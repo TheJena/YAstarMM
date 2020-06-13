@@ -3,6 +3,17 @@
 The suite name is the acronym of: Yet Another ( __*__ | Continuous
 Time | Hidden ) Markov Model
 
+## Installation
+
+### Dependencies
+
+* [PyYAML](https://pyyaml.org) ([MIT
+  License](https://github.com/yaml/pyyaml/blob/master/LICENSE))
+
+## Credits
+
+* Federico Motta (UNIMORE)
+
 ## LICENSE
 
 See full text [license](LICENSE) here; what follows are the copyright
