@@ -15,7 +15,11 @@ Time | Hidden ) Markov Model
 
 ## Credits
 
+* Davide Ferrari (UNIMORE)
+
 * Federico Motta (UNIMORE)
+
+* Francesco Ghinelli (UNIMORE)
 
 ## LICENSE
 
