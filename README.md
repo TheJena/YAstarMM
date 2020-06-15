@@ -7,6 +7,9 @@ Time | Hidden ) Markov Model
 
 ### Dependencies
 
+* [pandas](https://pandas.pydata.org) ([BSD 3-Clause
+  License](https://github.com/pandas-dev/pandas/blob/master/LICENSE))
+
 * [PyYAML](https://pyyaml.org) ([MIT
   License](https://github.com/yaml/pyyaml/blob/master/LICENSE))
 
