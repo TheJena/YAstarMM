@@ -32,6 +32,7 @@
             )
 """
 
+from .constants import NASTY_SUFFIXES
 from datetime import timedelta
 from .model import (
     State,
@@ -43,7 +44,7 @@ from .model import (
     HospitalJourney,
 )
 from sys import version_info
-from typing import Iterator, List, Optional, TextIO, Tuple
+from typing import Iterator, List, Optional, Tuple
 import logging
 import numpy as np
 import pandas as pd
@@ -259,20 +260,19 @@ class DumbyDog(object):
             self.info(repr(ev))
         self.info("")
 
-    def columns_to_wipe(
-        self, patient_df_len: int,  # make black auto-formatting prettier
-    ) -> Iterator[Tuple[str, pd.Series]]:
+    def columns_to_wipe(self, df_len: int,) -> Iterator[Tuple[str, pd.Series]]:
         """Return iterator over (columns, wiped_series) to wipe real patient df.
         """
-        nan_series = pd.Series([np.nan for _ in range(patient_df_len)])
+        nan_series = pd.Series([np.nan for _ in range(df_len)])
         for state in State:
-            for column_type in ("start_col", "fill_col", "end_col"):
-                try:
-                    column = getattr(state, column_type)
-                except KeyError:
-                    continue  # release states do not have these columns
-                else:
-                    yield (column, nan_series)
+            for nasty_suffix in NASTY_SUFFIXES:
+                for column_type in ("start_col", "fill_col", "end_col"):
+                    try:
+                        column = getattr(state, column_type)
+                    except KeyError:
+                        continue  # release states do not have these columns
+                    else:
+                        yield (f"{column}{nasty_suffix}", nan_series)
 
     def run(self) -> None:
         """Prepare results to write back to the real patient dataframe."""

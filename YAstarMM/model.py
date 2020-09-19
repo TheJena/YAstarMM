@@ -29,17 +29,113 @@
 
    ( or from within the YAstarMM package )
 
-            from           model  import  (
+            from          .model  import  (
                 State, AdmissionEvent, ... , ReleaseEvent, HospitalJourney,
             )
 """
 
+from .constants import (  # without the dot notebook raises ModuleNotFoundError
+    EXECUTING_IN_JUPYTER_KERNEL,
+    LOGGING_FORMAT,
+    LOGGING_LEVEL,
+    LOGGING_STREAM,
+    LOGGING_STYLE,
+    NASTY_SUFFIXES,
+)
 from datetime import datetime, timedelta
 from enum import IntEnum, unique
 from sys import version_info
-from typing import Any, Callable, Iterator, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+import logging
 import numpy as np
 import pandas as pd
+
+
+def _enforce_datetime_dtype(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Cast DataFrame columns to Timestamp data type"""
+    assert datetime.now().year <= 2029, str(
+        "Please fix all tests using string '/202' to determine "
+        "dayfirst/yearfirst boolean values to help Pandas parsing dates"
+    )
+
+    for idx, (col_name, series) in enumerate(dataframe.items()):
+        if "datetime64" in repr(series.dtype):
+            continue  # col_name is already casted correctly
+        dayfirst, yearfirst = False, False
+        for cell in series:
+            if pd.isna(cell):
+                continue
+            if "/202" in repr(cell):  # 21st century
+                # e.g. '25/04/2020 12:00:00'
+                dayfirst = True
+            else:
+                # e.g. '2020-04-25 12:00:00'
+                yearfirst = True
+            break
+        dataframe.iloc[:, idx] = pd.to_datetime(
+            series, dayfirst=dayfirst, yearfirst=yearfirst
+        )
+    return dataframe
+
+
+def _select_df_cols(
+    dataframe: pd.DataFrame, columns: Iterable[str]
+) -> pd.DataFrame:  # make black auto-formatting prettier
+    """Return DataFrame columns
+
+    Of course a simple selection like df[[col1, col2, ...]] would have
+    done this fabulously.
+
+    But since people are often not able to join Pandas DataFrames
+    properly; this function allows to deal with renamed (by adding
+    suffixes) columns (like pd.DataFrame.merge does in case of
+    overlapping names)
+    """
+    suffixes = set(NASTY_SUFFIXES).union(set(("",)))  # add empty string
+    columns_to_filter = [
+        col + suffix
+        for col in columns
+        for suffix in suffixes
+        if col + suffix in dataframe.columns
+    ]
+    if sorted(columns_to_filter) != sorted(columns):
+        logging.debug(
+            f" Using column filter [{', '.join(columns_to_filter)}, ] "
+            f"instead of [{', '.join(columns)}, ]"
+        )
+    return dataframe[columns_to_filter]
+
+
+def _select_df_rows_with_not_nan_values_in_columns(
+    dataframe: pd.DataFrame, columns: Iterable[str],
+) -> pd.DataFrame:
+    """Return DataFrame rows with at least one not Nan value in given columns
+
+    Of course a simple selection like df[df[col1, col2, ...].notna()]
+    would have done this fabulously.
+
+    But since people are often not able to join Pandas DataFrames
+    properly; this function allows to deal with renamed (by adding
+    suffixes) columns (like pd.DataFrame.merge does in case of
+    overlapping names)
+    """
+    positions = [
+        list(dataframe.index.values).index(data.Index)  # real index position
+        for data in _select_df_cols(dataframe, columns)
+        .notna()
+        .itertuples(index=True)  # make black auto-formatting prettier
+        if any((v for k, v in data._asdict().items() if k != "Index"))
+    ]
+    return dataframe.iloc[positions]
 
 
 def new_columns_to_add(
@@ -229,11 +325,19 @@ class Event(object):
                 raise ValueError(
                     "You probably forgot to pass 'value' kwarg in __init__()"
                 )
-            my_series = self.callable(
-                self._dataframe[self._dataframe[self.filter_col].notna()][
-                    self.timestamp_col
-                ]
+            filtered_df = _select_df_cols(
+                _select_df_rows_with_not_nan_values_in_columns(
+                    self._dataframe, (self.filter_col,)
+                ),
+                (self.timestamp_col,),
             )
+            filtered_df = _enforce_datetime_dtype(filtered_df)
+            if filtered_df.empty:
+                self._value = pd.to_datetime(pd.NaT)
+                return self._value
+            filtered_series = self.callable(filtered_df)
+            my_max = self.callable(filtered_series)
+            my_series = my_max
             if not isinstance(my_series, (pd.Timestamp, type(pd.NaT),)):
                 raise ValueError(
                     "Event.callable should return a Pandas.Timestamp; "
@@ -312,6 +416,10 @@ class Event(object):
         self._start = bool(start)
         assert self._start == (not bool(end)), "start_flag != not end_flag"
         self._callable = start_callable if self._start else end_callable
+        assert datetime.now().year <= 2029, str(
+            "Please fix all tests using string '/202' to determine "
+            "dayfirst/yearfirst boolean values to help Pandas parsing dates"
+        )
         self._value = value
 
     def __repr__(self) -> str:
@@ -715,16 +823,31 @@ class ReleaseEvent(Event):
         if self._reason is None:  # type: ignore
             if self.value > datetime.now():
                 raise ValueError("Patient still in charge")
-            for r in self._dataframe["ModalitaDimissione"].unique():
-                if not pd.isna(r):
-                    if "deceduto" in r.lower():
-                        self._reason = State.Deceased
-                    elif "dimissione ordinaria al domicilio" in r.lower():
-                        self._reason = State.Discharged
-                    else:
-                        self._reason = State.Transferred
-                    break
-        return self._reason  # type: ignore
+            reasons = set(
+                (
+                    reason
+                    for col_name, series in _select_df_cols(
+                        self._dataframe, ("ModalitaDimissione",)
+                    ).items()
+                    for reason in series.unique()
+                    if not pd.isna(reason)
+                )
+            )
+
+            # death wins over any possible other reason
+            for r in reasons:
+                if "deceduto" in r.lower():
+                    self._reason = State.Deceased
+                    return self._reason
+
+            if (
+                "dimissione ordinaria al domicilio"
+                == self._last_reason_between(reasons).lower()
+            ):
+                self._reason = State.Discharged
+            else:
+                self._reason = State.Transferred
+        return self._reason
 
     @property
     def state(self) -> State:
@@ -749,6 +872,124 @@ class ReleaseEvent(Event):
     @value.setter
     def value(self, new_value: Union[str, pd.Timestamp]) -> None:
         super().value(new_value)
+
+    def _last_reason_between(self, reasons: Iterable[str]) -> str:
+        """Return which discharge reason is the last one (between multiple)
+
+        Explore the filtered_df looking for rows containing only a date
+        (or multiple copies of it) and only a reason (or multiple
+        copies of it); then between the collected {date: reason}
+        return the reason of the maximum date.
+        """
+        if len(reasons) == 1:
+            return reasons.pop()
+
+        saved_log_level = logging.getLogger().getEffectiveLevel()
+
+        # let's abuse of the existing HospitalJourney class just to
+        # get, through its property, the id of the patient having
+        # several discharge reasons in order to make the logging more
+        # meaningful
+        patient_id = HospitalJourney(
+            patient_df=self._dataframe, log_level=logging.CRITICAL,
+        ).patient_id
+
+        logging.getLogger().setLevel(saved_log_level)  # restore log level
+
+        logging.warning(
+            "".join(
+                (
+                    f" Patient '{patient_id}' has several discharge reasons: ",
+                    f"\n{' ' * 10}" if EXECUTING_IN_JUPYTER_KERNEL else "",
+                    f"\n{' ' * 10}".join(
+                        (
+                            str("- " + repr(reason)[:66] + " ...'").replace(
+                                "' ...'", "'"
+                            )
+                            for reason in sorted(reasons)
+                        )
+                    )
+                    if EXECUTING_IN_JUPYTER_KERNEL
+                    else f"{repr(sorted(reasons))[1:-1]}.",
+                )
+            )
+        )
+
+        filtered_df = _select_df_cols(
+            self._dataframe, ("DataDimissione", "ModalitaDimissione",)
+        )
+        data = dict()
+        for row in filtered_df.itertuples(index=False, name=None):
+            possible_reason = None
+            possible_date = None
+            for cell in row:
+                if pd.isna(cell):
+                    continue
+                if cell in reasons:
+                    if possible_reason in (None, cell):
+                        possible_reason = cell
+                    else:  # got multiple reasons
+                        possible_reason = None
+                        break
+                else:  # cell contains a date
+                    assert datetime.now().year <= 2029, str(
+                        "Please fix all tests using string '/202' to "
+                        "determine dayfirst/yearfirst boolean values "
+                        "to help Pandas parsing dates"
+                    )
+                    cell = pd.to_datetime(
+                        cell,
+                        dayfirst="/202" in repr(cell),  # 21st century
+                        # e.g. '25/04/2020 12:00:00'
+                    )
+                    if possible_date in (None, cell):
+                        possible_date = cell
+                    else:  # got multiple dates
+                        possible_date = None
+                        break
+            if possible_reason is not None and possible_date is not None:
+                if (
+                    possible_date in data
+                    and data[possible_date] != possible_reason
+                    and True  # make black auto-formatting prettier
+                ):
+                    # misleading data containing contraddictions,
+                    # let's trigger the case: "no discharge reason found"
+                    data = dict()
+                    break
+                data[possible_date] = possible_reason
+        if not data:
+            logging.critical(
+                f" Patient '{patient_id}' last discharge reason is"
+                " absent or not easy to guess (due to contraddictions"
+                f" in the input data); '{str(State.Transferred)}'"
+                " will be probably chosen by default."
+            )
+            return "no discharge reason found"
+
+        last_discharge_date = max(data.keys())
+        assert last_discharge_date == self.value, str(
+            f"Last discharge date ({repr(last_discharge_date)}) found "
+            f"in ReleaseEvent._last_reason_between() for "
+            f"patient '{patient_id}' differs from the one in the "
+            f"@property ReleaseEvent.value ({repr(self.value)})\t"
+            "THAT IS DEFINITELY SOMETHING CRITICAL"
+        )
+        logging.warning(
+            "".join(
+                (
+                    f" Patient '{patient_id}' last discharge date is ",
+                    f"{last_discharge_date}, with reason: ",
+                    f"\n{' ' * 10}" if EXECUTING_IN_JUPYTER_KERNEL else "",
+                    f"* {repr(data[last_discharge_date])[:66]} ...'".replace(
+                        "' ...'", "'"
+                    )
+                    if EXECUTING_IN_JUPYTER_KERNEL
+                    else f"* {repr(data[last_discharge_date])}",
+                )
+            )
+        )
+        return data[last_discharge_date]
 
     def __init__(
         self,
@@ -839,11 +1080,21 @@ class HospitalJourney(object):
         return self._patient_id
 
     def __init__(
-        self, patient_df: pd.DataFrame, patient_id: Optional[int] = None
+        self, patient_df: pd.DataFrame, log_level: int = LOGGING_LEVEL,
     ) -> None:
         """Populate patient journey from its Pandas DataFrame."""
         self._patient_df = patient_df
-        self._patient_id = patient_id
+        self._patient_id = None
+        if EXECUTING_IN_JUPYTER_KERNEL:
+            logging_format = "{levelname:^8}|{message}"
+        else:
+            logging_format = LOGGING_FORMAT
+        logging.basicConfig(
+            filename=LOGGING_STREAM,
+            format=logging_format,
+            level=LOGGING_LEVEL,
+            style=LOGGING_STYLE,
+        )
         self._journey = [
             AdmissionEvent(patient_df),
             NoO2StartEvent(pd.NaT),  # not yet known
