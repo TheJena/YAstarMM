@@ -117,10 +117,10 @@ class DumbyDog(object):
             if k == "used_dates":
                 continue
             if k in (
-                "double_hole",
-                "ending_no_oxygen",
-                "no_o2_patients",
-                "starting_no_oxygen",
+                "filled_double_holes",
+                "filled_no_oxygen_ends",
+                "filled_patients_without_oxygen_therapy",
+                "filled_no_oxygen_starts",
             ):
                 v *= 2
             fixed_dates += v
@@ -399,13 +399,13 @@ class Insomnia(DumbyDog):
 
     _stats = dict(
         deleted_dates=0,
-        double_hole=0,
-        ending_no_oxygen=0,
-        no_o2_patients=0,
-        spared_end_case=0,
-        spared_start_case=0,
-        starting_no_oxygen=0,
         swapped_dates=0,
+        filled_double_holes=0,
+        filled_missing_starts=0,
+        filled_missing_ends=0,
+        filled_patients_without_oxygen_therapy=0,
+        filled_no_oxygen_starts=0,
+        filled_no_oxygen_ends=0,
         used_dates=0,  # Amount of used dates by the algorithm
     )
     """Statistics collected globally, over all users."""
@@ -531,10 +531,10 @@ class Insomnia(DumbyDog):
                 except StopIteration:
                     continue  # no valid date found after next event date
                 else:
-                    self.debug(f"filled spared date: {next_ev.label}")
+                    self.debug(f"filled missing end date: {next_ev.label}")
                     next_ev.value = max(next_next_ev.day_offset(-1), ev.value)
                     self.info(repr(next_ev))
-                    self._stats["spared_start_case"] += 1
+                    self._stats["filled_missing_ends"] += 1
                     continue
             elif not next_ev.is_nat:
                 # found an end date without its start, let's guess it
@@ -547,10 +547,10 @@ class Insomnia(DumbyDog):
                     )
                     continue
                 else:
-                    self.debug(f"filled spared date: {ev.label}")
+                    self.debug(f"filled missing start date: {ev.label}")
                     ev.value = min(prev_ev.day_offset(+1), next_ev.value)
                     self.info(repr(ev))
-                    self._stats["spared_end_case"] += 1
+                    self._stats["filled_missing_starts"] += 1
                     continue
 
     def fix_missing_initial_no_oxygen_state(self) -> None:
@@ -580,7 +580,7 @@ class Insomnia(DumbyDog):
                 self.debug(f"filled missing initial {str(State.No_O2)} state")
                 no_oxygen_start_ev.value = admission_ev.date
                 no_oxygen_end_ev.value = ev.day_offset(-1)
-                self._stats["starting_no_oxygen"] += 1
+                self._stats["filled_no_oxygen_starts"] += 1
                 self.info(repr(no_oxygen_start_ev))
                 self.info(repr(no_oxygen_end_ev))
             # Let's fix just the period involving the 1st date after admission
@@ -621,7 +621,7 @@ class Insomnia(DumbyDog):
                 self.debug(f"filled missing final {str(State.No_O2)} state")
                 post_no_oxygen_start_ev.value = ev.day_offset(+1)
                 post_no_oxygen_end_ev.value = discharge_ev.day_offset(-1)
-                self._stats["ending_no_oxygen"] += 1
+                self._stats["filled_no_oxygen_ends"] += 1
                 self.info(repr(post_no_oxygen_start_ev))
                 self.info(repr(post_no_oxygen_end_ev))
             # Let's fix just the period involving last date before discharge
@@ -711,7 +711,7 @@ class Insomnia(DumbyDog):
             self.debug(f"filled double hole: {ev.label}, {next_ev.label}")
             ev.value = new_start_date
             next_ev.value = new_end_date
-            self._stats["double_hole"] += 1
+            self._stats["filled_double_holes"] += 1
             self.info(repr(ev))
             self.info(repr(next_ev))
 
@@ -752,7 +752,7 @@ class Insomnia(DumbyDog):
             no_oxygen_end_ev.value = discharge_ev.day_offset(-1)
             self.info(repr(no_oxygen_start_ev))
             self.info(repr(no_oxygen_end_ev))
-            self._stats["no_o2_patients"] += 1
+            self._stats["filled_patients_without_oxygen_therapy"] += 1
 
     def run(self) -> None:
         """Run Insomnia algorithm and build super()._results property
