@@ -20,7 +20,11 @@
 # You should have received a copy of the GNU General Public License
 # along with YAstarMM.  If not, see <https://www.gnu.org/licenses/>.
 """
-   Preprocess a DataFrame containing dates and the relatives states.
+   Modellize data from an input DataFrame into: States, Events and Journeys
+
+   A State is the condition in which a patient is.
+   An Event is the starting or ending timestamp of a State.
+   A Journey is a sequence of Events.
 
    Usage:
             from  YAstarMM.model  import  (
@@ -221,7 +225,7 @@ class State(IntEnum):
             Intubated="Intubazione_Inizio",
         )[
             self.name
-        ]  # can raise a KeyError for release states
+        ]  # can raise a KeyError on release states
 
     @property
     def fill_col(self) -> str:
@@ -233,7 +237,7 @@ class State(IntEnum):
             Intubated="Intubazione",
         )[
             self.name
-        ]  # can raise a KeyError for release states
+        ]  # can raise a KeyError on release states
 
     @property
     def end_col(self) -> str:
@@ -245,7 +249,7 @@ class State(IntEnum):
             Intubated="Intubazione_Fine",
         )[
             self.name
-        ]  # can raise a KeyError for release states
+        ]  # can raise a KeyError on release states
 
     @classmethod
     def names(cls) -> List[str]:
@@ -261,7 +265,7 @@ class State(IntEnum):
 class Event(object):
     """General event denoting a state start or end."""
 
-    text_pad = 32
+    text_pad = 48  # yet another magic number ;-)
 
     @property
     def index(self) -> int:
@@ -1019,9 +1023,11 @@ class ReleaseEvent(Event):
                 str(f"Please increase max label size " f"({self.text_pad})")
             )
         if self.value > datetime.now():
-            return str(
-                f"{self.label}:".ljust(self.text_pad)  # force newline
-                + "Timestamp('in the future')"
+            return "".join(
+                (  # make black auto-formatting prettier
+                    f"{self.label}:".ljust(self.text_pad),
+                    "Timestamp('in the future')",
+                )
             )
         return super().__repr__()
 
@@ -1126,7 +1132,7 @@ class HospitalJourney(object):
     def next_event(self, ev: Event) -> Event:
         """Return next event in the hospital journey."""
         if ev not in self._journey:
-            raise ValueError(  # force newline
+            raise ValueError(  # make black auto-formatting prettier
                 f"Could not find event '{ev.label}' in patient journey."
             )
         if ev == self.ending:
@@ -1136,7 +1142,7 @@ class HospitalJourney(object):
     def prev_event(self, ev: Event) -> Event:
         """Return previous event in the hospital journey."""
         if ev not in self._journey:
-            raise ValueError(  # force newline
+            raise ValueError(  # make black auto-formatting prettier
                 f"Could not find event '{ev.label}' in patient journey."
             )
         if ev == self.beginning:

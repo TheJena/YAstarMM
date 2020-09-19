@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# coding: utf-8
+#
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Copyright (C) 2020 Federico Motta <191685@studenti.unimore.it>
@@ -230,7 +232,7 @@ class DumbyDog(object):
             ] = discharge_ev.reason.value
         except ValueError as e:
             if str(e).lower() == "patient still in charge":
-                cut_date = discharge_ev.date  # aka tomorrow
+                cut_date = discharge_ev.date  # i.e. tomorrow
             else:
                 raise e
         else:
@@ -567,16 +569,15 @@ class Insomnia(DumbyDog):
                     break  # no time for No O2 state
 
                 post_no_oxygen_end_ev = self.journey.prev_event(discharge_ev)
-                post_no_oxygen_start_ev = self.journey.prev_event(  # force \n
+                post_no_oxygen_start_ev = self.journey.prev_event(
                     post_no_oxygen_end_ev
-                )
+                )  # make black auto-formatting prettier
 
                 assert all(
                     (
                         isinstance(
-                            post_no_oxygen_start_ev,
-                            PostNoO2StartEvent,  # force pretty auto-formatting
-                        ),
+                            post_no_oxygen_start_ev, PostNoO2StartEvent,
+                        ),  # make black auto-formatting prettier
                         isinstance(post_no_oxygen_end_ev, PostNoO2EndEvent),
                     )
                 ), "Expected PostNoO2[Start|End]Events :("
@@ -622,16 +623,16 @@ class Insomnia(DumbyDog):
             if new_start_date > new_end_date:
                 continue  # unfillable hole, no time
 
-            no_oxygen_start_ev = self.journey.next_event(  # force newline
+            no_oxygen_start_ev = self.journey.next_event(
                 self.journey.beginning
-            )
+            )  # make black auto-formatting prettier
             no_oxygen_end_ev = self.journey.next_event(no_oxygen_start_ev)
-            post_no_oxygen_end_ev = self.journey.prev_event(  # force newline
+            post_no_oxygen_end_ev = self.journey.prev_event(
                 self.journey.ending
-            )
-            post_no_oxygen_start_ev = self.journey.prev_event(  # force newline
+            )  # make black auto-formatting prettier
+            post_no_oxygen_start_ev = self.journey.prev_event(
                 post_no_oxygen_end_ev
-            )
+            )  # make black auto-formatting prettier
 
             assert all(
                 (
@@ -646,9 +647,13 @@ class Insomnia(DumbyDog):
                 (
                     not no_oxygen_start_ev.is_nat,
                     not no_oxygen_end_ev.is_nat,
-                    abs(no_oxygen_start_ev.date - new_start_date)  # force \n
+                    abs(
+                        no_oxygen_start_ev.date - new_start_date
+                    )  # make black auto-formatting prettier
                     <= timedelta(days=1),
-                    abs(no_oxygen_end_ev.date - new_end_date)  # force newline
+                    abs(
+                        no_oxygen_end_ev.date - new_end_date
+                    )  # make black auto-formatting prettier
                     <= timedelta(days=1),
                 )
             ):
@@ -659,7 +664,9 @@ class Insomnia(DumbyDog):
                     not post_no_oxygen_end_ev.is_nat,
                     abs(post_no_oxygen_start_ev.date - new_start_date)
                     <= timedelta(days=1),
-                    abs(post_no_oxygen_end_ev.date - new_end_date)  # force \n
+                    abs(
+                        post_no_oxygen_end_ev.date - new_end_date
+                    )  # make black auto-formatting prettier
                     <= timedelta(days=1),
                 )
             ):
