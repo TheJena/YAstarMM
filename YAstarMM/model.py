@@ -45,6 +45,7 @@ from .constants import (  # without the dot notebook raises ModuleNotFoundError
     LOGGING_STREAM,
     LOGGING_STYLE,
     NASTY_SUFFIXES,
+    ORDINARILY_HOME_DISCHARGED,
 )
 from datetime import datetime, timedelta
 from enum import IntEnum, unique
@@ -255,6 +256,12 @@ class State(IntEnum):
     def names(cls) -> List[str]:
         """Return list containing all the state names."""
         return [str(member) for _, member in State.__members__.items()]
+
+    @classmethod
+    def non_final_states_names(cls) -> Tuple[str]:
+        return tuple(
+            str(s) for s in (State.No_O2, State.O2, State.NIV, State.Intubated)
+        )
 
     @classmethod
     def values(cls) -> List[int]:
@@ -845,8 +852,8 @@ class ReleaseEvent(Event):
                     return self._reason
 
             if (
-                "dimissione ordinaria al domicilio"
-                == self._last_reason_between(reasons).lower()
+                self._last_reason_between(reasons).lower()
+                == ORDINARILY_HOME_DISCHARGED.lower()
             ):
                 self._reason = State.Discharged
             else:

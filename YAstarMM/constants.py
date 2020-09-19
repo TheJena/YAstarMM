@@ -24,17 +24,19 @@
 
    Usage:
             from  YAstarMM.constants  import  (
-                ALLOWED_OUTPUT_FORMATS, LOGGING_LEVEL, NON_FINAL_STATES,
+                ALLOWED_OUTPUT_FORMATS, LOGGING_LEVEL,
             )
 
    ( or from within the YAstarMM package )
 
             from          .constants  import  (
-                ALLOWED_OUTPUT_FORMATS, LOGGING_LEVEL, NON_FINAL_STATES,
+                ALLOWED_OUTPUT_FORMATS, LOGGING_LEVEL,
             )
 """
 
+from typing import Dict, Tuple
 import logging
+import pandas as pd
 import sys
 
 try:
@@ -52,6 +54,46 @@ ALLOWED_OUTPUT_FORMATS: Tuple[str, ...] = (
 """Allowed DataFrame export formats."""
 
 
+COLUMNS_AFTER_STATE_TRANSITION_COLUMNS = (
+    #
+    # Order does matter, do not change it please
+    #
+)
+
+COLUMNS_BEFORE_STATE_TRANSITION_COLUMNS = (
+    #
+    # Order does matter, do not change it please
+    #
+)
+
+COLUMNS_CONTAINING_EXAM_DATE = (
+)
+
+COLUMNS_NOT_SO_EASY_TO_MERGE = (  # because of contraddicting data
+)
+
+COLUMNS_TO_KEEP_DICTIONARY = {
+}
+
+COLUMNS_TO_MAXIMIZE = (
+)
+
+COLUMNS_TO_MAXIMIZE_DATE = ()
+COLUMNS_TO_MINIMIZE_DATE = ()
+
+COLUMN_CONTAINING_PERCENTAGES = ""
+COLUMN_RECALCULATED_AFTERWARDS = ""
+COLUMN_WITH_EXECUTED_EXAM = ""
+COLUMN_WITH_REASON = ""
+
+DECEASED_VALUE = ""
+
+DEFAULT_RENAME_DICT: Dict[str, str]
+DEFAULT_RENAME_DICT = dict(
+)
+
+EXECUTED_VALUE = ""
+
 EXECUTING_IN_JUPYTER_KERNEL = (
     False
     if "IPython" not in sys.modules
@@ -62,6 +104,8 @@ EXECUTING_IN_JUPYTER_KERNEL = (
     else getattr(get_ipython(), "kernel", None) is not None
 )
 
+FLOAT_EQUALITY_THRESHOLD = 1e-9
+
 LOGGING_FORMAT = "[{levelname:^8}][{filename:^16}]{message}"
 # "[%(levelname)s][%(filename)s]%(message)s"
 LOGGING_LEVEL = logging.WARNING
@@ -69,3 +113,9 @@ LOGGING_STREAM = None  # i.e. stderr
 LOGGING_STYLE = "{"
 
 NASTY_SUFFIXES = ("_x", "_y",) + tuple(f"_z{'z' * i}" for i in range(16))
+
+ORDINARILY_HOME_DISCHARGED = ""
+
+PREFIX_OF_COLUMNS_CONTAINING_EXAM_DATE = ""
+
+TRANSFERRED_VALUE = ""
