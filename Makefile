@@ -1,4 +1,7 @@
-.PHONY: black clean docs init mypy upgrade
+# Please define your own dataset path
+DATASETS ?= $(DIR_datasets)
+
+.PHONY: black clean docs init mypy update upgrade
 
 # Lets not argue about code style :D
 # https://github.com/psf/black#the-uncompromising-code-formatter
@@ -12,11 +15,13 @@ black:
 
 # Remove emacs backup files and python compiled bytecode
 clean:
+	clear
 	find . -type f -iname "*~"          -exec rm  -fv {} \;
 	find . -type d -iname "__pycache__" -exec rm -rfv {} \;
 
 # Renderize markdown documentation into pdf files in docs/
 docs:
+	clear
 	find . -type f -iname "*.md" -print				\
 	| sed 's/\.md//'						\
 	| xargs -n1 -I@ pandoc @.md					\
@@ -32,6 +37,7 @@ init:
 
 # Loop forever and show mypy hints at each modification of .py files
 mypy:
+	clear
 	while true; do							\
 		$(eval PY_FILES := $$(shell				\
 			find . -iname '*py'				\
@@ -43,6 +49,18 @@ mypy:
 		&& mypy $(PY_FILES)					\
 		; echo -e "\n\treveal_type( expr )\t may help you :D"	\
 	; done
+
+# Update symbolic link to the most recent available dataset
+update:
+	clear
+	mkdir -p provided_data
+	ln --symbolic --force $(shell					\
+		find ${DATASETS} -type f -name '00_dataset_*' -exec	\
+			stat -c '%Y %n' {} \;				\
+		| sort -n						\
+		| sed 's/^[0-9]*\s*//'					\
+		| tail -n 1)						\
+		provided_data/00_dataset_latest.xlsx
 
 # Upgrade all outdated packages with pip
 # ( many thanks to https://stackoverflow.com/a/3452888 )
