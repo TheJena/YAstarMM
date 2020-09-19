@@ -36,6 +36,7 @@
 
 from .constants import (  # without the dot notebook raises ModuleNotFoundError
     ALLOWED_OUTPUT_FORMATS,
+    EXECUTING_IN_JUPYTER_KERNEL,
     LOGGING_LEVEL,
     NASTY_SUFFIXES,
 )
@@ -98,15 +99,19 @@ class DumbyDog(object):
     """Statistics collected globally, over all users."""
 
     @classmethod
-    def show_statistics(cls, logger_prefix: Optional[str] = None) -> None:
-        """Print collected statistics."""
-        if logger_prefix is None:
-            logger_prefix = str(
-                f"[INFO][{__name__}.py][{cls.__name__}"
-                f" v{'.'.join(str(v) for v in cls.__version__)}]"
-                f"[{'STATISTICS'.center(16)}] "
-            )
-        print(logger_prefix)  # empty line as separator
+    def show_statistics(cls) -> None:
+        """Log collected statistics."""
+        prefix = str(
+            f"[{cls.__name__} "
+            f"v{'.'.join(str(v) for v in cls.__version__)}]"
+            f"[{'STATISTICS'.center(16)}] "
+        )
+        if EXECUTING_IN_JUPYTER_KERNEL:
+            prefix = " "
+
+        saved_log_level = logging.getLogger().getEffectiveLevel()
+        logging.getLogger().setLevel(logging.INFO)
+        logging.info(prefix)  # empty line as separator
         fixed_dates = 0
         for k, v in cls._stats.items():
             if k == "used_dates":
@@ -119,24 +124,25 @@ class DumbyDog(object):
             ):
                 v *= 2
             fixed_dates += v
-            print(logger_prefix + f"{k}:".ljust(Event.text_pad) + f"{v:10d}")
-            cls._stats[k] = 0  # reset already printed value
+            logging.info(prefix + f"{k}:".ljust(Event.text_pad) + f"{v:10d}")
+            cls._stats[k] = 0  # reset already shown value
 
         if fixed_dates > 0:  # DumbyDog should never enter here
-            print(logger_prefix + " " * Event.text_pad + "-" * 10)  # sum line
-            print(
-                logger_prefix
+            logging.info(prefix + " " * Event.text_pad + "-" * 10)  # sum line
+            logging.info(
+                prefix
                 + "Total fixed dates:".ljust(Event.text_pad)
                 + f"{fixed_dates:10d}"
             )
 
-        print(
-            logger_prefix
+        logging.info(
+            prefix
             + "Total valid dates used:".ljust(Event.text_pad)
             + f"{cls._stats['used_dates']:10d}"
         )
-        cls._stats["used_dates"] = 0  # reset already printed value
-        print(logger_prefix)  # empty line as separator
+        cls._stats["used_dates"] = 0  # reset already shown value
+        logging.info(prefix)  # empty line as separator
+        logging.getLogger().setLevel(saved_log_level)
 
     @property
     def date_range(self) -> pd.Series:
@@ -276,14 +282,14 @@ class DumbyDog(object):
         ]
 
     def __init__(
-        self, journey: HospitalJourney, log_level: int = logging.WARNING,
+        self, journey: HospitalJourney, log_level: Optional[int] = None,
     ) -> None:
         """Initialize DumbyDog algorithm."""
         super(DumbyDog, self).__init__()
-        logging.basicConfig(
-            format="[%(levelname)s][%(filename)s]%(message)s", level=log_level,
-        )
         self._journey: HospitalJourney = journey
+        if log_level is not None:
+            logging.getLogger().setLevel(log_level)
+
         self._results: Optional[  # make black auto-formatting prettier
             List[Tuple[pd.Timestamp, pd.Timestamp, State]]
         ] = None
@@ -405,7 +411,7 @@ class Insomnia(DumbyDog):
     """Statistics collected globally, over all users."""
 
     def __init__(
-        self, journey: HospitalJourney, log_level: int = logging.WARNING,
+        self, journey: HospitalJourney, log_level: Optional[int] = None,
     ) -> None:
         """Initialize Insomnia algorithm."""
         super(Insomnia, self).__init__(
