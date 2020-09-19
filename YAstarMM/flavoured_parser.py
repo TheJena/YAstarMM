@@ -142,14 +142,20 @@ def _get_cli_parser(flavour_dict: Dict[str, Any]) -> ArgumentParser:
     return cli_parser
 
 
-def _get_flavour_parser() -> ArgumentParser:
+def _get_flavour_parser(
+    default_flavour_file: Optional[str] = None,
+) -> ArgumentParser:  # make black auto-formatting prettier
     """Return parser of only the 'flavour' argument."""
     flavour_parser = ArgumentParser(add_help=False, allow_abbrev=False)
     flavour_parser.add_argument(
         # This is the real 'flavour' argument to edit !!!
         "-f",
         "--flavour",
-        default=None,  # <~ Right place to set a default 'flavour' file name
+        #
+        # Next line is the only right place to set a default 'flavour' filename
+        default=default_flavour_file,
+        #
+        dest="flavour_file",
         help=SUPPRESS,
         type=FileType("r"),
     )
@@ -308,8 +314,37 @@ class FlavouredNamespace(object):
             )
 
 
-parsed_args: Optional[FlavouredNamespace] = None
+_PARSED_ARGS: Optional[FlavouredNamespace] = None
 """Namespace-like object, hiding 'flavour' complexity."""
+
+
+def parsed_args(
+    default_flavour_file: Optional[str] = None,
+) -> FlavouredNamespace:  # make black auto-formatting prettier
+    """Return parsed arguments from CLI and YAML file hiding complexity."""
+    global _PARSED_ARGS
+    if _PARSED_ARGS is None:
+        # 1st parser just parses -f / --flavour cli argument (if present)
+        _flavour_namespace, _args_left = _get_flavour_parser(
+            default_flavour_file
+        ).parse_known_args()
+
+        # Parse 'flavour' file (if absent or empty, a dictionary is returned)
+        _flavour_dict = _get_flavour_dict(_flavour_namespace.flavour_file)
+
+        # 2nd parser is the real one and parses the remaining cli arguments
+        _namespace = _get_cli_parser(_flavour_dict).parse_args(_args_left)
+
+        # Populate the global variable which other modules will import
+        _PARSED_ARGS = FlavouredNamespace(
+            flavour=_flavour_dict,
+            namespace=_namespace,
+            dump_filename=_namespace.debug_dump_flavoured_parser,
+        )
+    if _PARSED_ARGS.debug_parser:
+        raise SystemExit(_PARSED_ARGS._debug())
+    return _PARSED_ARGS
+
 
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
@@ -320,23 +355,3 @@ assert all(
         "parsed_args" in globals(),
     )
 ), "Please update 'Usage' section of module docstring"
-
-if parsed_args is None:
-    # 1st parser just parses -f / --flavour cli argument (if present)
-    _flavour_namespace, _args_left = _get_flavour_parser().parse_known_args()
-
-    # Parse 'flavour' file (if absent or empty, a dictionary is returned)
-    _flavour = _get_flavour_dict(flavour_file=_flavour_namespace.flavour)
-
-    # 2nd parser is the real one and parses the remaining cli arguments
-    _namespace = _get_cli_parser(flavour_dict=_flavour).parse_args(_args_left)
-
-    # Populate the global variable which other modules will import
-    parsed_args = FlavouredNamespace(
-        flavour=_flavour,
-        namespace=_namespace,
-        dump_filename=_namespace.debug_dump_flavoured_parser,
-    )
-
-    if parsed_args.debug_parser:
-        raise SystemExit(parsed_args._debug())
