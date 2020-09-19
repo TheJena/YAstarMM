@@ -47,7 +47,8 @@ def new_columns_to_add(
 ) -> Iterator[Tuple[str, Union[pd.Categorical, pd.Series]]]:
     """Return iterator over (new columns name, new columns series)."""
     for col in ordered_state_transition_columns():
-        yield (col, pd.Series(data=[np.nan for _ in range(main_df_len)]))
+        if col not in ("ActualState", "ActualState_val"):
+            yield (col, pd.Series(data=[np.nan for _ in range(main_df_len)]))
     yield (
         "ActualState",
         pd.Categorical(
