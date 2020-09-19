@@ -49,15 +49,6 @@ from sys import version_info
 from typing import Any, Dict, Iterator, Optional, TextIO, Tuple, Union
 from yaml import dump, load
 
-ALLOWED_OUTPUT_FORMATS: Tuple[str, ...] = (
-    "csv",
-    "json",
-    "pickle",
-    "pkl",
-    "xlsx",
-)
-"""Allowed DataFrame export formats."""
-
 _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("-i", "--input",): dict(
         help="Excel input file containing the DataFrame to parse",

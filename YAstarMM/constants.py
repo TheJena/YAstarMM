@@ -42,6 +42,16 @@ try:
 except (ImportError, ModuleNotFoundError):
     pass  # ipython not installed
 
+ALLOWED_OUTPUT_FORMATS: Tuple[str, ...] = (
+    "csv",
+    "json",
+    "pickle",
+    "pkl",
+    "xlsx",
+)
+"""Allowed DataFrame export formats."""
+
+
 EXECUTING_IN_JUPYTER_KERNEL = (
     False
     if "IPython" not in sys.modules

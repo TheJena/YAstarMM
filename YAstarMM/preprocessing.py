@@ -20,36 +20,66 @@
 # You should have received a copy of the GNU General Public License
 # along with YAstarMM.  If not, see <https://www.gnu.org/licenses/>.
 """
-   Preprocess a DataFrame read from an input file.
+   Reconstruct wrong or missing data in a DataFrame.
 
    Usage:
             from  YAstarMM.preprocessing  import  (
-                DumbyDog, Insomnia,
+                clear_and_refill_state_transition_columns, export_df_to_file,
             )
 
    ( or from within the YAstarMM package )
 
-            from           preprocessing  import  (
-                DumbyDog, Insomnia,
+            from          .preprocessing  import  (
+                clear_and_refill_state_transition_columns, export_df_to_file,
             )
 """
 
-from .constants import NASTY_SUFFIXES
-from datetime import timedelta
-from .model import (
-    State,
-    Event,
-    NoO2StartEvent,
-    NoO2EndEvent,
-    PostNoO2StartEvent,
-    PostNoO2EndEvent,
-    HospitalJourney,
+from .constants import (  # without the dot notebook raises ModuleNotFoundError
+    ALLOWED_OUTPUT_FORMATS,
+    LOGGING_LEVEL,
+    NASTY_SUFFIXES,
 )
+from .model import (  # without the dot notebook raises ModuleNotFoundError
+    Event,
+    HospitalJourney,
+    NoO2EndEvent,
+    NoO2StartEvent,
+    PostNoO2EndEvent,
+    PostNoO2StartEvent,
+    State,
+    new_columns_to_add,
+)
+from datetime import timedelta
 from sys import version_info
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator, List, Optional, TextIO, Tuple, Union
 import logging
 import numpy as np
 import pandas as pd
+
+
+def export_df_to_file(df: pd.DataFrame, file_object: Union[TextIO, str]) -> None:
+    if isinstance(file_object, str):
+        file_object = open(file_object, "w")
+
+    extension: str = file_object.name.split(".")[-1]
+    if extension not in ALLOWED_OUTPUT_FORMATS:
+        raise ValueError(
+            f"Output file '{file_object.name}' format is not supported!\n"
+            f"Allowed extensions are: .{', .'.join(ALLOWED_OUTPUT_FORMATS)}"
+        )
+    if extension == "csv":
+        df.to_csv(file_object)
+    elif extension == "json":
+        df.to_json(file_object)
+    elif extension in ("pkl", "pickle"):
+        df.to_pickle(file_object.buffer)  # use underlying binary buffer
+    elif extension == "xlsx":
+        df.to_excel(file_object.buffer)  # use underlying binary buffer
+    else:
+        raise SystemExit(
+            "Please update this switch-case accordingly "
+            "with ALLOWED_OUTPUT_FORMATS constant content"
+        )
 
 
 class DumbyDog(object):
@@ -733,6 +763,113 @@ class Insomnia(DumbyDog):
         super().run()  # build super()._results property
 
 
+def clear_and_refill_state_transition_columns(
+    whole_df,
+    log_level=LOGGING_LEVEL,
+    show_statistics=True,
+    use_dumbydog=False,
+    use_insomnia=False,
+):
+    assert bool(use_insomnia) != bool(use_dumbydog), str(
+        "Please set either use_insomnia=True or use_dumbydog=True"
+    )
+
+    # Add new columns (if missing)
+    for new_col, new_nan_series in new_columns_to_add(len(whole_df)):
+        if new_col not in whole_df.columns:
+            whole_df[new_col] = new_nan_series
+
+    # Sort whole_df by DataRef and fill State Transition cols of each patient
+    whole_df = (
+        whole_df.sort_values("DataRef")
+        .groupby(["IdPatient"])
+        .apply(
+            run_clear_and_refill_algorithm_over_patient_df,
+            log_level=log_level,
+            use_dumbydog=use_dumbydog,
+            use_insomnia=use_insomnia,
+        )
+    )
+
+    if show_statistics and use_insomnia:
+        Insomnia.show_statistics()
+    elif show_statistics and use_dumbydog:
+        DumbyDog.show_statistics()
+
+    return whole_df
+
+
+def run_clear_and_refill_algorithm_over_patient_df(
+    patient_df,
+    log_level=LOGGING_LEVEL,
+    use_dumbydog=False,
+    use_insomnia=False,  # make black auto-formatting prettier
+):
+    assert bool(use_insomnia) != bool(use_dumbydog), str(
+        "Please set either use_insomnia=True or use_dumbydog=True"
+    )
+
+    journey = HospitalJourney(patient_df, log_level=log_level)
+
+    if use_insomnia:
+        algorithm = Insomnia(journey, log_level=log_level)
+    elif use_dumbydog:
+        algorithm = DumbyDog(journey, log_level=log_level)
+    else:
+        raise ValueError(  # make black auto-formatting prettier
+            "Please set either use_insomnia=True or use_dumbydog=True"
+        )
+
+    algorithm.run()
+
+    # algorithm.results now contains all the meaningful pieces of
+    # information; we can safely wipe original patient's events dates
+
+    for col, nan_series in algorithm.columns_to_wipe(df_len=len(patient_df)):
+        if col in patient_df.columns:
+            patient_df[col] = nan_series
+        elif all((not col.endswith(s) for s in NASTY_SUFFIXES)):
+            print(
+                f"Could not find column '{col}' in "
+                f"patient '{journey.patient_id}' dataframe"
+            )
+
+    for (
+        start_day,
+        end_day,
+        start_col,
+        end_col,
+        fill_col,
+        state_name,
+        state_value,
+    ) in algorithm.results:
+        if start_col is not None:
+            patient_df.loc[  # make black auto-formatting prettier
+                patient_df["DataRef"] == start_day, [start_col]
+            ] = True
+        if end_col is not None:
+            patient_df.loc[patient_df["DataRef"] == end_day, [end_col]] = True
+        if fill_col is not None:
+            patient_df.loc[
+                (patient_df["DataRef"] >= start_day)
+                & (patient_df["DataRef"] <= end_day),
+                [fill_col],
+            ] = True
+        if state_name in State.names():
+            patient_df.loc[
+                (patient_df["DataRef"] >= start_day)
+                & (patient_df["DataRef"] <= end_day),
+                ["ActualState"],
+            ] = state_name
+        if state_value in State.values():
+            patient_df.loc[
+                (patient_df["DataRef"] >= start_day)
+                & (patient_df["DataRef"] <= end_day),
+                ["ActualState_val"],
+            ] = state_value
+    return patient_df
+
+
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
 assert version_info >= (3, 6), "Please use at least Python 3.6"
@@ -744,7 +881,7 @@ assert all(
             "YAstarMM.preprocessing",
             "preprocessing",
         ),
-        "DumbyDog" in globals(),
-        "Insomnia" in globals(),
+        "clear_and_refill_state_transition_columns" in globals(),
+        "export_df_to_file" in globals(),
     )
 ), "Please update 'Usage' section of module docstring"
