@@ -66,6 +66,20 @@ _DISABLE_BLACK_MAGIC_GLOBALLY = False
 
 _CACHE_LOCK, _PERF_LOCK = Lock(), Lock()
 
+EXTRACTION_REGEXP = re.compile(
+    r"(Estrazione|Extraction)"
+    r"[ _-]*"  # separator
+    r"(?P<year>2[01]\d\d)"  # valid until 2199
+    r"[ _-]*"  # separator
+    r"(?P<month>0[1-9]|1[012])"
+    r"[ _-]*"  # separator
+    r"(?P<day>[012][1-9]|30|31)"
+    r".*",  # whatever
+    re.IGNORECASE,
+)
+assert datetime.today().year < 2200, "Please fix the above regular expression"
+
+
 def black_magic(fun):
     """Like @lru_cache but persistent thank to compressed pickle files
 
@@ -170,6 +184,24 @@ def debug_stop_timer(event_name):
                 f"took {t1 - t0:9.3f} seconds.",
             )
         )
+    )
+
+
+def extraction_date(filename):
+    m = EXTRACTION_REGEXP.match(filename)
+    if m is not None:
+        return datetime(
+            year=int(m.group("year")),
+            month=int(m.group("month")),
+            day=int(m.group("day")),
+        )
+    raise ValueError(
+        "Extraction input files must have a name like:"
+        "\n\t- Estrazione_20001231_whatever.xlsx"
+        "\n\t- Estrazione_20001231_whatever.xlsx"
+        "\n\t- Estrazione_2000_12_31_whatever.xlsx"
+        "\n\t- Extraction_2000_12_31_whatever.xlsx"
+        f"\n\n(Please fix {filename} accordingly)"
     )
 
 
