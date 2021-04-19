@@ -28,7 +28,12 @@
                 DAYFIRST_REGEXP,
                 drop_rules,
                 keep_rules,
+                progressive_features,
                 rename_helper,
+                shift_features,
+                summarize_features,
+                switch_to_date_features,
+                verticalize_features,
             )
 
    ( or from within the YAstarMM package )
@@ -38,7 +43,12 @@
                 DAYFIRST_REGEXP,
                 drop_rules,
                 keep_rules,
+                progressive_features,
                 rename_helper,
+                shift_features,
+                summarize_features,
+                switch_to_date_features,
+                verticalize_features,
             )
 """
 
@@ -972,6 +982,27 @@ drop_rules = OrderedDict(
         )
     }
 )
+SummarizeFeatureItem = namedtuple(
+    "SummarizeFeatureItem", ["old_columns", "old_values_checker", "new_enum"]
+)
+
+SwitchToDateValue = namedtuple("SwitchToDateValue", ["true_val", "date_col"])
+
+VerticalizeFeatureItem = namedtuple(
+    "VerticalizeFeatureItem", ["date_column", "column_name", "related_columns"]
+)
+
+
+
+
+@lru_cache(maxsize=None)
+def progressive_features():
+    return iter(
+        rename_helper(
+            (
+            )
+        )
+    )
 
 
 @lru_cache(maxsize=None)
@@ -1033,6 +1064,213 @@ def rename_helper(columns):
     return tuple(ret)
 
 
+@lru_cache(maxsize=None)
+def shift_features(sheet_name):
+    return iter(
+        rename_helper(
+            dict(
+                emogas=(
+                ),
+                symptoms=(
+                ),
+            ).get(
+                sheet_name, tuple()
+            )  # return empty tuple when sheet name not in dictionary
+        )
+    )
+
+
+@lru_cache(maxsize=None)
+def summarize_features():
+    return {
+        f"{new_categorical_col}_severity": [
+            SummarizeFeatureItem(
+                old_columns=rename_helper(tuple(sfi.old_columns)),
+                old_values_checker=[
+                    f if f not in [True, False] else lambda val: val is f
+                    for f in sfi.old_values_checker
+                ],
+                new_enum=sfi.new_enum,
+            )
+            for sfi in summary_rule_list
+        ]
+        for new_categorical_col, summary_rule_list in {
+            "dyspnea": [
+                SummarizeFeatureItem([""], [False], "no dyspnea"),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "dyspnea during room walk",
+                ),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "dyspnea while washing/dressing",
+                ),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "dyspnea while sitting/lying",
+                ),
+            ],
+            "cough": [
+                SummarizeFeatureItem([""], [False], "no cough"),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "cough with weakness",
+                ),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "persistent cough",
+                ),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "persistent cough",
+                ),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "persistent cough",
+                ),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "persistent cough",
+                ),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "persistent cough",
+                ),
+            ],
+            "oxygen_therapy": [
+                SummarizeFeatureItem(
+                    [""],
+                    [False],
+                    "no oxygen used",
+                ),
+                SummarizeFeatureItem(
+                    ["", ""],
+                    [True, lambda rr: pd.notna(rr) and float(rr) < 30],
+                    "oxygen used and respiratory rate < 30",
+                ),
+                SummarizeFeatureItem(
+                    ["", ""],
+                    [True, lambda rr: pd.notna(rr) and float(rr) >= 30],
+                    "oxygen used and respiratory rate >= 30",
+                ),
+                SummarizeFeatureItem(
+                    [""],
+                    [True],
+                    "non-invasive ventilation",
+                ),
+                SummarizeFeatureItem([""], [True], "intubated"),
+            ],
+        }.items()
+    }
+
+
+def switch_to_date_features(sheet_name):
+    date = rename_helper("")
+    anakinra, antibiotic, plaquenil, remdesivir, tocilizumab = rename_helper(
+        ()
+    )
+    return dict(
+        diary={
+            anakinra: SwitchToDateValue("", date),
+            antibiotic: SwitchToDateValue("", date),
+            plaquenil: SwitchToDateValue("", date),
+            remdesivir: SwitchToDateValue("", date),
+            tocilizumab: SwitchToDateValue("", date),
+        },
+    ).get(
+        sheet_name, dict()
+    )  # return empty dict when sheet name not in dictionary
+
+
+def verticalize_features():
+    for item in [
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+        VerticalizeFeatureItem(
+        ),
+    ]:
+        yield VerticalizeFeatureItem(
+            date_column=rename_helper(item.date_column),
+            column_name=rename_helper(item.column_name),
+            related_columns=rename_helper(tuple(item.related_columns)),
+        )
+
+
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
 assert version_info >= (3, 6), "Please use at least Python 3.6"
@@ -1049,5 +1287,8 @@ assert all(
         "drop_rules" in globals(),
         "keep_rules" in globals(),
         "rename_helper" in globals(),
+        "shift_features" in globals(),
+        "switch_to_date_features" in globals(),
+        "verticalize_features" in globals(),
     )
 ), "Please update 'Usage' section of module docstring"
