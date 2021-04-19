@@ -5,6 +5,10 @@ Time | Hidden ) Markov Model
 
 ## Installation
 
+https://virtualenvwrapper.readthedocs.io/en/latest/install.html#basic-installation
+
+mkvirtualenv -a ~/YAstarMM/ -r ~/YAstarMM/requirements.txt --verbose --python=/usr/bin/python3 --prompt="(YastarMM) " YAstarMM
+
 ### Dependencies
 
 * [pandas](https://pandas.pydata.org) ([BSD 3-Clause
