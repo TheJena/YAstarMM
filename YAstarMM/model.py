@@ -205,19 +205,22 @@ class State(IntEnum):
     O2 = 1
     """Oxygen therapy"""
 
-    NIV = 2
+    HFNO = 2
+    """High flow nasal oxygen therapy"""
+
+    NIV = 3
     """Non-invasive ventilation therapy"""
 
-    Intubated = 3
+    Intubated = 4
     """Invasive ventilation technique for patient in intensive care unit"""
 
-    Deceased = 4
+    Deceased = 5
     """Release state: patient is dead"""
 
-    Discharged = 5
+    Discharged = 6
     """Release state: patient is sent back home"""
 
-    Transferred = 6
+    Transferred = 7
     """Release state: patient is moved to another hospital"""
 
     def __str__(self) -> str:
@@ -229,6 +232,7 @@ class State(IntEnum):
         return dict(
             No_O2=rename_helper("No_Ossigenoterapia_Inizio"),
             O2=rename_helper("Ossigenoterapia_Inizio"),
+            HFNO=rename_helper("HFNO_Inizio"),
             NIV=rename_helper("NIV_Inizio"),
             Intubated=rename_helper("Intubazione_Inizio"),
         )[
@@ -241,6 +245,7 @@ class State(IntEnum):
         return dict(
             No_O2=rename_helper("No_Ossigenoterapia"),
             O2=rename_helper("Ossigenoterapia"),
+            HFNO=rename_helper("HFNO"),
             NIV=rename_helper("NIV"),
             Intubated=rename_helper("Intubazione"),
         )[
@@ -253,6 +258,7 @@ class State(IntEnum):
         return dict(
             No_O2=rename_helper("No_Ossigenoterapia_Fine"),
             O2=rename_helper("Ossigenoterapia_Fine"),
+            HFNO=rename_helper("HFNO_Fine"),
             NIV=rename_helper("NIV_Fine"),
             Intubated=rename_helper("Intubazione_Fine"),
         )[
@@ -271,6 +277,7 @@ class State(IntEnum):
             for s in (
                 State.No_O2,
                 State.O2,
+                State.HFNO,
                 State.NIV,
                 State.Intubated,
             )
@@ -600,6 +607,58 @@ class O2EndEvent(Event):
         )
 
 
+class HFNOStartEvent(Event):
+    """Patient high flow nasal oxygen therapy start."""
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        filter_col: str = rename_helper("HFNO_Inizio"),
+        index: int = 5,
+        label: str = "hfno_start",
+        start: bool = True,
+        state: State = State.HFNO,
+        timestamp_col: str = rename_helper("DataRef"),
+        **kwargs,
+    ) -> None:
+        super(HFNOStartEvent, self).__init__(
+            dataframe=df,
+            filter_col=filter_col,
+            index=index,
+            label=label,
+            start=start,
+            state=state,
+            timestamp_col=timestamp_col,
+            **kwargs,
+        )
+
+
+class HFNOEndEvent(Event):
+    """Patient high flow nasal oxygen therapy end."""
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        end: bool = True,
+        filter_col: str = rename_helper("HFNO_Fine"),
+        index: int = 6,
+        label: str = "hfno_end",
+        state: State = State.HFNO,
+        timestamp_col: str = rename_helper("DataRef"),
+        **kwargs,
+    ) -> None:
+        super(HFNOEndEvent, self).__init__(
+            dataframe=df,
+            end=end,
+            filter_col=filter_col,
+            index=index,
+            label=label,
+            state=state,
+            timestamp_col=timestamp_col,
+            **kwargs,
+        )
+
+
 class NIVStartEvent(Event):
     """Patient non-invasive ventilation start."""
 
@@ -607,7 +666,7 @@ class NIVStartEvent(Event):
         self,
         df: pd.DataFrame,
         filter_col: str = rename_helper("NIV_Inizio"),
-        index: int = 5,
+        index: int = 7,
         label: str = "niv_start",
         start: bool = True,
         state: State = State.NIV,
@@ -634,7 +693,7 @@ class NIVEndEvent(Event):
         df: pd.DataFrame,
         end: bool = True,
         filter_col: str = rename_helper("NIV_Fine"),
-        index: int = 6,
+        index: int = 8,
         label: str = "niv_end",
         state: State = State.NIV,
         timestamp_col: str = rename_helper("DataRef"),
@@ -659,7 +718,7 @@ class IntubationStartEvent(Event):
         self,
         df: pd.DataFrame,
         filter_col: str = rename_helper("Intubazione_Inizio"),
-        index: int = 7,
+        index: int = 9,
         label: str = "intubation_start",
         start: bool = True,
         state: State = State.Intubated,
@@ -686,7 +745,7 @@ class IntubationEndEvent(Event):
         df: pd.DataFrame,
         end: bool = True,
         filter_col: str = rename_helper("Intubazione_Fine"),
-        index: int = 8,
+        index: int = 10,
         label: str = "intubation_end",
         state: State = State.Intubated,
         timestamp_col: str = rename_helper("DataRef"),
@@ -710,7 +769,7 @@ class PostNIVStartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        index: int = 9,
+        index: int = 11,
         label: str = "post_niv_start",
         start: bool = True,
         state: State = State.NIV,
@@ -735,7 +794,7 @@ class PostNIVEndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        index: int = 10,
+        index: int = 12,
         label: str = "post_niv_end",
         state: State = State.NIV,
         timestamp_col: str = rename_helper("NIV_Post_Fine_Data"),
@@ -752,13 +811,65 @@ class PostNIVEndEvent(Event):
         )
 
 
+class PostHFNOStartEvent(Event):
+    """Patient post-intubation high flow nasal oxygen therapy start."""
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        filter_col: str = rename_helper("HFNO_Post_Inizio"),
+        index: int = 13,
+        label: str = "post_hfno_start",
+        start: bool = True,
+        state: State = State.HFNO,
+        timestamp_col: str = rename_helper("DataRef"),
+        **kwargs,
+    ) -> None:
+        super(PostHFNOStartEvent, self).__init__(
+            dataframe=df,
+            filter_col=filter_col,
+            index=index,
+            label=label,
+            start=start,
+            state=state,
+            timestamp_col=timestamp_col,
+            **kwargs,
+        )
+
+
+class PostHFNOEndEvent(Event):
+    """Patient post-intubation high flow nasal oxygen therapy end."""
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        end: bool = True,
+        filter_col: str = rename_helper("HFNO_Post_Fine"),
+        index: int = 14,
+        label: str = "post_hfno_end",
+        state: State = State.HFNO,
+        timestamp_col: str = rename_helper("DataRef"),
+        **kwargs,
+    ) -> None:
+        super(PostHFNOEndEvent, self).__init__(
+            dataframe=df,
+            end=end,
+            filter_col=filter_col,
+            index=index,
+            label=label,
+            state=state,
+            timestamp_col=timestamp_col,
+            **kwargs,
+        )
+
+
 class PostO2StartEvent(Event):
     """Patient post-intubation oxygen therapy start."""
 
     def __init__(
         self,
         df: pd.DataFrame,
-        index: int = 11,
+        index: int = 15,
         label: str = "post_oxygen_therapy_start",
         start: bool = True,
         state: State = State.O2,
@@ -783,7 +894,7 @@ class PostO2EndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        index: int = 12,
+        index: int = 16,
         label: str = "post_oxygen_therapy_end",
         state: State = State.O2,
         timestamp_col: str = rename_helper("Ossigenoterapia_Post_Fine_Data"),
@@ -807,7 +918,7 @@ class PostNoO2StartEvent(Event):
         self,
         timestamp: pd.Timestamp,
         df: Optional[pd.DataFrame] = None,  # timestamp already determined
-        index: int = 13,
+        index: int = 17,
         label: str = "post_no_oxygen_start",
         start: bool = True,
         state: State = State.No_O2,
@@ -833,7 +944,7 @@ class PostNoO2EndEvent(Event):
         timestamp: pd.Timestamp,
         df: Optional[pd.DataFrame] = None,  # timestamp already determined
         end: bool = True,
-        index: int = 14,
+        index: int = 18,
         label: str = "post_no_oxygen_end",
         state: State = State.No_O2,
         timestamp_col: Optional[str] = None,  # timestamp already determined
@@ -1037,7 +1148,7 @@ class ReleaseEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        index: int = 15,
+        index: int = 19,
         label: str = "release",
         start: bool = True,
         start_callable: Callable[..., Any] = pd.DataFrame.max,
@@ -1100,11 +1211,12 @@ class HospitalJourney(object):
 
         The returned iterator iterates over the events which in theory
         suppose a FiO2 greater than the natural one (i.e. 21%):
-            [O2|NIV|Intubation|PostNIV|PostO2][Start|End]Event
+            [O2|HFNO|NIV|Intubation|PostNIV|PostO2][Start|End]Event
         """
         for event in self:
             if not isinstance(event, ReleaseEvent) and event.state in (
                 State.O2,
+                State.HFNO,
                 State.NIV,
                 State.Intubated,
             ):
@@ -1148,12 +1260,16 @@ class HospitalJourney(object):
             NoO2EndEvent(pd.NaT),  # not yet known
             O2StartEvent(patient_df),
             O2EndEvent(patient_df),
+            HFNOStartEvent(patient_df),
+            HFNOEndEvent(patient_df),
             NIVStartEvent(patient_df),
             NIVEndEvent(patient_df),
             IntubationStartEvent(patient_df),
             IntubationEndEvent(patient_df),
             PostNIVStartEvent(patient_df),
             PostNIVEndEvent(patient_df),
+            PostHFNOStartEvent(patient_df),
+            PostHFNOEndEvent(patient_df),
             PostO2StartEvent(patient_df),
             PostO2EndEvent(patient_df),
             PostNoO2StartEvent(pd.NaT),  # not yet known
