@@ -53,13 +53,13 @@ def _get_feature_name(
 ) -> Optional[str]:
     """Return the new name of a requested variable according to the vocabulary.
 
-       The vocabulary has a single column explaining the feature (aka
-       variable) name in english.
+    The vocabulary has a single column explaining the feature (aka
+    variable) name in english.
 
-       :param feature: Name of the requested feature.
-       :param vocabulary_df: DataFrame from which information is extracted
-       :param column_name: Column name containing the desired naming convention
-       :return: Name of the requested feature in the desired naming convention
+    :param feature: Name of the requested feature.
+    :param vocabulary_df: DataFrame from which information is extracted
+    :param column_name: Column name containing the desired naming convention
+    :return: Name of the requested feature in the desired naming convention
     """
     if feature is None or not feature:
         print("No feature passed, returning it as it is")
@@ -90,10 +90,10 @@ def set_name_vocabulary(
 ) -> Optional[pd.DataFrame]:
     """Rename DataFrame columns.
 
-       :param df: DataFrame containing columns to be renamed
-       :param vocabulary_file: File containing DataFrame defining the rename
-       :param column_name: Column (in vocabulary) defining the rename criteria
-       :return: DataFrame with renamed columns or None
+    :param df: DataFrame containing columns to be renamed
+    :param vocabulary_file: File containing DataFrame defining the rename
+    :param column_name: Column (in vocabulary) defining the rename criteria
+    :return: DataFrame with renamed columns or None
     """
     if vocabulary_file is None or not vocabulary_file:
         print("No vocabulary file passed.")
@@ -106,7 +106,8 @@ def set_name_vocabulary(
         new_name = _get_feature_name(feature, vocabulary_df, column_name)
         if new_name is not None and new_name != feature:
             df.rename(
-                columns={feature: new_name}, inplace=True,
+                columns={feature: new_name},
+                inplace=True,
             )
         else:
             print(f"Name not set for feature '{feature}'")
@@ -121,17 +122,17 @@ def _get_feature_dtype(
 ) -> Optional[str]:
     """Return the dtype of a requested variable according to the vocabulary.
 
-       The vocabulary has two different columns containing the type of
-       the feature (aka variable).
+    The vocabulary has two different columns containing the type of
+    the feature (aka variable).
 
-       Since in datasets both type standards can occur, it is also
-       provided the possibility to get the dtype from the second type
-       column / convention.
+    Since in datasets both type standards can occur, it is also
+    provided the possibility to get the dtype from the second type
+    column / convention.
 
-       :param feature: Name of the requested feature.
-       :param vocabulary_df: DataFrame from which information is extracted
-       :param column_name: Column name containing the desired type convention
-       :return: The dtype of the requested feature in the desired convention
+    :param feature: Name of the requested feature.
+    :param vocabulary_df: DataFrame from which information is extracted
+    :param column_name: Column name containing the desired type convention
+    :return: The dtype of the requested feature in the desired convention
     """
     if feature is None or not feature:
         print("No feature passed, returning 'object' by default")
@@ -161,10 +162,10 @@ def set_dtype_vocabulary(
 ) -> Optional[pd.DataFrame]:
     """Cast Dataframe columns.
 
-       :param df: Dataframe containing columns to be casted
-       :param vocabulary_file: File containing the DataFrame defining the cast
-       :param column_name: Column (in vocabulary) defining the cast
-       :return: DataFrame with renamed columns or None
+    :param df: Dataframe containing columns to be casted
+    :param vocabulary_file: File containing the DataFrame defining the cast
+    :param column_name: Column (in vocabulary) defining the cast
+    :return: DataFrame with renamed columns or None
     """
     if vocabulary_file is None or not vocabulary_file:
         print("No vocabulary file passed.")

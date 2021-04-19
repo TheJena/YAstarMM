@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2020 Federico Motta <191685@studenti.unimore.it>
+# Copyright (C) 2020-2021 Federico Motta <191685@studenti.unimore.it>
 #
 # This file is part of YAstarMM
 #
@@ -34,6 +34,8 @@
             )
 """
 
+from .column_rules import rename_helper
+from re import VERBOSE, compile
 from typing import Dict, Tuple
 import logging
 import pandas as pd
@@ -53,44 +55,74 @@ ALLOWED_OUTPUT_FORMATS: Tuple[str, ...] = (
 )
 """Allowed DataFrame export formats."""
 
+APPLE_GREEN = "#8DB600"
+CAPRI_BLUE = "#00BFFF"
 
-COLUMNS_AFTER_STATE_TRANSITION_COLUMNS = (
-    #
-    # Order does matter, do not change it please
-    #
+
+COLUMNS_AFTER_STATE_TRANSITION_COLUMNS = rename_helper(
+    (
+        #
+        # Order does matter, do not change it please
+        #
+    )
 )
 
-COLUMNS_BEFORE_STATE_TRANSITION_COLUMNS = (
-    #
-    # Order does matter, do not change it please
-    #
+COLUMNS_BEFORE_STATE_TRANSITION_COLUMNS = rename_helper(
+    (
+        #
+        # Order does matter, do not change it please
+        #
+    )
 )
 
-COLUMNS_CONTAINING_EXAM_DATE = (
+COLUMNS_CONTAINING_EXAM_DATE = rename_helper(
+    (
+    )
 )
 
-COLUMNS_NOT_SO_EASY_TO_MERGE = (  # because of contraddicting data
+COLUMNS_NOT_SO_EASY_TO_MERGE = rename_helper(
+    (  # because of contraddicting data
+    )
 )
 
 COLUMNS_TO_KEEP_DICTIONARY = {
+    rename_helper(k): v
+    for k, v in {
+        # column_name: column_type,
+    }.items()
 }
 
-COLUMNS_TO_MAXIMIZE = (
+COLUMNS_TO_MAXIMIZE = rename_helper(
+    (
+    )
+)
+COLUMNS_TO_MAXIMIZE_DATE = rename_helper(
+    (
+    )
 )
 
-COLUMNS_TO_MAXIMIZE_DATE = ()
-COLUMNS_TO_MINIMIZE_DATE = ()
+COLUMNS_TO_MINIMIZE = rename_helper(
+    (
+    )
+)
+COLUMNS_TO_MINIMIZE_DATE = rename_helper(
+    (
+    )
+)
 
-COLUMN_CONTAINING_PERCENTAGES = ""
-COLUMN_RECALCULATED_AFTERWARDS = ""
-COLUMN_WITH_EXECUTED_EXAM = ""
-COLUMN_WITH_REASON = ""
+COLUMN_CONTAINING_PERCENTAGES = rename_helper("")
+COLUMN_HOSPITAL_UNIT = rename_helper("")
+COLUMN_RECALCULATED_AFTERWARDS = rename_helper("")
+COLUMN_WITH_EXECUTED_EXAM = rename_helper("")
+COLUMN_WITH_REASON = rename_helper("")
 
 DECEASED_VALUE = ""
 
 DEFAULT_RENAME_DICT: Dict[str, str]
 DEFAULT_RENAME_DICT = dict(
 )
+
+EPSILON = 1e-6
 
 EXECUTED_VALUE = ""
 
@@ -112,10 +144,66 @@ LOGGING_LEVEL = logging.WARNING
 LOGGING_STREAM = None  # i.e. stderr
 LOGGING_STYLE = "{"
 
-NASTY_SUFFIXES = ("_x", "_y",) + tuple(f"_z{'z' * i}" for i in range(16))
+NASTY_SUFFIXES = (
+    "_x",
+    "_y",
+) + tuple(f"_z{'z' * i}" for i in range(16))
 
 ORDINARILY_HOME_DISCHARGED = ""
 
-PREFIX_OF_COLUMNS_CONTAINING_EXAM_DATE = ""
+PER_STATE_TRANSITION_OBSERVABLES = {
+    ("No O2", "O2"): rename_helper(
+        (
+        )
+    ),
+    ("O2", "NIV"): rename_helper(
+        (
+        )
+    ),
+    ("NIV", "Intubated"): rename_helper(
+        (
+        )
+    ),
+}
+
+PREFIX_OF_COLUMNS_CONTAINING_EXAM_DATE = rename_helper("")
+
+REGEX_FLOAT_AND_DATE = compile(
+    r"""
+    ^'?\s*
+    (\d+[.,]?\d*)?                        # 1st group: the float
+    \s*
+    (\(\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\))?  # 2nd group: the date
+    \s*'?$
+    """,
+    VERBOSE,
+)
+"""1st group contains the float whilst 2nd group contains the date."""
+
+REGEX_RANGE_OF_FLOATS = compile(
+    r"""
+    ^'?\s*
+    (\d+[.,]?\d*)               # 1st group: range start
+    \s*[-÷]\s*
+    (\d+[.,]?\d*)               # 2nd group: range end
+    \s*'?$
+    """,
+    VERBOSE,
+)
+"""1st group contains the range start whilst the 2nd the range end."""
+
+REGEX_UNDER_THRESHOLD_FLOAT = compile(
+    r"""
+    ^'?\s*
+    <\s*
+    (\d+[.,]?\d*)               # 1st group: threshold
+    \s*'?$
+    """,
+    VERBOSE,
+)
+"""1st group contains the float used as threshold."""
 
 TRANSFERRED_VALUE = ""
+
+TRUTH_DICT = {
+}

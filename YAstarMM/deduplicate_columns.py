@@ -34,7 +34,7 @@
             )
 """
 
-from collections import Counter, OrderedDict
+from .column_rules import rename_helper
 from .constants import (  # without the dot notebook raises ModuleNotFoundError
     #
     # these are mostly tuples (or strings) of italian words
@@ -46,8 +46,10 @@ from .constants import (  # without the dot notebook raises ModuleNotFoundError
     COLUMNS_TO_KEEP_DICTIONARY,  # dictionary
     COLUMNS_TO_MAXIMIZE,
     COLUMNS_TO_MAXIMIZE_DATE,
+    COLUMNS_TO_MINIMIZE,
     COLUMNS_TO_MINIMIZE_DATE,
     COLUMN_CONTAINING_PERCENTAGES,
+    COLUMN_HOSPITAL_UNIT,
     COLUMN_RECALCULATED_AFTERWARDS,
     COLUMN_WITH_EXECUTED_EXAM,
     COLUMN_WITH_REASON,
@@ -60,11 +62,12 @@ from .constants import (  # without the dot notebook raises ModuleNotFoundError
     PREFIX_OF_COLUMNS_CONTAINING_EXAM_DATE,
     TRANSFERRED_VALUE,  # string
 )
-from datetime import datetime
 from .model import (  # without the dot notebook raises ModuleNotFoundError
     State,
     ordered_state_transition_columns,
 )
+from collections import Counter, OrderedDict
+from datetime import datetime
 from multiprocessing import Process, Queue, cpu_count
 from sys import stderr, version_info
 import numpy as np
@@ -88,8 +91,7 @@ def all_equal_floats(iterable):
 
 
 def all_timestamps(iterable):
-    """Return whether iterable contains only and all timestamps compatible data.
-    """
+    """Return if iterable contains only and all timestamps compatible data."""
     assert datetime.now().year <= 2029, str(
         "Please fix all tests using string '/202' to determine "
         "dayfirst/yearfirst boolean values to help Pandas parsing dates"
@@ -123,12 +125,12 @@ def columns_to_keep(df):
     """
     ret = COLUMNS_TO_KEEP_DICTIONARY
     ret["index"] = "int64"
-    ret["ActualState"] = pd.CategoricalDtype(
+    ret[rename_helper("ActualState")] = pd.CategoricalDtype(
         # make black auto-formatting prettier
         categories=State.names(),
         ordered=True,
     )
-    ret["ActualState_val"] = pd.CategoricalDtype(
+    ret[rename_helper("ActualState_val")] = pd.CategoricalDtype(
         categories=State.values(), ordered=True
     )
     for col in df.columns:
@@ -187,7 +189,20 @@ def drop_duplicates_and_nan(list_of_lists):
                 value
                 for value_list in list_of_lists
                 for value in value_list
-                if pd.notna(value)
+                if all(
+                    (
+                        pd.notna(value),
+                        #######################################################
+                        isinstance(value, str)
+                        and value
+                        not in (  # involved column names
+                        ),
+                        #######################################################
+                        isinstance(value, str)
+                        and not value.startswith("")
+                        and not value.startswith(""),
+                    )
+                )
             )
         )
     )
@@ -196,8 +211,8 @@ def drop_duplicates_and_nan(list_of_lists):
 def find_values(good_column_name, old_row):
     """Return dictionary with good and nasty column names as keys.
 
-       Dictionary values are lists containing found values for the
-       respective key
+    Dictionary values are lists containing found values for the
+    respective key
     """
     ret = dict()
     for suffix in set(("",) + NASTY_SUFFIXES):
@@ -230,7 +245,9 @@ def print_updated_percentage(leading_string, iteration, tot_iterations):
     else:
         print("\b" * (8 + len(leading_string)), end="")
         print(
-            f"{leading_string}{percentage:6.2f} %", end="", flush=True,
+            f"{leading_string}{percentage:6.2f} %",
+            end="",
+            flush=True,
         )
 
 
@@ -291,6 +308,25 @@ def worker_body(final_columns, input_queue, output_queue, warning_queue):
                     f"value between {len(possible_values)} available."
                 )
                 new_row[good_column_name] = max(
+                    tuple((float(f) for f in possible_values))
+                )
+                continue
+            if good_column_name.lower() in [
+                column_name.lower() for column_name in COLUMNS_TO_MINIMIZE
+            ]:
+                # By supposing incremental values in df[good_column_name]
+                # we can pretty safely use the minimum one.
+                #
+                # Please also note that the decision to apply this
+                # easy fix has been took considering that any
+                # subsequent application taking this data in input
+                # PROBABLY does not use this piece of information
+                warning_queue.put(
+                    f"column '{good_column_name}' has been "
+                    f"determined\n{' ' * 8} by choosing the minimum "
+                    f"value between {len(possible_values)} available."
+                )
+                new_row[good_column_name] = min(
                     tuple((float(f) for f in possible_values))
                 )
                 continue
@@ -365,12 +401,12 @@ def worker_body(final_columns, input_queue, output_queue, warning_queue):
                     )
                     continue
             if good_column_name.lower() == COLUMN_WITH_REASON.lower():
-                if "ActualState" in old_row:
+                if rename_helper("ActualState") in old_row:
                     # Insomnia (version >= 3) already determined the last
                     # reason; let's use what it wrote in there
-                    possible_value = find_values("ActualState", old_row)[
-                        "ActualState"
-                    ].pop()
+                    possible_value = find_values(
+                        rename_helper("ActualState"), old_row
+                    )[rename_helper("ActualState")].pop()
                     if any(
                         (
                             possible_value in State.non_final_states_names(),
@@ -380,8 +416,9 @@ def worker_body(final_columns, input_queue, output_queue, warning_queue):
                     ):
                         warning_queue.put(
                             f"column '{good_column_name}' could not be "
-                            f"\n{' ' * 8} determined because a non-final "
-                            "state was found in 'ActualState';\n"
+                            f"\n{' ' * 8} determined because a non-final"
+                            " state was found in "
+                            f"'{rename_helper('ActualState')}';\n"
                             f"{' ' * 8} NaN value was set by default."
                         )
                         # unfortunately we did not get the record
@@ -415,7 +452,63 @@ def worker_body(final_columns, input_queue, output_queue, warning_queue):
                             )
                             new_row[good_column_name] = TRANSFERRED_VALUE
                             continue
-
+                else:  # Insomnia not yet run
+                    possible_values = [
+                        value
+                        for value_list in found_values.values()
+                        for value in value_list
+                        if pd.notna(value)
+                    ]
+                    if str(State.Deceased) in possible_values:
+                        new_row[good_column_name] = DECEASED_VALUE
+                        continue
+                    if str(State.Discharged) not in possible_values:
+                        new_row[good_column_name] = TRANSFERRED_VALUE
+                        continue
+                    warning_queue.put(
+                        f"column '{good_column_name}' has been "
+                        f"determined\n{' ' * 8} by choosing the most frequent "
+                        f"value between {len(possible_values)} available."
+                    )
+                    if (
+                        str(State.Discharged)
+                        == Counter(possible_values).most_common(1)[0]
+                    ):
+                        new_row[good_column_name] = ORDINARILY_HOME_DISCHARGED
+                        continue
+                    else:
+                        new_row[good_column_name] = TRANSFERRED_VALUE
+                        continue
+            if good_column_name.lower() in COLUMN_HOSPITAL_UNIT.lower():
+                possible_values = [
+                    value
+                    for value_list in found_values.values()
+                    for value in value_list
+                    if pd.notna(value)
+                ]
+                if len(possible_values) > 2:
+                    new_row[good_column_name] = Counter(
+                        possible_values  # make black auto-formatting prettier
+                    ).most_common(1)[0]
+                    warning_queue.put(
+                        f"column '{good_column_name}' has been "
+                        f"determined\n{' ' * 8} by choosing the most frequent "
+                        f"value between {len(possible_values)} available."
+                    )
+                    continue
+            if good_column_name.lower() in rename_helper(("free_text_notes",)):
+                possible_values = [
+                    note
+                    for value_list in found_values.values()
+                    for value in value_list
+                    for note in value.split("\n")
+                ]
+                new_row[good_column_name] = "\n".join(set(possible_values))
+                warning_queue.put(
+                    f"column '{good_column_name}' has been "
+                    f"determined\n{' ' * 8} by joining available values. "
+                )
+                continue
             assert good_column_name not in new_row, str(
                 "Did you forget to place a 'continue' statement "
                 f"after setting value {repr(new_row[good_column_name])} "
@@ -424,7 +517,8 @@ def worker_body(final_columns, input_queue, output_queue, warning_queue):
             warning_queue.put(
                 f"column '{good_column_name}' could not be\n{' ' * 8} "
                 f"determined because {len(possible_values)} values were"
-                " found; None value was set by default."
+                " found; None value was set by default.\t"
+                + repr(Counter(possible_values))
             )
             if _DEBUG:
                 print(f"{repr(found_values)}", file=stderr, flush=True)
@@ -437,14 +531,30 @@ def worker_body(final_columns, input_queue, output_queue, warning_queue):
         output_queue.put(new_row)
 
 
-def fix_duplicated_columns(df_merged):
-    final_columns = columns_to_keep(df_merged)
+def fix_duplicated_columns(
+    df_merged,
+    final_columns=None,
+    skip_sort_dictionary_keys=False,
+    skip_slowest_type_checking=False,
+):
+    if final_columns is None:
+        # Insomnia already run
+        final_columns = columns_to_keep(df_merged)
+    else:
+        # we just need to deduplicate AdmissionCode_[x|y] columns
+        skip_sort_dictionary_keys = True  # Insomnia not yet run
+        skip_slowest_type_checking = True  # Insomnia will do it
 
     scatter_q, gather_q, warning_q = Queue(), Queue(), Queue()
     workers_list = [
         Process(
             target=worker_body,
-            args=(final_columns.keys(), scatter_q, gather_q, warning_q,),
+            args=(
+                final_columns.keys(),
+                scatter_q,
+                gather_q,
+                warning_q,
+            ),
         )
         for _ in range(cpu_count())
     ]
@@ -493,7 +603,8 @@ def fix_duplicated_columns(df_merged):
         w.join()
 
     print("Building deduplicated dataframe")
-    sort_dictionary_keys(data)  # Sort future dataframe columns
+    if not skip_sort_dictionary_keys:
+        sort_dictionary_keys(data)  # Sort future dataframe columns
     new_df = pd.DataFrame(data=data)
 
     print("Verifing index integrity")
@@ -503,6 +614,8 @@ def fix_duplicated_columns(df_merged):
     print_after = list()
     tot = len(final_columns) - 1  # because i starts from zero
     for i, (col_name, col_type) in enumerate(final_columns.items()):
+        if skip_slowest_type_checking:
+            continue
         print_updated_percentage("Verifing columns data types: ", i, tot)
         if col_name == "index":
             continue  # it is not a column anymore, pandas got it was an Index

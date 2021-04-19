@@ -34,6 +34,7 @@
             )
 """
 
+from .column_rules import rename_helper
 from .constants import (  # without the dot notebook raises ModuleNotFoundError
     ALLOWED_OUTPUT_FORMATS,
     EXECUTING_IN_JUPYTER_KERNEL,
@@ -50,12 +51,15 @@ from .model import (  # without the dot notebook raises ModuleNotFoundError
     State,
     new_columns_to_add,
 )
+from collections import namedtuple
 from datetime import timedelta
 from sys import version_info
 from typing import Iterator, List, Optional, TextIO, Tuple, Union
 import logging
 import numpy as np
 import pandas as pd
+
+_LOGGING_LOCK = Lock()
 
 
 def export_df_to_file(df: pd.DataFrame, file_object: Union[TextIO, str]) -> None:
@@ -150,7 +154,10 @@ class DumbyDog(object):
         date_range = set((ev.value for ev in self.journey if not ev.is_nat))
         min_date, max_date = min(date_range), max(date_range)
         return pd.date_range(
-            start=min_date, end=max_date, freq="D", normalize=True,
+            start=min_date,
+            end=max_date,
+            freq="D",
+            normalize=True,
         ).to_series()
 
     @property
@@ -163,7 +170,7 @@ class DumbyDog(object):
         """Return string prefix for logging messages."""
         return str(
             f"[{self.__name__} v{'.'.join(str(v) for v in self.__version__)}]"
-            f"[patient{self.journey.patient_id:9d}]"
+            f"[patient {self.journey.patient_id}]"
         )
 
     @property
@@ -177,11 +184,14 @@ class DumbyDog(object):
         """
         if self._results is None:
             assert all(
-                (hasattr(self, "run"), callable(getattr(self, "run")),)
+                (
+                    hasattr(self, "run"),
+                    callable(getattr(self, "run")),
+                )
             ), "Please update the RuntimeWarning in the line after this one :D"
             raise RuntimeWarning("Please call the .run() method")
 
-        self.debug("{self.__name__}.results = [")
+        self.debug(f"{self.__name__}.results = [")
         for start_day, end_day, state in self._results:
             if start_day > end_day:
                 continue  # forbid unordered dates
@@ -205,6 +215,7 @@ class DumbyDog(object):
                 self.debug(repr(ret) + ",")
                 yield ret
         self.debug("]")
+        self.flush_logging_queue()
 
     @property
     def temporary_patient_dataframe(self) -> pd.DataFrame:
@@ -221,7 +232,7 @@ class DumbyDog(object):
                 ),
             ],
             axis=1,
-            keys=["Date", "State"],
+            keys=list(rename_helper(("Date", "State"))),
         )
 
         # Populate temporary patient dataframe
@@ -253,18 +264,21 @@ class DumbyDog(object):
                     continue
 
                 patient_tmp_df.loc[
-                    (patient_tmp_df["Date"] >= start_ev.date)
-                    & (patient_tmp_df["Date"] <= end_ev.date),
-                    ["State"],
+                    (patient_tmp_df[rename_helper("Date")] >= start_ev.date)
+                    & (patient_tmp_df[rename_helper("Date")] <= end_ev.date),
+                    [rename_helper("State")],
                 ] = state.value
 
         # Add also discharge reason
         discharge_ev = self.journey.ending
         try:
             patient_tmp_df.loc[
-                (patient_tmp_df["Date"] >= discharge_ev.date)
-                & (patient_tmp_df["Date"] < discharge_ev.day_offset(+1)),
-                ["State"],
+                (patient_tmp_df[rename_helper("Date")] >= discharge_ev.date)
+                & (
+                    patient_tmp_df[rename_helper("Date")]
+                    < discharge_ev.day_offset(+1)
+                ),
+                [rename_helper("State")],
             ] = discharge_ev.reason.value
         except ValueError as e:
             if str(e).lower() == "patient still in charge":
@@ -277,18 +291,27 @@ class DumbyDog(object):
 
         # Cut dataframe to the real date range
         return patient_tmp_df.loc[
-            (patient_tmp_df["Date"] >= self.journey.beginning.date)
-            & (patient_tmp_df["Date"] <= cut_date)
+            (
+                patient_tmp_df[rename_helper("Date")]
+                >= self.journey.beginning.date
+            )
+            & (patient_tmp_df[rename_helper("Date")] <= cut_date)
         ]
 
     def __init__(
-        self, journey: HospitalJourney, log_level: Optional[int] = None,
+        self,
+        journey: HospitalJourney,
+        log_level: Optional[int] = None,
     ) -> None:
         """Initialize DumbyDog algorithm."""
         super(DumbyDog, self).__init__()
         self._journey: HospitalJourney = journey
         if log_level is not None:
             logging.getLogger().setLevel(log_level)
+
+        # let us try to avoid interleaving of logging records about
+        # different patients due to parallelism
+        self._postponed_logging_queue = list()
 
         self._results: Optional[  # make black auto-formatting prettier
             List[Tuple[pd.Timestamp, pd.Timestamp, State]]
@@ -298,9 +321,11 @@ class DumbyDog(object):
             self.info(repr(ev))
         self.info("")
 
-    def columns_to_wipe(self, df_len: int,) -> Iterator[Tuple[str, pd.Series]]:
-        """Return iterator over (columns, wiped_series) to wipe real patient df.
-        """
+    def columns_to_wipe(
+        self,
+        df_len: int,
+    ) -> Iterator[Tuple[str, pd.Series]]:
+        """Return iterator over (columns, wiped_series) to wipe real patient df."""
         nan_series = pd.Series([np.nan for _ in range(df_len)])
         for state in State:
             for nasty_suffix in NASTY_SUFFIXES:
@@ -312,12 +337,20 @@ class DumbyDog(object):
                     else:
                         yield (f"{column}{nasty_suffix}", nan_series)
 
+    def flush_logging_queue(self) -> None:
+        global _LOGGING_LOCK
+        _LOGGING_LOCK.acquire()
+        while self._postponed_logging_queue:
+            level, msg = self._postponed_logging_queue.pop(0)
+            logging.log(level, msg)
+        _LOGGING_LOCK.release()
+
     def run(self) -> None:
         """Prepare results to write back to the real patient dataframe."""
         self._stats["used_dates"] += 1  # admission date
         results = list()
         start_day, end_day, prev_state = None, None, None
-        for index, row in self.temporary_patient_dataframe.iterrows():
+        for (index, row) in self.temporary_patient_dataframe.iterrows():
             curr_date, curr_state = row.to_list()
             if any(
                 (
@@ -327,7 +360,13 @@ class DumbyDog(object):
             ):
                 if start_day is not None:
                     prev_state = State(prev_state)  # type: ignore
-                    results.append((start_day, end_day, prev_state,))
+                    results.append(
+                        (
+                            start_day,
+                            end_day,
+                            prev_state,
+                        )
+                    )
                     if not pd.isna(curr_state):
                         curr_state = State(curr_state)
                         if curr_state in (  # test exit condition
@@ -335,7 +374,13 @@ class DumbyDog(object):
                             State.Transferred,
                             State.Deceased,
                         ):
-                            results.append((curr_date, curr_date, curr_state,))
+                            results.append(
+                                (
+                                    curr_date,
+                                    curr_date,
+                                    curr_state,
+                                )
+                            )
                             self._stats["used_dates"] += 1  # release date
                             break  # skip else statement of the for loop
                 start_day, end_day = curr_date, curr_date
@@ -354,21 +399,34 @@ class DumbyDog(object):
                     State.Transferred,
                     State.Deceased,
                 ):
-                    results.append((start_day, end_day, prev_state,))
+                    results.append(
+                        (
+                            start_day,
+                            end_day,
+                            prev_state,
+                        )
+                    )
                     self._stats["used_dates"] += 1  # future release date
         self._results = results
+        self.flush_logging_queue()
 
     def debug(self, message: str) -> None:
         """Log debug message."""
-        logging.debug(f"{self.logger_prefix} {message}")
+        self._postponed_logging_queue.append(
+            tuple((logging.DEBUG, f"{self.logger_prefix} {message}"))
+        )
 
     def info(self, message: str) -> None:
         """Log info message."""
-        logging.info(f"{self.logger_prefix} {message}")
+        self._postponed_logging_queue.append(
+            tuple((logging.INFO, f"{self.logger_prefix} {message}"))
+        )
 
     def warning(self, message: str) -> None:
         """Log warning message."""
-        logging.warning(f"{self.logger_prefix} {message}")
+        self._postponed_logging_queue.append(
+            tuple((logging.WARNING, f"{self.logger_prefix} {message}"))
+        )
 
 
 class Insomnia(DumbyDog):
@@ -411,11 +469,14 @@ class Insomnia(DumbyDog):
     """Statistics collected globally, over all users."""
 
     def __init__(
-        self, journey: HospitalJourney, log_level: Optional[int] = None,
+        self,
+        journey: HospitalJourney,
+        log_level: Optional[int] = None,
     ) -> None:
         """Initialize Insomnia algorithm."""
         super(Insomnia, self).__init__(
-            journey=journey, log_level=log_level,
+            journey=journey,
+            log_level=log_level,
         )
 
     def fix_inverted_dates(self) -> None:
@@ -480,7 +541,12 @@ class Insomnia(DumbyDog):
                 self._stats["swapped_dates"] += 2
                 ev.value, next_ev.value = next_ev.value, ev.value
                 continue
-            elif all((prev_ev.date <= ev.date, next_next_ev.date >= ev.date,)):
+            elif all(
+                (
+                    prev_ev.date <= ev.date,
+                    next_next_ev.date >= ev.date,
+                )
+            ):
                 # Current date is in range, delete the next one
                 self.debug(f"deleted one date: {next_ev.label}")
                 self._stats["deleted_dates"] += 1
@@ -556,14 +622,22 @@ class Insomnia(DumbyDog):
     def fix_missing_initial_no_oxygen_state(self) -> None:
         """Detect and fill missing No O2 state after admission."""
         admission_ev = self.journey.beginning
-        assert not admission_ev.is_nat, "Admission date should not be nan"
+        if admission_ev.is_nat:
+            patient_id = self.journey.patient_id
+            logging.warning(f" Patient '{patient_id}' has nan admission date")
+            return
 
         # Iterate forward excluding admission, discharge and No O2 dates
         for ev in self.journey.unnatural_FiO2_events:
             if ev.is_nat:
                 continue
 
-            if all((ev.is_start, ev.date > admission_ev.date,)):
+            if all(
+                (
+                    ev.is_start,
+                    ev.date > admission_ev.date,
+                )
+            ):
                 if admission_ev.date > ev.day_offset(-1):
                     break  # no time for No O2 state
 
@@ -600,7 +674,12 @@ class Insomnia(DumbyDog):
             if ev.is_nat:
                 continue
 
-            if all((ev.is_end, ev.date < discharge_ev.date,)):
+            if all(
+                (
+                    ev.is_end,
+                    ev.date < discharge_ev.date,
+                )
+            ):
                 if ev.day_offset(+1) > discharge_ev.day_offset(-1):
                     break  # no time for No O2 state
 
@@ -612,8 +691,8 @@ class Insomnia(DumbyDog):
                 assert all(
                     (
                         isinstance(
-                            post_no_oxygen_start_ev, PostNoO2StartEvent,
-                        ),  # make black auto-formatting prettier
+                            post_no_oxygen_start_ev, PostNoO2StartEvent
+                        ),
                         isinstance(post_no_oxygen_end_ev, PostNoO2EndEvent),
                     )
                 ), "Expected PostNoO2[Start|End]Events :("
@@ -640,7 +719,13 @@ class Insomnia(DumbyDog):
             except StopIteration:
                 continue  # not enough surrounding dates
 
-            if any((not next_ev.is_nat, prev_ev.is_nat, next_next_ev.is_nat,)):
+            if any(
+                (
+                    not next_ev.is_nat,
+                    prev_ev.is_nat,
+                    next_next_ev.is_nat,
+                )
+            ):
                 continue  # not valid surrounding dates
 
             # current date and the next one are missing (nan)
@@ -681,13 +766,13 @@ class Insomnia(DumbyDog):
 
             if all(
                 (
-                    not no_oxygen_start_ev.is_nat,
-                    not no_oxygen_end_ev.is_nat,
-                    abs(
+                    not no_oxygen_start_ev.is_nat
+                    and abs(
                         no_oxygen_start_ev.date - new_start_date
                     )  # make black auto-formatting prettier
                     <= timedelta(days=1),
-                    abs(
+                    not no_oxygen_end_ev.is_nat
+                    and abs(
                         no_oxygen_end_ev.date - new_end_date
                     )  # make black auto-formatting prettier
                     <= timedelta(days=1),
@@ -696,11 +781,11 @@ class Insomnia(DumbyDog):
                 continue  # double hole coincident with No O2 state
             if all(
                 (
-                    not post_no_oxygen_start_ev.is_nat,
-                    not post_no_oxygen_end_ev.is_nat,
-                    abs(post_no_oxygen_start_ev.date - new_start_date)
+                    not post_no_oxygen_start_ev.is_nat
+                    and abs(post_no_oxygen_start_ev.date - new_start_date)
                     <= timedelta(days=1),
-                    abs(
+                    not post_no_oxygen_end_ev.is_nat
+                    and abs(
                         post_no_oxygen_end_ev.date - new_end_date
                     )  # make black auto-formatting prettier
                     <= timedelta(days=1),
@@ -716,8 +801,7 @@ class Insomnia(DumbyDog):
             self.info(repr(next_ev))
 
     def fix_just_admission_discharge_patients(self) -> None:
-        """Set No O2 state for patients with only admission and discharge dates.
-        """
+        """Set No O2 state for patients with only admission and discharge dates."""
         admission_ev = self.journey.beginning
         discharge_ev = self.journey.ending
         assert not discharge_ev.is_nat, str(
@@ -775,10 +859,14 @@ def clear_and_refill_state_transition_columns(
     show_statistics=True,
     use_dumbydog=False,
     use_insomnia=False,
+    *args,
+    **kwargs,
 ):
     assert bool(use_insomnia) != bool(use_dumbydog), str(
         "Please set either use_insomnia=True or use_dumbydog=True"
     )
+
+    saved_log_level = logging.getLogger().getEffectiveLevel()
 
     # Add new columns (if missing)
     for new_col, new_nan_series in new_columns_to_add(len(whole_df)):
@@ -802,6 +890,8 @@ def clear_and_refill_state_transition_columns(
     elif show_statistics and use_dumbydog:
         DumbyDog.show_statistics()
 
+    logging.getLogger().setLevel(saved_log_level)  # restore log level
+
     return whole_df
 
 
@@ -809,7 +899,7 @@ def run_clear_and_refill_algorithm_over_patient_df(
     patient_df,
     log_level=LOGGING_LEVEL,
     use_dumbydog=False,
-    use_insomnia=False,  # make black auto-formatting prettier
+    use_insomnia=False,
 ):
     assert bool(use_insomnia) != bool(use_dumbydog), str(
         "Please set either use_insomnia=True or use_dumbydog=True"
@@ -850,30 +940,33 @@ def run_clear_and_refill_algorithm_over_patient_df(
         state_value,
     ) in algorithm.results:
         if start_col is not None:
-            patient_df.loc[  # make black auto-formatting prettier
-                patient_df["DataRef"] == start_day, [start_col]
+            patient_df.loc[
+                patient_df[rename_helper("DataRef")] == start_day, [start_col]
             ] = True
         if end_col is not None:
-            patient_df.loc[patient_df["DataRef"] == end_day, [end_col]] = True
+            patient_df.loc[
+                patient_df[rename_helper("DataRef")] == end_day, [end_col]
+            ] = True
         if fill_col is not None:
             patient_df.loc[
-                (patient_df["DataRef"] >= start_day)
-                & (patient_df["DataRef"] <= end_day),
+                (patient_df[rename_helper("DataRef")] >= start_day)
+                & (patient_df[rename_helper("DataRef")] <= end_day),
                 [fill_col],
             ] = True
         if state_name in State.names():
             patient_df.loc[
-                (patient_df["DataRef"] >= start_day)
-                & (patient_df["DataRef"] <= end_day),
-                ["ActualState"],
+                (patient_df[rename_helper("DataRef")] >= start_day)
+                & (patient_df[rename_helper("DataRef")] <= end_day),
+                [rename_helper("ActualState")],
             ] = state_name
         if state_value in State.values():
             patient_df.loc[
-                (patient_df["DataRef"] >= start_day)
-                & (patient_df["DataRef"] <= end_day),
-                ["ActualState_val"],
+                (patient_df[rename_helper("DataRef")] >= start_day)
+                & (patient_df[rename_helper("DataRef")] <= end_day),
+                [rename_helper("ActualState_val")],
             ] = state_value
-    return patient_df
+    algorithm.flush_logging_queue()
+    return (patient_df, algorithm._stats)
 
 
 if __name__ == "__main__":

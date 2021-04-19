@@ -47,8 +47,8 @@ _underscorer2 = re.compile("([a-z0-9])([A-Z])")
 def _camel2snake(col_name: str) -> str:
     """Convert camelcase names to snake case.
 
-       Credits to: https://gist.github.com/jaytaylor/3660565
-                   https://stackoverflow.com/a/1176023
+    Credits to: https://gist.github.com/jaytaylor/3660565
+                https://stackoverflow.com/a/1176023
     """
     subbed = _underscorer1.sub(r"\1_\2", col_name)
     return _underscorer2.sub(r"\1_\2", subbed).lower()
@@ -81,14 +81,21 @@ def _normalize_1(col_name: str) -> str:
 def _remove_special(col_name: str) -> str:
     """Remove special characters from column name."""
     return "".join(
-        item for item in str(col_name) if any((item.isalnum(), "_" in item,))
+        item
+        for item in str(col_name)
+        if any(
+            (
+                item.isalnum(),
+                "_" in item,
+            )
+        )
     )
 
 
 def _strip_accents(col_name: str) -> str:
     """Remove accents from a DataFrame column name.
 
-       Credits to: https://stackoverflow.com/a/517974
+    Credits to: https://stackoverflow.com/a/517974
     """
     return "".join(
         letter
@@ -122,14 +129,14 @@ def _strip_underscores(
 ) -> pd.DataFrame:
     """Strip underscores from DataFrames column names.
 
-       Underscores can be stripped from the beginning, end or both.
+    Underscores can be stripped from the beginning, end or both.
 
-       :param df: The pandas DataFrame object.
-       :param strip_underscores: (optional) Removes the outer
-            underscores from all column names. By default, None keeps
-            outer underscores. Values can be either 'left', 'right' or
-            'both' or the respective shorthand 'l', 'r' and True.
-       :returns: A pandas DataFrame with underscores removed.
+    :param df: The pandas DataFrame object.
+    :param strip_underscores: (optional) Removes the outer
+         underscores from all column names. By default, None keeps
+         outer underscores. Values can be either 'left', 'right' or
+         'both' or the respective shorthand 'l', 'r' and True.
+    :returns: A pandas DataFrame with underscores removed.
     """
     return df.rename(
         columns=lambda colum_name: _strip_underscores_func(
@@ -149,40 +156,40 @@ def clean_names(
 ) -> pd.DataFrame:
     """Clean column names.
 
-       Takes all column names, converts them to lowercase, then
-       replaces all spaces with underscores.
+    Takes all column names, converts them to lowercase, then
+    replaces all spaces with underscores.
 
-       By default, column names are converted to string types.  This
-       can be switched off by passing in ``enforce_string=False``.
+    By default, column names are converted to string types.  This
+    can be switched off by passing in ``enforce_string=False``.
 
-       This method does not mutate the original DataFrame.
+    This method does not mutate the original DataFrame.
 
-       Functional usage syntax:
+    Functional usage syntax:
 
-       :Example of transformation:
+    :Example of transformation:
 
-           Columns before: First Name, Last Name, Employee Status, Subject
-           Columns after: first_name, last_name, employee_status, subject
+        Columns before: First Name, Last Name, Employee Status, Subject
+        Columns after: first_name, last_name, employee_status, subject
 
-       :param df: The pandas DataFrame object.
-       :param strip_underscores: (optional) Removes the outer
-           underscores from all column names. Default None keeps outer
-           underscores. Values can be either 'left', 'right' or 'both'
-           or the respective shorthand 'l', 'r' and True.
-       :param case_type: (optional) Whether to make columns lower or
-           uppercase.  Current case may be preserved with 'preserve',
-           while snake case conversion (from CamelCase or camelCase
-           only) can be turned on using "snake".  Default 'lower'
-           makes all characters lowercase.
-       :param remove_special: (optional) Remove special characters
-           from columns.  Only letters, numbers and underscores are
-           preserved.
-       :param preserve_original_columns: (optional) Preserve original names.
-           This is later retrievable using `df.original_columns`.
-       :param enforce_string: Whether or not to convert all column names
-           to string type. Defaults to True, but can be turned off.
-           Columns with >1 levels will not be converted by default.
-       :returns: A pandas DataFrame.
+    :param df: The pandas DataFrame object.
+    :param strip_underscores: (optional) Removes the outer
+        underscores from all column names. Default None keeps outer
+        underscores. Values can be either 'left', 'right' or 'both'
+        or the respective shorthand 'l', 'r' and True.
+    :param case_type: (optional) Whether to make columns lower or
+        uppercase.  Current case may be preserved with 'preserve',
+        while snake case conversion (from CamelCase or camelCase
+        only) can be turned on using "snake".  Default 'lower'
+        makes all characters lowercase.
+    :param remove_special: (optional) Remove special characters
+        from columns.  Only letters, numbers and underscores are
+        preserved.
+    :param preserve_original_columns: (optional) Preserve original names.
+        This is later retrievable using `df.original_columns`.
+    :param enforce_string: Whether or not to convert all column names
+        to string type. Defaults to True, but can be turned off.
+        Columns with >1 levels will not be converted by default.
+    :returns: A pandas DataFrame.
     """
     original_column_names = list(df.columns)
 
@@ -212,5 +219,8 @@ if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
 assert version_info >= (3, 6), "Please use at least Python 3.6"
 assert all(
-    (__name__ in ("YAstarMM.janitor", "janitor"), "clean_names" in globals(),)
+    (
+        __name__ in ("YAstarMM.janitor", "janitor"),
+        "clean_names" in globals(),
+    )
 ), "Please update 'Usage' section of module docstring"

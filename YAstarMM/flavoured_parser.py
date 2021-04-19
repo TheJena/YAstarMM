@@ -37,6 +37,8 @@
             from           flavoured_parser  import  parsed_args
 """
 
+from .column_rules import rename_helper
+
 from argparse import (
     ArgumentDefaultsHelpFormatter,
     ArgumentParser,
@@ -63,8 +65,8 @@ _DESCRIPTION: str = """
     providing a YAML file containing key-value pairs.
 
     This way the amount of arguments passed via Command Line Interface
-    can be reduced and in the near future deploying the code to an 'in
-    production' web server should be easier.
+    can be reduced and in the near future deploying the code to a web
+    server 'in production' should be easier.
 
     In any case CLI arguments will always overwrite the respectives
     ones read from the 'flavour' file."""
@@ -102,7 +104,9 @@ def _get_cli_parser(flavour_dict: Dict[str, Any]) -> ArgumentParser:
 
     # Flag which triggers the print of a useful debugging message
     cli_parser.add_argument(
-        "--debug-parser", action="store_true", help=SUPPRESS,
+        "--debug-parser",
+        action="store_true",
+        help=SUPPRESS,
     )
 
     # WARNING: what follows is not the real -f / --flavour argument !!!
@@ -160,7 +164,7 @@ def _get_flavour_dict(flavour_file: Optional[TextIO]) -> Dict[str, Any]:
         try:
             # faster compiled (safe) Loader
             from yaml import CSafeLoader as SafeLoader
-        except AttributeError:
+        except ImportError:
             # fallback, slower interpreted (safe) Loader
             from yaml import SafeLoader  # type: ignore
         finally:
@@ -185,8 +189,9 @@ class FlavouredNamespace(object):
 
     def _debug(self) -> str:
         """Return internal state representation and prioritized fields view."""
+        global _PARSED_ARGS
         ret = "FlavouredNamespace internal state:\n\n"
-        ret += f"{str(parsed_args)}\n\n\n"
+        ret += f"{str(_PARSED_ARGS)}\n\n\n"
         ret += "FlavouredNamespace fields values (accordingly to priority):\n"
 
         longest_field = max(len(field) for field in self)
@@ -235,9 +240,9 @@ class FlavouredNamespace(object):
     ) -> None:
         """Save passed arguments in private instance variables.
 
-           :param flavour: Dictionary read from 'flavour' file.
-           :param namespace: Namespace built from CLI arguments.
-           :param dump_filename: TextIO object to which self will be dumped
+        :param flavour: Dictionary read from 'flavour' file.
+        :param namespace: Namespace built from CLI arguments.
+        :param dump_filename: TextIO object to which self will be dumped
         """
         if not FlavouredNamespace._initialized:
             self._flavour = flavour
@@ -257,7 +262,7 @@ class FlavouredNamespace(object):
     def __new__(cls, *args, **kwargs):  # type: ignore
         """Pythonic implementation of the singleton design pattern.
 
-           https://python-patterns.guide/gang-of-four/singleton/#a-more-pythonic-implementation
+        https://python-patterns.guide/gang-of-four/singleton/#a-more-pythonic-implementation
         """
         if cls._instance is None:
             cls._instance = super(FlavouredNamespace, cls).__new__(cls)
@@ -301,7 +306,10 @@ class FlavouredNamespace(object):
             from yaml import SafeDumper  # type: ignore
         finally:
             dump(
-                data, filename, Dumper=SafeDumper, default_flow_style=False,
+                data,
+                filename,
+                Dumper=SafeDumper,
+                default_flow_style=False,
             )
 
 

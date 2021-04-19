@@ -38,6 +38,7 @@
             )
 """
 
+from .column_rules import rename_helper
 from .constants import (  # without the dot notebook raises ModuleNotFoundError
     EXECUTING_IN_JUPYTER_KERNEL,
     LOGGING_FORMAT,
@@ -121,7 +122,8 @@ def _select_df_cols(
 
 
 def _select_df_rows_with_not_nan_values_in_columns(
-    dataframe: pd.DataFrame, columns: Iterable[str],
+    dataframe: pd.DataFrame,
+    columns: Iterable[str],
 ) -> pd.DataFrame:
     """Return DataFrame rows with at least one not Nan value in given columns
 
@@ -148,10 +150,10 @@ def new_columns_to_add(
 ) -> Iterator[Tuple[str, Union[pd.Categorical, pd.Series]]]:
     """Return iterator over (new columns name, new columns series)."""
     for col in ordered_state_transition_columns():
-        if col not in ("ActualState", "ActualState_val"):
+        if col not in rename_helper(("ActualState", "ActualState_val")):
             yield (col, pd.Series(data=[np.nan for _ in range(main_df_len)]))
     yield (
-        "ActualState",
+        rename_helper("ActualState"),
         pd.Categorical(
             values=[np.nan for i in range(main_df_len)],
             categories=State.names(),
@@ -159,7 +161,7 @@ def new_columns_to_add(
         ),
     )
     yield (
-        "ActualState_val",
+        rename_helper("ActualState_val"),
         pd.Categorical(
             values=[np.nan for i in range(main_df_len)],
             categories=State.values(),
@@ -170,21 +172,26 @@ def new_columns_to_add(
 
 def ordered_state_transition_columns() -> Tuple[str, ...]:
     # Order does matter, do not change it please
-    return (
-        "No_Ossigenoterapia_Inizio",
-        "No_Ossigenoterapia",
-        "No_Ossigenoterapia_Fine",
-        "Ossigenoterapia_Inizio",
-        "Ossigenoterapia",
-        "Ossigenoterapia_Fine",
-        "NIV_Inizio",
-        "NIV",
-        "NIV_Fine",
-        "Intubazione_Inizio",
-        "Intubazione",
-        "Intubazione_Fine",
-        "ActualState",
-        "ActualState_val",
+    return rename_helper(
+        (
+            "No_Ossigenoterapia_Inizio",
+            "No_Ossigenoterapia",
+            "No_Ossigenoterapia_Fine",
+            "Ossigenoterapia_Inizio",
+            "Ossigenoterapia",
+            "Ossigenoterapia_Fine",
+            "HFNO_Inizio",
+            "HFNO",
+            "HFNO_Fine",
+            "NIV_Inizio",
+            "NIV",
+            "NIV_Fine",
+            "Intubazione_Inizio",
+            "Intubazione",
+            "Intubazione_Fine",
+            "ActualState",
+            "ActualState_val",
+        )
     )
 
 
@@ -220,10 +227,10 @@ class State(IntEnum):
     def start_col(self) -> str:
         """Column name in Pandas DataFrame denoting state start."""
         return dict(
-            No_O2="No_Ossigenoterapia_Inizio",
-            O2="Ossigenoterapia_Inizio",
-            NIV="NIV_Inizio",
-            Intubated="Intubazione_Inizio",
+            No_O2=rename_helper("No_Ossigenoterapia_Inizio"),
+            O2=rename_helper("Ossigenoterapia_Inizio"),
+            NIV=rename_helper("NIV_Inizio"),
+            Intubated=rename_helper("Intubazione_Inizio"),
         )[
             self.name
         ]  # can raise a KeyError on release states
@@ -232,10 +239,10 @@ class State(IntEnum):
     def fill_col(self) -> str:
         """Column name in Pandas DataFrame denoting state persistence."""
         return dict(
-            No_O2="No_Ossigenoterapia",
-            O2="Ossigenoterapia",
-            NIV="NIV",
-            Intubated="Intubazione",
+            No_O2=rename_helper("No_Ossigenoterapia"),
+            O2=rename_helper("Ossigenoterapia"),
+            NIV=rename_helper("NIV"),
+            Intubated=rename_helper("Intubazione"),
         )[
             self.name
         ]  # can raise a KeyError on release states
@@ -244,10 +251,10 @@ class State(IntEnum):
     def end_col(self) -> str:
         """Column name in Pandas DataFrame denoting state end."""
         return dict(
-            No_O2="No_Ossigenoterapia_Fine",
-            O2="Ossigenoterapia_Fine",
-            NIV="NIV_Fine",
-            Intubated="Intubazione_Fine",
+            No_O2=rename_helper("No_Ossigenoterapia_Fine"),
+            O2=rename_helper("Ossigenoterapia_Fine"),
+            NIV=rename_helper("NIV_Fine"),
+            Intubated=rename_helper("Intubazione_Fine"),
         )[
             self.name
         ]  # can raise a KeyError on release states
@@ -260,7 +267,13 @@ class State(IntEnum):
     @classmethod
     def non_final_states_names(cls) -> Tuple[str]:
         return tuple(
-            str(s) for s in (State.No_O2, State.O2, State.NIV, State.Intubated)
+            str(s)
+            for s in (
+                State.No_O2,
+                State.O2,
+                State.NIV,
+                State.Intubated,
+            )
         )
 
     @classmethod
@@ -349,7 +362,13 @@ class Event(object):
             filtered_series = self.callable(filtered_df)
             my_max = self.callable(filtered_series)
             my_series = my_max
-            if not isinstance(my_series, (pd.Timestamp, type(pd.NaT),)):
+            if not isinstance(
+                my_series,
+                (
+                    pd.Timestamp,
+                    type(pd.NaT),
+                ),
+            ):
                 raise ValueError(
                     "Event.callable should return a Pandas.Timestamp; "
                     f"got a '{type(my_series)}' instead"
@@ -367,10 +386,16 @@ class Event(object):
             self._value = pd.NaT
             return
         if isinstance(new_value, str):
-            if new_value.lower() in ("nat", "nan",):
+            if new_value.lower() in (
+                "nat",
+                "nan",
+            ):
                 self._value = pd.NaT
                 return
-            if new_value.lower() in ("now", "today",):
+            if new_value.lower() in (
+                "now",
+                "today",
+            ):
                 self._value = pd.to_datetime(datetime.now().date())
                 return
         raise ValueError(
@@ -458,7 +483,7 @@ class AdmissionEvent(Event):
         label: str = "admission",
         start: bool = True,
         state: State = State.No_O2,
-        timestamp_col: str = "AdmissionTime",
+        timestamp_col: str = rename_helper("AdmissionTime"),
         **kwargs,
     ) -> None:
         super(AdmissionEvent, self).__init__(
@@ -529,12 +554,12 @@ class O2StartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        filter_col: str = "Ossigenoterapia_Inizio",
+        filter_col: str = rename_helper("Ossigenoterapia_Inizio"),
         index: int = 3,
         label: str = "oxygen_therapy_start",
         start: bool = True,
         state: State = State.O2,
-        timestamp_col: str = "DataRef",
+        timestamp_col: str = rename_helper("DataRef"),
         **kwargs,
     ) -> None:
         super(O2StartEvent, self).__init__(
@@ -556,11 +581,11 @@ class O2EndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        filter_col: str = "Ossigenoterapia_Fine",
+        filter_col: str = rename_helper("Ossigenoterapia_Fine"),
         index: int = 4,
         label: str = "oxygen_therapy_end",
         state: State = State.O2,
-        timestam_col: str = "DataRef",
+        timestamp_col: str = rename_helper("DataRef"),
         **kwargs,
     ) -> None:
         super(O2EndEvent, self).__init__(
@@ -570,7 +595,7 @@ class O2EndEvent(Event):
             index=index,
             label=label,
             state=state,
-            timestamp_col=timestam_col,
+            timestamp_col=timestamp_col,
             **kwargs,
         )
 
@@ -581,12 +606,12 @@ class NIVStartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        filter_col: str = "NIV_Inizio",
+        filter_col: str = rename_helper("NIV_Inizio"),
         index: int = 5,
         label: str = "niv_start",
         start: bool = True,
         state: State = State.NIV,
-        timestamp_col: str = "DataRef",
+        timestamp_col: str = rename_helper("DataRef"),
         **kwargs,
     ) -> None:
         super(NIVStartEvent, self).__init__(
@@ -608,11 +633,11 @@ class NIVEndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        filter_col: str = "NIV_Fine",
+        filter_col: str = rename_helper("NIV_Fine"),
         index: int = 6,
         label: str = "niv_end",
         state: State = State.NIV,
-        timestamp_col: str = "DataRef",
+        timestamp_col: str = rename_helper("DataRef"),
         **kwargs,
     ) -> None:
         super(NIVEndEvent, self).__init__(
@@ -633,12 +658,12 @@ class IntubationStartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        filter_col: str = "Intubazione_Inizio",
+        filter_col: str = rename_helper("Intubazione_Inizio"),
         index: int = 7,
         label: str = "intubation_start",
         start: bool = True,
         state: State = State.Intubated,
-        timestamp_col: str = "DataRef",
+        timestamp_col: str = rename_helper("DataRef"),
         **kwargs,
     ) -> None:
         super(IntubationStartEvent, self).__init__(
@@ -660,11 +685,11 @@ class IntubationEndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        filter_col: str = "Intubazione_Fine",
+        filter_col: str = rename_helper("Intubazione_Fine"),
         index: int = 8,
         label: str = "intubation_end",
         state: State = State.Intubated,
-        timestamp_col: str = "DataRef",
+        timestamp_col: str = rename_helper("DataRef"),
         **kwargs,
     ) -> None:
         super(IntubationEndEvent, self).__init__(
@@ -689,7 +714,7 @@ class PostNIVStartEvent(Event):
         label: str = "post_niv_start",
         start: bool = True,
         state: State = State.NIV,
-        timestamp_col: str = "NIV_Post_Inizio_Data",
+        timestamp_col: str = rename_helper("NIV_Post_Inizio_Data"),
         **kwargs,
     ) -> None:
         super(PostNIVStartEvent, self).__init__(
@@ -713,7 +738,7 @@ class PostNIVEndEvent(Event):
         index: int = 10,
         label: str = "post_niv_end",
         state: State = State.NIV,
-        timestamp_col: str = "NIV_Post_Fine_Data",
+        timestamp_col: str = rename_helper("NIV_Post_Fine_Data"),
         **kwargs,
     ) -> None:
         super(PostNIVEndEvent, self).__init__(
@@ -737,7 +762,7 @@ class PostO2StartEvent(Event):
         label: str = "post_oxygen_therapy_start",
         start: bool = True,
         state: State = State.O2,
-        timestamp_col: str = "Ossigenoterapia_Post_Inizio_Data",
+        timestamp_col: str = rename_helper("Ossigenoterapia_Post_Inizio_Data"),
         **kwargs,
     ) -> None:
         super(PostO2StartEvent, self).__init__(
@@ -761,7 +786,7 @@ class PostO2EndEvent(Event):
         index: int = 12,
         label: str = "post_oxygen_therapy_end",
         state: State = State.O2,
-        timestamp_col: str = "Ossigenoterapia_Post_Fine_Data",
+        timestamp_col: str = rename_helper("Ossigenoterapia_Post_Fine_Data"),
         **kwargs,
     ) -> None:
         super(PostO2EndEvent, self).__init__(
@@ -838,7 +863,7 @@ class ReleaseEvent(Event):
                 (
                     reason
                     for col_name, series in _select_df_cols(
-                        self._dataframe, ("ModalitaDimissione",)
+                        self._dataframe, rename_helper(("ModalitaDimissione",))
                     ).items()
                     for reason in series.unique()
                     if not pd.isna(reason)
@@ -902,7 +927,8 @@ class ReleaseEvent(Event):
         # several discharge reasons in order to make the logging more
         # meaningful
         patient_id = HospitalJourney(
-            patient_df=self._dataframe, log_level=logging.CRITICAL,
+            patient_df=self._dataframe,
+            log_level=logging.CRITICAL,
         ).patient_id
 
         logging.getLogger().setLevel(saved_log_level)  # restore log level
@@ -921,13 +947,19 @@ class ReleaseEvent(Event):
                         )
                     )
                     if EXECUTING_IN_JUPYTER_KERNEL
-                    else f"{repr(sorted(reasons))[1:-1]}.",
+                    else repr(sorted(reasons))[1:-1] + ".",
                 )
             )
         )
 
         filtered_df = _select_df_cols(
-            self._dataframe, ("DataDimissione", "ModalitaDimissione",)
+            self._dataframe,
+            rename_helper(
+                (
+                    "DataDimissione",
+                    "ModalitaDimissione" 
+                )
+            ),
         )
         data = dict()
         for row in filtered_df.itertuples(index=False, name=None):
@@ -1010,7 +1042,7 @@ class ReleaseEvent(Event):
         start: bool = True,
         start_callable: Callable[..., Any] = pd.DataFrame.max,
         state: Optional[State] = None,  # release reason is not yet known
-        timestam_col: str = "DataDimissione",
+        timestamp_col: str = rename_helper("DataDimissione"),
         **kwargs,
     ) -> None:
         super(ReleaseEvent, self).__init__(
@@ -1020,7 +1052,7 @@ class ReleaseEvent(Event):
             start=start,
             start_callable=start_callable,
             state=state,
-            timestamp_col=timestam_col,
+            timestamp_col=timestamp_col,
         )
         self._reason = None  # type: ignore
 
@@ -1093,21 +1125,23 @@ class HospitalJourney(object):
         return self._patient_id
 
     def __init__(
-        self, patient_df: pd.DataFrame, log_level: int = LOGGING_LEVEL,
+        self,
+        patient_df: pd.DataFrame,
+        log_level: int = LOGGING_LEVEL,
     ) -> None:
         """Populate patient journey from its Pandas DataFrame."""
         self._patient_df = patient_df
         self._patient_id = None
-        if EXECUTING_IN_JUPYTER_KERNEL:
-            logging_format = "{levelname:^8}|{message}"
-        else:
-            logging_format = LOGGING_FORMAT
-        logging.basicConfig(
-            filename=LOGGING_STREAM,
-            format=logging_format,
-            level=LOGGING_LEVEL,
-            style=LOGGING_STYLE,
-        )
+        if not EXECUTING_IN_JUPYTER_KERNEL:
+            logging.basicConfig(
+                filename=LOGGING_STREAM,
+                format=LOGGING_FORMAT,
+                level=log_level,  # LOGGING_LEVEL,
+                style=LOGGING_STYLE,
+            )
+        else:  # logging should already be configured
+            pass
+            )
         self._journey = [
             AdmissionEvent(patient_df),
             NoO2StartEvent(pd.NaT),  # not yet known
