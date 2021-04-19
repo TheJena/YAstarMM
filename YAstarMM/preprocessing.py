@@ -51,13 +51,21 @@ from .model import (  # without the dot notebook raises ModuleNotFoundError
     State,
     new_columns_to_add,
 )
+from .parallel import (
+    InputOutputErrorQueues,
+    GroupWorkerError,
+    GroupWorkerInput,
+)
 from collections import namedtuple
 from datetime import timedelta
+from multiprocessing import cpu_count, Lock, Process, Queue
 from sys import version_info
 from typing import Iterator, List, Optional, TextIO, Tuple, Union
 import logging
 import numpy as np
 import pandas as pd
+
+GroupWorkerOutput = namedtuple("GroupWorkerOutput", ["df", "stats"])
 
 _LOGGING_LOCK = Lock()
 
@@ -103,8 +111,10 @@ class DumbyDog(object):
     """Statistics collected globally, over all users."""
 
     @classmethod
-    def show_statistics(cls) -> None:
+    def show_statistics(cls, stats=None) -> None:
         """Log collected statistics."""
+        if stats is not None:
+            cls._stats = stats
         prefix = str(
             f"[{cls.__name__} "
             f"v{'.'.join(str(v) for v in cls.__version__)}]"
@@ -855,6 +865,7 @@ class Insomnia(DumbyDog):
 
 def clear_and_refill_state_transition_columns(
     whole_df,
+    patient_key_col,
     log_level=LOGGING_LEVEL,
     show_statistics=True,
     use_dumbydog=False,
@@ -865,6 +876,9 @@ def clear_and_refill_state_transition_columns(
     assert bool(use_insomnia) != bool(use_dumbydog), str(
         "Please set either use_insomnia=True or use_dumbydog=True"
     )
+    assert patient_key_col in whole_df.columns, str(
+        "'patient_key_col' must be a column of the passed whole_df"
+    )
 
     saved_log_level = logging.getLogger().getEffectiveLevel()
 
@@ -873,30 +887,147 @@ def clear_and_refill_state_transition_columns(
         if new_col not in whole_df.columns:
             whole_df[new_col] = new_nan_series
 
-    # Sort whole_df by DataRef and fill State Transition cols of each patient
-    whole_df = (
-        whole_df.sort_values("DataRef")
-        .groupby(["IdPatient"])
-        .apply(
-            run_clear_and_refill_algorithm_over_patient_df,
-            log_level=log_level,
-            use_dumbydog=use_dumbydog,
-            use_insomnia=use_insomnia,
+    if False:  # serial version
+        # Sort df by DataRef and fill State Transition cols of each patient
+        whole_df = (
+            whole_df.sort_values(rename_helper("DataRef"))
+            .groupby(patient_key_col)
+            .apply(
+                run_clear_and_refill_algorithm_over_patient_df,
+                patient_key_col,
+                log_level=log_level,
+                use_dumbydog=use_dumbydog,
+                use_insomnia=use_insomnia,
+            )
         )
-    )
+        all_stats = None
+    else:  # parallel version
+        input_queue, output_queue, error_queue = InputOutputErrorQueues(
+            Queue(), Queue(), Queue()
+        )
+        parallel_workers = [
+            Process(
+                target=_run_clear_and_refill_algorithm_over_patient_df,
+                args=(
+                    input_queue,
+                    output_queue,
+                    error_queue,
+                    patient_key_col,
+                    log_level,
+                    use_dumbydog,
+                    use_insomnia,
+                ),
+            )
+            for _ in range(cpu_count())
+        ]
+        for pw in parallel_workers:
+            pw.start()
+        # Sort whole_df by DataRef and fill State Transition cols of each patient
+        for group_name, patient_df in whole_df.sort_values(
+            rename_helper("DataRef")
+        ).groupby(patient_key_col):
+            input_queue.put(GroupWorkerInput(group_name, patient_df))
+        for _ in parallel_workers:
+            input_queue.put(None)  # send termination signals
+
+        whole_df, all_stats = list(), dict()
+        output_ack, error_ack = len(parallel_workers), len(parallel_workers)
+        while output_ack > 0:
+            output = output_queue.get()
+            if output is None:  # receive ack to termination signal
+                output_ack -= 1
+                continue
+            new_patient_df, patient_stats = output
+            whole_df.append(new_patient_df)
+            all_stats = {
+                k: patient_stats.get(k, 0) + all_stats.get(k, 0)
+                for k in set(patient_stats.keys()).union(set(all_stats.keys()))
+            }
+        while error_ack > 0:
+            error = error_queue.get()
+            if error is None:  # receive ack to termination signal
+                error_ack -= 1
+                continue
+            logging.warning(
+                "While preprocessing patients dataframes; "
+                f" worker {repr(error.group_name)} got the "
+                f"follwing exception: {str(error.exception)}"
+            )
+        logging.debug(
+            "".join(
+                (
+                    "Waiting for all preprocessing workers to join ",
+                    f"({len(parallel_workers)})",
+                )
+            )
+        )
+        for pw in parallel_workers:
+            pw.join()
+        logging.debug(
+            f"All ({len(parallel_workers)}) preprocessing workers joined"
+        )
+        whole_df = pd.concat(whole_df, join="outer", sort=True)
 
     if show_statistics and use_insomnia:
-        Insomnia.show_statistics()
+        Insomnia.show_statistics(all_stats)
     elif show_statistics and use_dumbydog:
-        DumbyDog.show_statistics()
+        DumbyDog.show_statistics(all_stats)
 
     logging.getLogger().setLevel(saved_log_level)  # restore log level
 
     return whole_df
 
 
+def _run_clear_and_refill_algorithm_over_patient_df(
+    input_queue,
+    output_queue,
+    error_queue,
+    patient_key_col,
+    log_level,
+    use_dumbydog,
+    use_insomnia,
+):
+    worker_results, all_stats = list(), dict()
+    while True:
+        group_worker_input = input_queue.get()
+        if group_worker_input is None:
+            break
+
+        group_name, old_patient_df = group_worker_input
+        try:
+            (
+                new_patient_df,
+                _stats,
+            ) = run_clear_and_refill_algorithm_over_patient_df(
+                old_patient_df,
+                patient_key_col,
+                log_level,
+                use_dumbydog,
+                use_insomnia,
+            )
+        except Exception as e:
+            error_queue.put(GroupWorkerError(group_name, e))
+            worker_results.append(old_patient_df)
+        else:
+            worker_results.append(new_patient_df)
+            all_stats = {
+                k: _stats.get(k, 0) + all_stats.get(k, 0)
+                for k in set(_stats.keys()).union(set(all_stats.keys()))
+            }
+
+    output_queue.put(
+        GroupWorkerOutput(
+            pd.concat(worker_results, join="outer", sort=True),
+            all_stats,
+        )
+    )
+    error_queue.put(None)
+    output_queue.put(None)
+
+
 def run_clear_and_refill_algorithm_over_patient_df(
     patient_df,
+    patient_key_col,
     log_level=LOGGING_LEVEL,
     use_dumbydog=False,
     use_insomnia=False,
@@ -905,7 +1036,7 @@ def run_clear_and_refill_algorithm_over_patient_df(
         "Please set either use_insomnia=True or use_dumbydog=True"
     )
 
-    journey = HospitalJourney(patient_df, log_level=log_level)
+    journey = HospitalJourney(patient_df, patient_key_col, log_level=log_level)
 
     if use_insomnia:
         algorithm = Insomnia(journey, log_level=log_level)
