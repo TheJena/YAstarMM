@@ -686,6 +686,148 @@ class MetaModel(object):
             f"{self._validation_df.shape[1]} columns"
         )
 
+    def print_matrix(
+        self,
+        occurrences_matrix=False,
+        transition_matrix=False,
+        training_matrix=False,
+        file_obj=stdout,
+        #
+        # style parameters
+        #
+        float_decimals=3,
+        cell_pad=2,
+        separators=True,
+    ):
+        assert (
+            len(
+                [
+                    b
+                    for b in (
+                        occurrences_matrix,
+                        transition_matrix,
+                        training_matrix,
+                    )
+                    if bool(b)
+                ]
+            )
+            == 1
+        ), str(
+            "Please set only one flag between "
+            "{occurrences,transition,training}_matrix"
+        )
+
+        col_names = State.values()
+        if occurrences_matrix:
+            matrix = self.occurrences_matrix
+            title = "Occurrences"
+        elif transition_matrix:
+            matrix = self.transition_matrix
+            title = "Transition"
+        elif training_matrix:
+            matrix = self.training_matrix
+            title = "Training"
+        else:
+            raise ValueError(
+                "Please set only one flag between "
+                "{occurrences,transition,training}_matrix"
+            )
+        title += " matrix (count_all)"
+
+        legend_size = max(len(name) for name in State.names())
+        cell_size = max(len(str(col)) for col in col_names)
+        if isinstance(
+            matrix[0][0],
+            (
+                int,
+                np.uint16,
+            ),
+        ):
+            cell_size = max(cell_size, len(str(np.max(matrix))))
+        elif isinstance(
+            matrix[0][0],
+            (
+                float,
+                np.float64,
+            ),
+        ):
+            cell_size = max(cell_size, float_decimals + 2)
+
+        header = " " * (3 + 3) + "From / to".center(legend_size) + " " * 3
+        header += "".join(  # make black auto-formatting prettier
+            str(col).rjust(cell_size) + " " * cell_pad for col in col_names
+        )
+        if title:
+            print(title, file=file_obj)
+        print(header, file=file_obj)
+        if separators:
+            print("_" * len(header), file=file_obj)
+        for row in State.values():
+            print(
+                f"{row:3d} = " + str(State(row)).center(legend_size),
+                end=" | ",
+                file=file_obj,
+            )
+            for col in range(len(col_names)):
+                cell_value = matrix[row][col]
+                if isinstance(
+                    cell_value,
+                    (
+                        int,
+                        np.uint16,
+                    ),
+                ):
+                    cell_str = str(cell_value)
+                elif isinstance(
+                    cell_value,
+                    (
+                        float,
+                        np.float64,
+                    ),
+                ):
+                    if not np.isnan(cell_value):
+                        assert cell_value <= 1 and cell_value >= 0, str(
+                            "This function expects float values "
+                            "to be in "
+                            "[0, 1] like probabilities; "
+                            f"got {cell_value:g} instead."
+                        )
+                    cell_str = "{:.16f}".format(  # right pad with many zeros
+                        round(cell_value, float_decimals)
+                    )
+                    cell_str = cell_str[:cell_size]  # cut unneded "padding" 0
+                else:
+                    raise NotImplementedError(
+                        f"Please add support to {type(cell_value)} cells"
+                    )
+                print(
+                    cell_str.rjust(cell_size),
+                    end=" " * cell_pad,
+                    file=file_obj,
+                )
+            print("", file=file_obj)
+        if separators:
+            print("_" * len(header), file=file_obj)
+        print(file=file_obj)
+
+    def print_start_probability(
+        self,
+        float_decimals=3,
+        cell_pad=2,
+        file_obj=stdout,
+    ):
+        print("Start probability:  ", end="", file=file_obj)
+        print(
+            str(" " * cell_pad).join(
+                str("{:.16f}".format(round(p, float_decimals)))[
+                    : float_decimals + 2
+                ]  # make black auto-formatting prettier
+                for p in self.start_prob
+            ),
+            end="\n\n",
+            file=file_obj,
+        )
+
     def validation_matrix_labels(self, unordered_model_states):
         new_index_of_state = {
             str(state.name).replace(" ", "_"): i
