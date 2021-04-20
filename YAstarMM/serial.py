@@ -25,6 +25,7 @@
    Usage:
             from  YAstarMM.serial  import  (
                 cast_columns_to_booleans,
+                cast_columns_to_categorical,
                 fix_bad_date_range,
                 deduplicate_dataframe_columns
             )
@@ -33,6 +34,7 @@
 
             from          .serial  import  (
                 cast_columns_to_booleans,
+                cast_columns_to_categorical,
                 fix_bad_date_range,
                 deduplicate_dataframe_columns,
             )
@@ -40,7 +42,9 @@
 
 from .column_rules import (
     BOOLEANISATION_MAP,
+    does_not_match_categorical_rule,
     ENUM_GRAVITY_LIST,
+    matched_enumerated_rule,
     matches_boolean_rule,
     NORMALIZED_TIMESTAMP_COLUMNS,
     rename_helper,
@@ -205,6 +209,75 @@ def cast_columns_to_booleans(df_dict):
         info(
             f"Successfully converted {len(new_columns): >2d} columns of "
             f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to boolean"
+        )
+    return df_dict
+
+
+@black_magic
+def cast_columns_to_categorical(df_dict, **kwargs):
+    new_df_columns = dict()
+    for sheet_name, df in df_dict.items():
+        for column in df.columns:
+            if does_not_match_categorical_rule(column, df):
+                continue
+            column_unique_values = set(df.loc[:, column].unique())
+            debug(
+                f"Column {repr(column).ljust(64)} in sheet "
+                f"{repr(sheet_name).ljust(25)} probably contains enumerated "
+                + repr(
+                    sorted(
+                        column_unique_values,
+                        key=lambda cell: str(cell).lower(),
+                    )
+                )
+            )
+            dtype, conversion_map = matched_enumerated_rule(
+                column, column_unique_values
+            )
+            if dtype is None or conversion_map is None:
+                debug(
+                    f"No known enum rule did match column '{column}' "
+                    f"of sheet '{sheet_name}'"
+                )
+                continue
+            old_col_repr = repr(df.loc[:, column].tolist())
+            new_series = df.loc[:, column].apply(
+                lambda cell: conversion_map.get(cell, cell)
+            )
+            new_col_repr = repr(new_series.tolist())
+            if old_col_repr != new_col_repr:
+                debug(
+                    f"Column '{column}' of sheet '{sheet_name}' was:       "
+                    + old_col_repr
+                )
+                debug(
+                    f"Column '{column}' of sheet '{sheet_name}' now is:    "
+                    + new_col_repr
+                )
+            new_df_columns[sheet_name] = new_df_columns.get(sheet_name, dict())
+            try:
+                new_df_columns[sheet_name][column] = new_series.astype(dtype)
+            except Exception as e:
+                debug(
+                    f"Could not force {repr(dtype)} on column '{column}' "
+                    f"of sheet '{sheet_name}' because {str(e)}"
+                )
+                new_df_columns[sheet_name][column] = new_series
+            else:
+                debug(
+                    f"Successfully converted column '{column}' "
+                    f"of sheet '{sheet_name}' into '"
+                    + " ".join(repr(dtype).split())
+                    + "'"
+                )
+    sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
+    for sheet_name, new_columns in sorted(
+        new_df_columns.items(), key=lambda tup: tup[0].lower()
+    ):
+        df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
+        info(
+            f"Successfully converted {len(new_columns): >2d} columns of "
+            f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to Categorical"
         )
     return df_dict
 

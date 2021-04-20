@@ -26,6 +26,7 @@
             from  YAstarMM.column_rules  import  (
                 BOOLEANISATION_MAP,
                 DAYFIRST_REGEXP,
+                does_not_match_categorical_rule,
                 drop_rules,
                 keep_rules,
                 matched_enumerated_rule,
@@ -44,6 +45,7 @@
             from          .column_rules  import  (
                 BOOLEANISATION_MAP,
                 DAYFIRST_REGEXP,
+                does_not_match_categorical_rule,
                 drop_rules,
                 keep_rules,
                 matched_enumerated_rule,
@@ -1045,6 +1047,308 @@ def matches_date_time_rule(column_name):
     )
 
 
+def charlson_enum_rule(column_values):
+    charlson_map, unique_values = dict(), set(column_values)
+    for val in unique_values:
+        if all(
+            (
+                "0" in str(val),
+                "=" in str(val) or ("<" in str(val) and "50" in str(val)),
+                BOOLEANISATION_MAP.get(
+                    str(val)
+                    .replace("50", "@@")
+                    .strip("0.= ()")
+                    .lower()
+                    .replace("< @@", "no")
+                    .replace("<@@", "no"),
+                    True,
+                )
+                not in {np.nan, True},
+            )
+        ):  # we found a cell like '0 = No' or '0 (< 50)'
+            charlson_map[0] = set([val])
+    if not charlson_map:
+        raise ValueError("Bad guess, retry")
+    for val in unique_values:
+        for i in range(10):
+            if any(
+                (
+                    f"{i}=" in "".join(str(val).split()),
+                    str(i) == str(val).strip(".0 "),
+                    # the following line treats stuff in 
+                    str(i) == " ".join(str(val).split("(")[:1]).strip(".0 "),
+                )
+            ):
+                charlson_map[i] = charlson_map.get(i, set()).union({val})
+                break
+    categories, conversion_map = list(), dict()
+    for i, values in sorted(charlson_map.items(), key=lambda tup: tup[0]):
+        elected_value = None
+        if len(values) == 1:
+            # The next line pops on purpose the only value in the set
+            # but from a copy of it (i.e. a list) because otherwise the
+            # loop below which populates the conversion map would not
+            # add this value
+            elected_value = str(list(values).pop()).strip(" ")
+        else:
+            for value in values:
+                if str(i) in str(value) and (
+                    any(
+                        (
+                            "-" in str(value),  # 
+                            "<" in str(value),  # 
+                            "=" in str(value),  # 
+                            ">" in str(value),  # 
+                        )
+                    )
+                ):
+                    elected_value = str(value).strip(" ")
+                    break
+        assert elected_value is not None, str(
+            f"Expected a not None value for index '{i}'"
+        )
+        categories.append(elected_value)
+        for v in values.union({int(i), float(i), str(int(i)), str(float(i))}):
+            conversion_map[v] = " ".join(elected_value.split())
+    for val in unique_values:
+        assert val in conversion_map, str(
+            f"Value {repr(val)} expected to be in Charlson conversion map"
+        )
+    dtype = pd.CategoricalDtype(categories=categories, ordered=True)
+    return dtype, conversion_map
+
+
+def covid_enum_rule(column_values):
+    covid_map = {
+        "": "",
+        "": "",
+    }
+
+    if not all((str(res).lower() in covid_map for res in set(column_values))):
+        raise ValueError("Bad guess, retry")
+
+    covid_map = {k: v.capitalize() for k, v in covid_map.items()}
+    for val in set(column_values):
+        if val not in covid_map:
+            covid_map[val] = covid_map[str(val).lower()]
+    dtype = pd.CategoricalDtype(
+        categories=sorted(set(covid_map.values())),
+        ordered=False,
+    )
+    return dtype, covid_map
+
+
+def does_not_match_categorical_rule(column_name, df):
+    if any(
+        (
+            str(df.dtypes[column_name])
+            in ("boolean", "datetime64[ns]"),  # already casted
+            "" in column_name.lower(),  # free text notes
+            "" in column_name.lower(),  # free text notes
+            "" in column_name.lower(),  # exam results
+            "" in column_name.lower(),  # free text notes
+            "" in column_name.lower(),
+            "" in column_name.lower(),
+            "" in column_name.lower(),  # dates
+            column_name.lower().startswith(""),
+        )
+    ):
+        return True
+
+    try:
+        group_name = "blood_tests_to_be_partitioned_into_ad_hoc_regexp"
+        first_dict_in_list = keep_rules[group_name][0]
+        anonymous_group_regexp = first_dict_in_list[""]
+        if anonymous_group_regexp.match(column_name) is not None:
+            return True
+    except Exception:
+        raise Exception(
+            "Please make this try-except piece of code "
+            "return True if the column name matches "
+            "the regexp against all the blood tests"
+        )
+
+    column_unique_values = set(df.loc[:, column_name].unique())
+    if any(
+        (
+            len(column_unique_values) > 32,  # unit_name ~= 30
+            all(
+                pd.api.types.is_number(value)
+                for value in column_unique_values
+                if pd.notna(value)
+            ),
+            "" in (str(v).lower() for v in column_unique_values),
+        )
+    ):
+        return True
+    # ELSE
+    return False
+
+
+def drug_enum_rule(column_values):
+    drug_map = dict(
+    )
+    drug_map.update({f"{k}": f"{v}" for k, v in drug_map.items()})
+    drug_map.update(
+        {
+            k: f"{'' if not v else ''}"
+            for k, v in BOOLEANISATION_MAP.items()
+            if pd.notna(v)
+        }
+    )
+    if not any(
+        (
+            " ".join(str(val).lower().split()) in drug_map.keys()
+            for val in set(column_values)
+        )
+    ):
+        raise ValueError("Bad guess, retry")
+
+    drug_map = {k: v.capitalize() for k, v in drug_map.items()}
+    for val in set(column_values):
+        nice_val = " ".join(str(val).split()).capitalize()
+        if nice_val.lower() in drug_map:
+            drug_map[val] = drug_map[nice_val.lower()]
+        elif nice_val not in set(drug_map.values()):
+            drug_map[val] = nice_val
+    dtype = pd.CategoricalDtype(
+        categories=sorted(set(drug_map.values())), ordered=False
+    )
+    return dtype, drug_map
+
+
+def fallback_enum_rule(column_values):
+    categories, conversion_map = set(), dict()
+    for val in set(column_values):
+        nice_val = (
+            " ".join(
+                str(word).capitalize()
+                if all(
+                    (
+                        pos == 0,
+                        str(word)[0].lower() == str(word)[0],  # char is lower
+                        not str(word).isupper(),  # whole word is in uppercase
+                    )
+                )
+                else str(word)
+                for pos, word in enumerate(val.split())
+            )
+            .replace("anakirna", "anakinra")  # typos are everywhere :_(
+            .replace("Anakirna", "Anakinra")  # en.wikipedia.org/wiki/Anakinra
+            .replace("ANAKIRNA", "ANAKINRA")
+            .replace("", "")
+        )
+        categories.add(nice_val)
+        conversion_map[val] = nice_val
+    dtype = pd.CategoricalDtype(
+        categories=sorted(categories, key=str.lower), ordered=False
+    )
+    return dtype, conversion_map
+
+
+def matched_enumerated_rule(column_name, column_values):
+    unique_values = set(v for v in column_values if pd.notna(v))
+    for enum_rule in (
+        oxygen_state_enum_rule,  # keep before  !
+        # ---------------------- #
+        oxygen_support_enum_rule,  # very fragile, keep before Charlson !
+        # ------------------------ # ---------------------------------- #
+        charlson_enum_rule,
+        covid_enum_rule,
+        drug_enum_rule,
+        sex_enum_rule,
+        swab_enum_rule,
+        # ------------------ # ------------ #
+        fallback_enum_rule,  # keep as last !
+    ):
+        try:
+            dtype, conversion_map = enum_rule(unique_values)
+        except ValueError as e:
+            if str(e) != "Bad guess, retry":
+                raise e
+        else:
+            return dtype, conversion_map
+    return None, None
+
+
+def oxygen_support_enum_rule(column_values):
+    oxygen_map = {
+        "": "hfno",
+        "": "hfno",
+        "": "absent",
+        "niv": "niv",
+        "no": "absent",
+        "": "nasal cannula",
+        "reservoir": "with reservoir bag",
+        "": "nasal cannula",
+        "ventimask": "venturi mask",
+        "venturi": "venturi mask",
+    }
+    if not any(
+        (
+            word.strip(digits + punctuation)
+            in set(oxygen_map.keys()).difference({"", "no", ""})
+            for val in set(column_values)
+            for word in str(val).lower().split()
+        )
+    ):
+        raise ValueError("Bad guess, retry")
+    oxygen_map = {
+        k: v.capitalize() if v not in ("hfno", "niv") else v.upper()
+        for k, v in oxygen_map.items()
+    }
+    for val in set(column_values):
+        for word in str(val).lower().split():
+            nice_word = word.strip(digits + punctuation)
+            if nice_word not in oxygen_map.keys():
+                continue
+            if all(w not in nice_word for w in ("reserv", "", "")):
+                nice_word = oxygen_map[nice_word]
+                if "con" in str(val).lower():
+                    nice_word += " with"
+                elif "senza" in str(val).lower():
+                    nice_word += " without"
+                if "reserv" in str(val).lower():
+                    nice_word += " reservoir bag"
+                oxygen_map[val] = nice_word
+            else:
+                oxygen_map[val] = oxygen_map[nice_word]
+            break
+    dtype = pd.CategoricalDtype(
+        categories=sorted(set(oxygen_map.values())), ordered=False
+    )
+    return dtype, oxygen_map
+
+
+def oxygen_state_enum_rule(column_values):
+    oxygen_states = [
+        # this list should be equal to YAstarMM.model.State.names();
+        # but unfortunately YAstarMM.model can not be imported because
+        # it would generate a recursive dependency
+        # ORDER DOES MATTER
+        "No O2",
+        "O2",
+        "HFNO",
+        "NIV",
+        "Intubated",
+        "Deceased",
+        "Discharged",
+        "Transferred",
+    ]
+    if set(str(v).strip().lower() for v in column_values if pd.notna(v)).difference(
+        set(s.lower() for s in oxygen_states)
+    ):
+        raise ValueError("Bad guess, retry")
+    oxygen_state_map = {
+        val: state
+        for val in set(column_values)
+        for state in set(oxygen_states)
+        if pd.notna(val) and val.strip().lower() == state.lower()
+    }
+    dtype = pd.CategoricalDtype(categories=oxygen_states, ordered=True)
+    return dtype, oxygen_state_map
+
+
 @lru_cache(maxsize=None)
 def progressive_features():
     return iter(
@@ -1112,6 +1416,31 @@ def rename_helper(columns):
     if input_was_a_string:
         return ret.pop()  # return just a string
     return tuple(ret)
+
+
+def sex_enum_rule(column_values, sex_map=None):
+    if sex_map is None:
+        sex_map = dict(
+            f="female",
+            female="female",
+            m="male",
+            male="male",
+            xx="female",
+            xy="male",
+        )
+
+    if not all((str(sex).lower() in sex_map for sex in set(column_values))):
+        raise ValueError("Bad guess, retry")
+
+    sex_map = {k: v.capitalize() for k, v in sex_map.items()}
+    for val in set(column_values):
+        if val not in sex_map:
+            sex_map[val] = sex_map[str(val).lower()]
+    dtype = pd.CategoricalDtype(
+        categories=set(sorted(set(sex_map.values()), key=lambda _: random())),
+        ordered=False,  # gender neutral
+    )
+    return dtype, sex_map
 
 
 @lru_cache(maxsize=None)
@@ -1221,6 +1550,40 @@ def summarize_features():
             ],
         }.items()
     }
+
+
+def swab_enum_rule(column_values):
+    swab_common_values = [
+    ]
+    if not any(
+        (
+            " ".join(str(val).lower().split()) in swab_common_values
+            for val in set(column_values)
+        )
+    ):
+        raise ValueError("Bad guess, retry")
+
+    swab_common_values = [
+        v.capitalize().replace("", "") for v in swab_common_values
+    ]
+    conversion_map = {val: val for val in swab_common_values}
+    for val in set(column_values):
+        nice_val = (
+            " ".join(str(val).split())
+            .capitalize()
+            .replace(
+                "",
+                "",
+            )
+        )
+        if nice_val not in swab_common_values:
+            swab_common_values.append(nice_val)
+            conversion_map[val] = nice_val
+    dtype = pd.CategoricalDtype(
+        categories=sorted(swab_common_values),
+        ordered=False,
+    )
+    return dtype, conversion_map
 
 
 def switch_to_date_features(sheet_name):
@@ -1334,14 +1697,12 @@ assert all(
         ),
         "BOOLEANISATION_MAP" in globals(),
         "DAYFIRST_REGEXP" in globals(),
+        "does_not_match_categorical_rule" in globals(),
         "drop_rules" in globals(),
         "keep_rules" in globals(),
-<<<<<<< HEAD
-=======
         "matched_enumerated_rule" in globals(),
         "matches_boolean_rule" in globals(),
         "matches_date_time_rule" in globals(),
->>>>>>> 7a3c6c3 (todo mergeme)
         "rename_helper" in globals(),
         "shift_features" in globals(),
         "switch_to_date_features" in globals(),
