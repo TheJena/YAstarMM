@@ -24,12 +24,14 @@
 
    Usage:
             from  YAstarMM.serial  import  (
+                fix_bad_date_range,
                 deduplicate_dataframe_columns
             )
 
    ( or from within the YAstarMM package )
 
             from          .serial  import  (
+                fix_bad_date_range,
                 deduplicate_dataframe_columns,
             )
 """
@@ -41,7 +43,9 @@ from .column_rules import (
     rename_helper,
 )
 from .utility import (
+    AVERAGE_DAYS_PER_YEAR,
     black_magic,
+    swap_month_and_day,
 )
 from collections import Counter
 from datetime import timedelta
@@ -172,6 +176,85 @@ def deduplicate_dataframe_columns(
     return new_df
 
 
+@black_magic
+def fix_bad_date_range(
+    df_dict, start_col, end_col, admit_start_end_swap=False, **kwargs
+):
+    fixed_dates = Counter()
+    for sheet_name in sorted(df_dict.keys()):
+        df = df_dict.pop(sheet_name)
+        if start_col in df.columns and end_col in df.columns:
+            for (start_value, end_value), _ in df.loc[
+                :,
+                [start_col, end_col],
+            ].groupby([start_col, end_col]):
+                if start_value <= end_value:
+                    continue  # good date range, nothing to fix
+                debug(
+                    f"negative date range ('{start_col}': '{start_value}'; "
+                    f"'{end_col}': '{end_value}') will be replaced with ..."
+                )
+                selected_rows = (df[start_col] == start_value) & (
+                    df[end_col] == end_value
+                )
+                swapped = dict()
+                for col, old_col_value in {
+                    start_col: start_value,
+                    end_col: end_value,
+                }.items():
+                    try:
+                        new_col_value = swap_month_and_day(old_col_value)
+                    except ValueError:
+                        swapped[col] = old_col_value
+                    else:
+                        swapped[col] = new_col_value
+                previous_date_range_size = round(120 * AVERAGE_DAYS_PER_YEAR)
+                for start, end, swap_num in (
+                    (swapped[start_col], end_value, 1),
+                    (start_value, swapped[end_col], 1),
+                    (swapped[start_col], swapped[end_col], 2),
+                    (
+                        end_value if admit_start_end_swap else start_value,
+                        start_value if admit_start_end_swap else end_value,
+                        int(admit_start_end_swap),
+                    ),
+                ):
+                    if start > end:
+                        continue  # still a negative date range, skip it
+                    current_date_range_size = pd.date_range(
+                        start, end, freq="D", normalize=True
+                    ).size
+                    if current_date_range_size < previous_date_range_size:
+                        debug(
+                            f"{'.'*len('negative date range')} "
+                            f"('{start_col}': '{start}'; "
+                            f"'{end_col}': '{end}')"
+                            + str(
+                                " which is shorter ("
+                                f"{current_date_range_size} < "
+                                f"{previous_date_range_size})"
+                                if previous_date_range_size
+                                != round(120 * AVERAGE_DAYS_PER_YEAR)
+                                else ""
+                            )
+                        )
+                        previous_date_range_size = current_date_range_size
+                        start_value, end_value = start, end
+                        fixed_dates.update([sheet_name] * swap_num)
+                df.loc[selected_rows, start_col] = start_value
+                df.loc[selected_rows, end_col] = end_value
+        df_dict[sheet_name] = df
+
+    if fixed_dates:
+        pad = len(str(fixed_dates.most_common(1)[0][1]))
+        for sheet_name, count in fixed_dates.most_common():
+            info(
+                f"{str(count).rjust(pad)} dates causing "
+                f"negative date ranges fixed in '{sheet_name}'"
+            )
+    return df_dict
+
+
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
 assert version_info >= (3, 6), "Please use at least Python 3.6"
@@ -187,5 +270,6 @@ assert all(
         "cast_columns_to_booleans" in globals(),
         "cast_columns_to_categorical" in globals(),
         "cast_columns_to_floating_point" in globals(),
+        "fix_bad_date_range" in globals(),
     )
 ), "Please update 'Usage' section of module docstring"

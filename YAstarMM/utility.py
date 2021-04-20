@@ -66,6 +66,9 @@ _DISABLE_BLACK_MAGIC_GLOBALLY = False
 
 _CACHE_LOCK, _PERF_LOCK = Lock(), Lock()
 
+# https://en.wikipedia.org/w/index.php?title=Bissextile_year&redirect=yes
+AVERAGE_DAYS_PER_YEAR = 365 + 1 / 4 - 1 / 100 + 1 / 400
+
 EXTRACTION_REGEXP = re.compile(
     r"(Estrazione|Extraction)"
     r"[ _-]*"  # separator
@@ -237,6 +240,20 @@ def initialize_logging(level=INFO):
     debug("")
     debug("Logging initialized and temporary file created")
     debug("")
+
+
+def swap_month_and_day(date):
+    ret = datetime(
+        year=date.year,
+        month=date.day,  # month <~ day
+        day=date.month,  # day   <~ month
+        hour=date.hour,
+        minute=date.minute,
+        second=date.second,
+    )
+    if ret > datetime.today():
+        raise ValueError(f"{ret} is in the future")
+    return pd.to_datetime(ret)
 
 
 if __name__ == "__main__":
