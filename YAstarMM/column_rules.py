@@ -28,6 +28,9 @@
                 DAYFIRST_REGEXP,
                 drop_rules,
                 keep_rules,
+                matched_enumerated_rule,
+                matches_boolean_rule,
+                matches_date_time_rule,
                 progressive_features,
                 rename_helper,
                 shift_features,
@@ -43,6 +46,9 @@
                 DAYFIRST_REGEXP,
                 drop_rules,
                 keep_rules,
+                matched_enumerated_rule,
+                matches_boolean_rule,
+                matches_date_time_rule,
                 progressive_features,
                 rename_helper,
                 shift_features,
@@ -993,6 +999,50 @@ VerticalizeFeatureItem = namedtuple(
 )
 
 
+def matches_boolean_rule(column_name, column_values):
+    if column_name in (
+    ):
+        return True
+    unique_values = set(
+        val.lower() if isinstance(val, str) else val
+        for val in column_values
+        if pd.notna(val)
+    )
+    return all(
+        (
+            not matches_date_time_rule(column_name),
+            len(unique_values) <= len(BOOLEANISATION_MAP),
+            len(
+                unique_values.difference(
+                    set(BOOLEANISATION_MAP.keys()),
+                )
+            )
+            == 0,
+            len(unique_values.difference({float(0.0), float(1.0)})) > 0,
+        )
+    )
+
+
+@lru_cache(maxsize=None)
+def matches_date_time_rule(column_name):
+    c = column_name.lower()
+    return any(
+        (
+            "" in c,
+            c in ("date"),
+            c.endswith(""),
+            c.endswith(""),
+            c.endswith(""),
+            c.endswith(""),
+            c.endswith(""),
+            c.endswith("_from"),
+            c.endswith(""),
+            c.endswith("_start"),
+            c.endswith("_to"),
+            c.startswith("") and not c.endswith(""),
+            c.startswith("") and not c.endswith(""),
+        )
+    )
 
 
 @lru_cache(maxsize=None)
@@ -1286,6 +1336,12 @@ assert all(
         "DAYFIRST_REGEXP" in globals(),
         "drop_rules" in globals(),
         "keep_rules" in globals(),
+<<<<<<< HEAD
+=======
+        "matched_enumerated_rule" in globals(),
+        "matches_boolean_rule" in globals(),
+        "matches_date_time_rule" in globals(),
+>>>>>>> 7a3c6c3 (todo mergeme)
         "rename_helper" in globals(),
         "shift_features" in globals(),
         "switch_to_date_features" in globals(),

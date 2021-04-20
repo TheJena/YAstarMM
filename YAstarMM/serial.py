@@ -24,6 +24,7 @@
 
    Usage:
             from  YAstarMM.serial  import  (
+                cast_columns_to_booleans,
                 fix_bad_date_range,
                 deduplicate_dataframe_columns
             )
@@ -31,6 +32,7 @@
    ( or from within the YAstarMM package )
 
             from          .serial  import  (
+                cast_columns_to_booleans,
                 fix_bad_date_range,
                 deduplicate_dataframe_columns,
             )
@@ -39,6 +41,7 @@
 from .column_rules import (
     BOOLEANISATION_MAP,
     ENUM_GRAVITY_LIST,
+    matches_boolean_rule,
     NORMALIZED_TIMESTAMP_COLUMNS,
     rename_helper,
 )
@@ -72,6 +75,19 @@ ENUM_TO_MAXIMISE = [
 
 def duplicated_columns(df):
     return sorted(df.loc[:, df.columns.duplicated()].columns)
+
+
+def _convert_single_cell_boolean(cell, column_name=None):
+    if column_name is not None and column_name in (
+    ):
+        if pd.isna(cell):
+            return np.nan
+        return bool(" ".join(str(cell).lower().split()) != "")
+    else:
+        return BOOLEANISATION_MAP.get(
+            cell.lower() if isinstance(cell, str) else cell,
+            cell,
+        )
 
 
 def _merge_multiple_columns(sheet_name, df, col):
@@ -132,6 +148,65 @@ def _merge_multiple_columns(sheet_name, df, col):
         f"df.shape[0]: {df.shape[0]}"
     )
     return df.drop(columns=col).assign(**{col: pd.Series(data)})
+
+
+def cast_columns_to_booleans(df_dict):
+    new_df_columns = dict()
+    for sheet_name, df in df_dict.items():
+        for column in df.columns:
+            assert isinstance(df.loc[:, column], pd.Series), str(
+                f"Did you deduplicate columns of '{sheet_name}'? Because "
+                f"column '{column}' seems to appear more than once.."
+            )
+            if matches_boolean_rule(column, df.loc[:, column].unique()):
+                debug(
+                    f"Column '{column}' in sheet '{sheet_name}' "
+                    "probably contains booleans. "
+                    + repr(
+                        sorted(
+                            set(df.loc[:, column].unique()),
+                            key=lambda cell: str(cell).lower(),
+                        )
+                    )
+                )
+                new_df_columns[sheet_name] = new_df_columns.get(
+                    sheet_name,
+                    dict(),
+                )
+                old_col_repr = repr(df.loc[:, column].tolist())
+                new_df_columns[sheet_name][column] = (
+                    df.loc[:, column]
+                    .apply(_convert_single_cell_boolean, args=(column,))
+                    .convert_dtypes(
+                        infer_objects=True,
+                        convert_boolean=True,
+                        convert_floating=False,
+                        convert_integer=False,
+                        convert_string=False,
+                    )
+                )
+                new_col_repr = repr(
+                    new_df_columns[sheet_name][column].tolist()
+                )
+                if old_col_repr != new_col_repr:
+                    debug(
+                        f"Column '{column}' of sheet '{sheet_name}' was:       "
+                        + old_col_repr
+                    )
+                    debug(
+                        f"Column '{column}' of sheet '{sheet_name}' now is:    "
+                        + new_col_repr
+                    )
+    sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
+    for sheet_name, new_columns in sorted(
+        new_df_columns.items(), key=lambda tup: tup[0].lower()
+    ):
+        df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
+        info(
+            f"Successfully converted {len(new_columns): >2d} columns of "
+            f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to boolean"
+        )
+    return df_dict
 
 
 @black_magic
