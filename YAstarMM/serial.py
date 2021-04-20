@@ -815,6 +815,233 @@ def fix_bad_date_range(
     return df_dict
 
 
+@black_magic
+def identify_remaining_records(
+    df_dict,
+    aux_cols,
+    old_key_tuple,
+    new_key_col,
+    guess_admission_date=None,
+    guess_discharge_date=None,
+    ignore_provenance=False,
+    **kwargs,
+):
+    assert isinstance(old_key_tuple, tuple)
+    if not ignore_provenance:
+        assert "provenance" in old_key_tuple, str(
+            "Please put 'provenance' also in old_key_tuple argument"
+        )
+    aux_cols = list(aux_cols)
+    for new_col in (new_key_col, guess_admission_date, guess_discharge_date):
+        if new_col is not None:
+            aux_cols.append(new_col)
+    debug(
+        f"building auxiliary dataframe with columns {repr(aux_cols)}"
+        " from all sheets"  # make black auto-formatting prettier
+    )
+    for col in ("admission_date", "discharge_date", "provenance"):
+        assert col in aux_cols, f"'{col}' must be in aux_cols"
+    aux_df = _auxiliary_dataframe(  # all aux_cols in df_dict.values()
+        df_dict,
+        aux_cols=aux_cols,
+        new_empty_col=None,  # do not add anything
+        sortby=list(old_key_tuple)
+        + [
+            "provenance",
+            guess_admission_date
+            if guess_admission_date is not None
+            else "admission_date",
+            guess_discharge_date
+            if guess_discharge_date is not None
+            else "discharge_date",
+        ],
+    ).astype({new_key_col: "string"})
+
+    # add to aux_df two new columns for guessed admission/discharge dates
+    for guess_col, new_col in {
+        guess_admission_date: "NEW_admission_date",
+        guess_discharge_date: "NEW_discharge_date",
+    }.items():
+        if guess_col is not None:
+            aux_df = aux_df.assign(
+                **{
+                    new_col: pd.Series(
+                        [np.nan for _ in range(aux_df.shape[0])],
+                        dtype="datetime64[ns]",
+                    )
+                }
+            )
+
+    stats = Counter()
+
+    # select only rows not covered by create_new_unique_identifier()
+    selector = aux_df[new_key_col].isna()
+    for col in aux_df.columns:
+        if all(
+            (
+                col not in old_key_tuple,
+                col != "provenance",
+                (guess_admission_date is None)
+                or (col != guess_admission_date),
+                (guess_discharge_date is None)
+                or (col != guess_discharge_date),
+            )
+        ):
+            selector = (selector) & (aux_df[col].isna())
+
+    old_identifiers = [
+        dict(zip(old_key_tuple, old_key_values))
+        for old_key_values, _ in aux_df.loc[selector, :].groupby(
+            list(old_key_tuple)
+        )
+    ]
+    while old_identifiers:
+        old_id = old_identifiers.pop()
+        patient_selector = selector
+        for col, val in old_id.items():
+            assert col in aux_df, f"'{col}' must be in aux_df"
+            patient_selector = (patient_selector) & (aux_df[col] == val)
+
+        new_admission_date = (
+            aux_df.loc[
+                patient_selector,
+                guess_admission_date
+                if guess_admission_date is not None
+                else "admission_date",
+            ]
+            .dropna()
+            .min()
+        )
+        if pd.isna(new_admission_date):
+            continue
+
+        new_discharge_date = (
+            aux_df.loc[
+                patient_selector,
+                guess_discharge_date
+                if guess_discharge_date is not None
+                else "discharge_date",
+            ]
+            .dropna()
+            .max()
+        )
+        if pd.isna(new_discharge_date):
+            new_discharge_date = None
+
+        debug(
+            f"patient ({repr(old_id)}) has: ("
+            + str(
+                repr(guess_admission_date)
+                if guess_admission_date is not None
+                else repr("admission_date")
+            )
+            + f"=='{new_admission_date}', "
+            + str(
+                repr(guess_discharge_date)
+                if guess_discharge_date is not None
+                else repr("discharge_date")
+            )
+            + f"=='{new_discharge_date}') "
+            + f"and {patient_selector.sum()} records in aux_df."
+        )
+
+        new_key_value = new_key_col_value(
+            admission_date=new_admission_date,
+            discharge_date=new_discharge_date,
+        )
+        if new_key_value in set(aux_df[new_key_col].dropna().tolist()):
+            warning(f"patient '{new_key_value}' is already in aux_df")
+            debug(
+                "\n"
+                + aux_df.loc[
+                    (aux_df[new_key_col].isin([new_key_value]))
+                    | patient_selector,
+                    :,
+                ].to_string()
+            )
+        aux_df.loc[patient_selector, new_key_col] = new_key_value
+
+        aux_df.loc[patient_selector, "NEW_admission_date"] = new_admission_date
+        aux_df.loc[patient_selector, "NEW_discharge_date"] = new_discharge_date
+
+        stats.update(
+            {
+                str(
+                    f"successfully identified by a '{new_key_col}'"
+                    " value built with\n("
+                    + str(
+                        repr(guess_admission_date)
+                        if guess_admission_date is not None
+                        else "admission_date"
+                    )
+                    + ", "
+                    + str(
+                        repr(guess_discharge_date)
+                        if guess_discharge_date is not None
+                        else "discharge_date"
+                    )
+                    + ")"
+                ): patient_selector.sum()
+            }
+        )
+
+    # drop 'date' column if present since it is not needed anymore
+    aux_df = (
+        aux_df.drop(columns=["date"] if "date" in aux_df.columns else [])
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+    giver = tuple([new_key_col, "NEW_admission_date", "NEW_discharge_date"])
+    receiver = tuple([new_key_col, "admission_date", "discharge_date"])
+    info("")
+    debug(
+        f"updating all sheets columns {repr(receiver)}' with information "
+        f"from aux_df[{repr(giver)}'].notna() (when rows match)"
+    )
+    df_dict = update_all_sheets(
+        df_dict, aux_df, receiver=receiver, giver=giver
+    )
+    info("")
+    pad1 = len(str(stats.most_common(1)[0][1]))
+    for msg, count in stats.most_common():
+        prefix = f"{str(count).rjust(pad1)} records "
+        info(prefix + msg.split("\n")[0].lstrip())
+        for line in msg.split("\n")[1:]:
+            info(f"{' ' * len(prefix.rstrip())} {line.lstrip()}")
+
+    debug(
+        "aux_df =\n"
+        + aux_df.sort_values(
+            [
+                guess_admission_date
+                if guess_admission_date is not None
+                else "admission_date",
+                new_key_col,
+                guess_discharge_date
+                if guess_discharge_date is not None
+                else "discharge_date",
+            ]
+        )
+        .drop_duplicates()
+        .reset_index(drop=True)
+        .to_string()
+    )
+    debug(
+        f"amount of NEW_KEY            in aux_df: "
+        f"{aux_df[new_key_col].count():9d}"
+    )
+    debug(
+        f"amount of NEW_admission_date in aux_df: "
+        f"{aux_df['NEW_admission_date'].count():9d}"
+    )
+    debug(
+        f"amount of NEW_discharge_date in aux_df: "
+        f"{aux_df['NEW_discharge_date'].count():9d}"
+    )
+    debug(f"size of                         aux_df: {aux_df.shape[0]:9d}")
+    return df_dict
+
+
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
 assert version_info >= (3, 6), "Please use at least Python 3.6"
