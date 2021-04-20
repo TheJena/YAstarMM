@@ -43,6 +43,7 @@ from .column_rules import (
 )
 from .utility import (
     black_magic,
+    new_key_col_value,
     row_selector,
     swap_month_and_day,
 )
@@ -120,6 +121,9 @@ GroupWorkerError = namedtuple("GroupWorkerError", ["group_name", "exception"])
 InputOutputErrorQueues = namedtuple(
     "InputOutputErrorQueues", ["input_queue", "output_queue", "error_queue"]
 )
+
+NewKeyOutput = namedtuple("NewKeyOutput", ["selected_rows", "new_value"])
+NewKeyError = namedtuple("NewKeyError", ["ids_values", "exception"])
 
 RowFillerError = namedtuple("RowFillerError", ["row", "exception"])
 RowFillerOutput = namedtuple(
@@ -561,6 +565,34 @@ def _join_all(process_to_wait, label="spawned process"):
     debug(f"All ({len(process_to_wait)}) {label} joined")
 
 
+def _new_key_worker_body(
+    input_queue, output_queue, error_queue, aux_df, selector, ids_columns
+):
+    debug("New key worker started")
+
+    while True:
+        ids_values = input_queue.get()
+        if ids_values is None:
+            debug("New key worker got a termination signal")
+            break
+        try:
+            if len(ids_columns) == 1:
+                ids_values = [ids_values]  # make single pd.Timestamp iterable
+            selected_rows = row_selector(index=selector.index)
+            for col, val in zip(ids_columns, ids_values):
+                selected_rows = (selected_rows) & (aux_df[col] == val)
+            new_key_value = new_key_col_value(
+                **{col: val for col, val in zip(ids_columns, ids_values)}
+            )
+            output_queue.put(NewKeyOutput(selected_rows, new_key_value))
+        except Exception as e:
+            error_queue.put(NewKeyError(ids_values, str(e)))
+    output_queue.put(None)
+    error_queue.put(None)
+    debug("New key worker acked twice to termination signal")
+    debug("New key worker is ready to rest in peace")
+
+
 def _sheet_worker_body(input_queue, output_queue, error_queue):
     filename, old_sheet_name, df = input_queue.get()
     debug(
@@ -877,6 +909,63 @@ def fill_rows_matching_truth(
             f"follwing exception: {str(rfe.exception)}"
         )
     _join_all(row_filler_workers, "row filler workers")
+    return (aux_df, stats)
+
+
+# DO NOT CACHE THIS FUNCTION
+def find_valid_keys(aux_df, selector, ids_columns, new_key, stats):
+    nk_input_queue, nk_output_queue, nk_error_queue = InputOutputErrorQueues(
+        Queue(), Queue(), Queue()
+    )
+    new_key_workers = [
+        Process(
+            target=_new_key_worker_body,
+            args=(
+                nk_input_queue,
+                nk_output_queue,
+                nk_error_queue,
+                aux_df,
+                selector,
+                ids_columns,
+            ),
+        )
+        for _ in range(cpu_count() - 1)
+    ]
+    for nk in new_key_workers:
+        nk.start()
+
+    for ids_values, _ in aux_df.loc[selector, ids_columns].groupby(
+        ids_columns
+    ):
+        nk_input_queue.put(ids_values)
+    for nk in new_key_workers:
+        nk_input_queue.put(None)  # sent termination signals
+
+    output_ack, error_ack = len(new_key_workers), len(new_key_workers)
+    while output_ack > 0:
+        nko = nk_output_queue.get()
+        if nko is None:  # receive ack to termination signal
+            output_ack -= 1
+            continue
+        aux_df.loc[nko.selected_rows, new_key] = nko.new_value
+        stats.update(
+            {
+                str(
+                    f"successfully identified by a '{new_key}' value",
+                ): len(list(nko.selected_rows.index.array))
+            }
+        )
+    while error_ack > 0:
+        nke = nk_error_queue.get()
+        if nke is None:  # receive ack to termination signal
+            error_ack -= 1
+            continue
+        warning(
+            "While finding {repr(tuple(ids_columns))} values, valid as key; "
+            f"worker in charge of ids_values: {repr(nke.ids_values)} got the "
+            f"follwing exception: {str(nke.exception)}"
+        )
+    _join_all(new_key_workers, "new_key workers")
     return (aux_df, stats)
 
 

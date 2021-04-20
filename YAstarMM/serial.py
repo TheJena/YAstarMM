@@ -56,11 +56,13 @@ from .column_rules import (
 )
 from .parallel import (
     fill_rows_matching_truth,
+    find_valid_keys,
     update_all_sheets,
 )
 from .utility import (
     AVERAGE_DAYS_PER_YEAR,
     black_magic,
+    new_key_col_value,
     swap_month_and_day,
 )
 from collections import Counter
@@ -467,6 +469,147 @@ def cast_columns_to_floating_point(df_dict, **kwargs):
         "| uniq "
         "| less -S"
     )
+    return df_dict
+
+
+@black_magic
+def create_new_unique_identifier(
+    df_dict, aux_cols, new_key_col, autoselect_date_columns=False, **kwargs
+):
+    debug(f"original aux_cols: {repr(aux_cols)}")
+    original_aux_cols, added_cols = list(aux_cols), list()
+    if autoselect_date_columns:
+        added_cols = sorted(
+            set(
+                col
+                for df in df_dict.values()
+                for col in df.columns
+                if matches_date_time_rule(col)
+            ).difference(set(aux_cols)),
+            key=str.lower,
+        )
+    aux_cols = original_aux_cols + added_cols
+    debug(
+        f"building auxiliary dataframe with columns {repr(aux_cols)}"
+        " from all sheets"  # make black auto-formatting prettier
+    )
+    aux_df = _auxiliary_dataframe(  # all aux_cols in df_dict.values()
+        df_dict,
+        aux_cols=aux_cols,
+        new_empty_col=new_key_col,
+        sortby=["admission_date", "discharge_date"],
+    ).astype({new_key_col: "string"})
+
+    stats = Counter()
+    for ids_columns, empty_columns in (
+        (["admission_date", "birth_date", "discharge_date"], []),
+        (["admission_date", "birth_date"], ["discharge_date"]),
+        (["admission_date", "discharge_date"], ["birth_date"]),
+        (["admission_date"], ["birth_date", "discharge_date"]),
+    ):
+        selector = aux_df[new_key_col].isna()
+        for col in ids_columns:
+            assert col in aux_df, f"'{col}' must be in aux_df"
+            selector = (selector) & (aux_df[col].notna())
+        for col in empty_columns:
+            assert col in aux_df, f"'{col}' has to be in aux_df"
+            selector = (selector) & (aux_df[col].isna())
+
+        debug(f"finding {repr(tuple(ids_columns))} values, valid as key")
+        aux_df, stats = find_valid_keys(
+            aux_df, selector, ids_columns, new_key=new_key_col, stats=stats
+        )
+
+        debug(f"building read only table with '{new_key_col}' valid values")
+        read_only_truth = _read_only_copy(
+            aux_df, key_col=new_key_col, excluded_cols=["date"]
+        )
+
+        debug(
+            f"filling missing '{new_key_col}' values of records matching"
+            " those in the read only table"
+        )
+        aux_df, stats = fill_rows_matching_truth(
+            aux_df,
+            read_only_truth,
+            empty_columns,
+            new_key=new_key_col,
+            indirect_obj=new_key_col,  # en.wikipedia.org/wiki/Object_(grammar)
+            added_date_cols=added_cols,
+            stats=stats,
+            use_all_available_dates=autoselect_date_columns,
+        )
+        debug(f"With identification columns: {repr(tuple(ids_columns))}")
+        for msg, count in stats.most_common():
+            debug(f"{count:9d} records {msg}")
+        stats = Counter(
+            {
+                str(
+                    f"{msg} built with\n{repr(tuple(ids_columns))}"
+                    if "successfully" in msg and "built with" not in msg
+                    else msg
+                ): count
+                for msg, count in stats.most_common()
+                if "successfully" in msg or len(ids_columns) == 1
+            }
+        )
+
+    aux_df = (
+        aux_df.loc[:, original_aux_cols + [new_key_col]]
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+    debug(f"updating all sheets with the new key column '{new_key_col}'")
+    df_dict = update_all_sheets(
+        df_dict,
+        aux_df.drop(columns=["date"] if "date" in aux_df.columns else []),
+        receiver=new_key_col,
+        giver=new_key_col,
+    )
+
+    tot = sum(qty for _, qty in stats.most_common())
+    pad1 = len(str(stats.most_common(1)[0][1]))
+    pad2 = {msg: msg.lstrip().find(repr(new_key_col)) for msg in stats.keys()}
+    for msg, count in stats.most_common():
+        if count == tot:
+            continue
+        prefix = (
+            f"{str(count).rjust(pad1)} ({100 * count / tot:6.3f}%) records "
+        )
+        info(
+            prefix
+            + msg.split("\n")[0].lstrip().rjust(max(pad2.values()) - pad2[msg])
+        )
+        for line in msg.split("\n")[1:]:
+            info(f"{' ' * len(prefix.rstrip())} {line.lstrip()}")
+
+    debug(
+        "aux_df =\n"
+        + aux_df.sort_values(
+            [new_key_col, "admission_date", "birth_date", "discharge_date"]
+        )
+        .drop_duplicates()
+        .reset_index(drop=True)
+        .to_string()
+    )
+    if isdir(join_path(expanduser("~"), "RAMDISK")):
+        aux_df.sort_values(
+            [
+                "admission_date",
+                "discharge_date",
+                "admission_code",
+                "admission_id",
+            ]
+        ).drop(columns=["date"]).dropna(
+            subset=[""]
+        ).drop_duplicates().reset_index(
+            drop=True
+        ).to_pickle(
+            join_path(expanduser("~"), "RAMDISK", "aux_df.pkl")
+        )
+    debug(f"amount of          in aux_df: {aux_df[].count():9d}")
+    debug(f"amount of          in aux_df: {aux_df[].count():9d}")
+    debug(f"size of               aux_df: {aux_df.shape[0]:9d}")
     return df_dict
 
 
