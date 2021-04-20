@@ -558,6 +558,33 @@ def _get_new_sheet_name(filename, old_sheet_name, df):
     )
 
 
+def _group_worker_body(tail, input_queue, output_queue, error_queue):
+    worker_results = list()
+    while True:
+        group_worker_input = input_queue.get()
+        if group_worker_input is None:
+            debug("Group worker got a termination signal")
+            break
+
+        group_name, old_df = group_worker_input
+        debug(f"Group worker started  filling Nan of {repr(group_name)}")
+        try:
+            new_df = old_df.fillna(method="bfill").fillna(method="ffill")
+        except Exception as e:
+            error_queue.put(GroupWorkerError(group_name, e))
+            worker_results.append(old_df.tail(tail))
+        else:
+            worker_results.append(new_df.tail(tail))
+        finally:
+            debug(f"Group worker finished filling Nan of {repr(group_name)}")
+
+    output_queue.put(pd.concat(worker_results, join="outer", sort=True))
+    error_queue.put(None)
+    output_queue.put(None)
+    debug("Group worker acked twice to termination signal")
+    debug("Group worker is ready to rest in peace")
+
+
 def _join_all(process_to_wait, label="spawned process"):
     debug(f"Waiting for all {label} to join ({len(process_to_wait)})")
     for p in process_to_wait:
@@ -833,6 +860,56 @@ def cast_date_time_columns_to_timestamps(df_dict, **kwargs):
             f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to pd.Timestamp"
         )
     return df_dict
+
+
+@black_magic
+def fill_nan_backward_forward(
+    name,
+    df,
+    sort_criteria,
+    group_criteria,
+    tail,
+    **kwargs,
+):
+    max_cpus = cpu_count() - 1
+
+    gw_input_queue, gw_output_queue, gw_error_queue = InputOutputErrorQueues(
+        Queue(), Queue(), Queue()
+    )
+    group_workers = [
+        Process(
+            target=_group_worker_body,
+            args=(tail, gw_input_queue, gw_output_queue, gw_error_queue),
+        )
+        for _ in range(max_cpus)
+    ]
+    for gw in group_workers:
+        gw.start()
+    for name, group in df.sort_values(sort_criteria).groupby(group_criteria):
+        gw_input_queue.put(GroupWorkerInput(name, group))
+    for _ in group_workers:
+        gw_input_queue.put(None)  # send termination signals
+
+    all_groups = list()
+    output_ack, error_ack = len(group_workers), len(group_workers)
+    while output_ack > 0:
+        group_df = gw_output_queue.get()
+        if group_df is None:  # receive ack to termination signal
+            output_ack -= 1
+            continue
+        all_groups.append(group_df)  # tail already done by workers
+    while error_ack > 0:
+        group_worker_error = gw_error_queue.get()
+        if group_worker_error is None:  # receive ack to termination signal
+            error_ack -= 1
+            continue
+        warning(
+            "While filling backward/forward NaN values of sheet '{name}';"
+            f" worker {repr(group_worker_error.group_name)} got the "
+            f"follwing exception: {str(group_worker_error.exception)}"
+        )
+    _join_all(group_workers, "group workers")
+    return pd.concat(all_groups, join="outer", sort=True)
 
 
 # DO NOT CACHE THIS FUNCTION
