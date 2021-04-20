@@ -54,6 +54,7 @@ from .column_rules import (
     matches_static_rule,
     NORMALIZED_TIMESTAMP_COLUMNS,
     rename_helper,
+    verticalize_features as _verticalize_features,
 )
 from .parallel import (
     fill_rows_matching_truth,
@@ -1317,6 +1318,96 @@ def identify_remaining_records(
         f"{aux_df['NEW_discharge_date'].count():9d}"
     )
     debug(f"size of                         aux_df: {aux_df.shape[0]:9d}")
+    return df_dict
+
+
+@black_magic
+def verticalize_features(df_dict, key_col, **kwargs):
+    # Populate the new dataframe just with patient IDs and relevant dates
+    all_patient_date_couples = set()
+    for sheet_name, df in df_dict.items():
+        column_selector = set(
+            column
+            for feature_item in _verticalize_features()
+            for column in [feature_item.date_column]
+            + list(feature_item.related_columns)
+        ).intersection(set(df.columns))
+        if not column_selector or key_col not in df.columns:
+            continue
+        column_selector.update({key_col})
+        for key_val, patient_df in df.loc[:, column_selector].groupby(
+            key_col
+        ):  # make black auto-formatting prettier
+            if pd.isna(key_val):
+                continue
+            for col_name, series in patient_df.items():
+                if series.dtype != "datetime64[ns]":
+                    continue
+                for timestamp in series.loc[series.notna()].unique():
+                    all_patient_date_couples.update(
+                        {tuple((key_val, timestamp))}
+                    )  # make black auto-formatting prettier
+    new_df_columns = sorted(
+        {
+            column
+            for feature_item in _verticalize_features()
+            for column in [feature_item.column_name]
+            + list(feature_item.related_columns)
+            if column not in {key_col, "date"}  # separately treated
+        },
+        key=str.lower,
+    )
+    new_df = pd.DataFrame(
+        [
+            pd.Series(
+                {key_col: key_val, "date": date},
+                index=[key_col, "date"] + new_df_columns,
+            )
+            for key_val, date in all_patient_date_couples
+        ]
+    )
+
+    # Populate the rest of the columns in the new dataframe
+    for sheet_name, df in df_dict.items():
+        column_selector = set(
+            column
+            for feature_item in _verticalize_features()
+            for column in [feature_item.date_column]
+            + list(feature_item.related_columns)
+        ).intersection(set(df.columns))
+        if not column_selector or key_col not in df.columns:
+            continue
+        column_selector.update({key_col})
+        for key_val, patient_df in df.loc[:, column_selector].groupby(
+            key_col
+        ):  # make black auto-formatting prettier
+            for feature_item in _verticalize_features():
+                if feature_item.date_column not in patient_df.columns:
+                    continue
+                for patient_row in patient_df.itertuples(index=False):
+                    date = getattr(patient_row, feature_item.date_column)
+                    if pd.notna(date):
+                        selected_rows = (new_df[key_col] == key_val) & (
+                            new_df["date"] == date
+                        )
+                        if (
+                            not selected_rows.empty
+                            and feature_item.column_name in new_df.columns
+                        ):
+                            new_df.loc[
+                                selected_rows,
+                                feature_item.column_name,
+                            ] = True
+                        for related_column in feature_item.related_columns:
+                            if hasattr(patient_row, related_column):
+                                new_df.loc[
+                                    selected_rows,
+                                    related_column,
+                                ] = getattr(patient_row, related_column)
+        df_dict[sheet_name] = df.drop(
+            columns=column_selector.difference({key_col})
+        )  # make black auto-formatting prettier
+    df_dict["vertical-features"] = new_df
     return df_dict
 
 
