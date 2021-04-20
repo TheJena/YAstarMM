@@ -130,6 +130,12 @@ RowFillerOutput = namedtuple(
     "RowFillerOutput", ["row_index", "chosen_id", "stats"]
 )
 
+SheetMergerInput = namedtuple(
+    "SheetMergerInput",
+    ["left_name", "right_name", "left_df", "right_df", "join_dict"],
+)
+SheetMergerOutput = namedtuple("SheetMergerOutput", ["name", "df"])
+
 SheetWorkerError = namedtuple(
     "SheetWorkerError", ["filename", "sheet_name", "exception"]
 )
@@ -620,6 +626,100 @@ def _new_key_worker_body(
     debug("New key worker is ready to rest in peace")
 
 
+def _sheet_merger_worker_body(input_queue, output_queue, error_queue, key_col):
+    debug("Sheet merger worker started")
+
+    while True:
+        try:
+            workload = input_queue.get(block=True, timeout=0.5)  # seconds
+        except EmptyQueue:
+            continue  # keep polling
+        else:
+            if workload is None:
+                debug("Sheet merger worker got a termination signal")
+                break  # received termination signal
+
+        left_name, right_name, left_df, right_df, join_dict = workload
+        worker_name = f"Merger of: [{left_name}] + [{right_name}]"
+        debug(f"{worker_name} started")
+
+        type_cast_mapping = {
+            column: "object"
+            for column in set(left_df.columns) & set(right_df.columns)
+            if str(left_df.dtypes[column]) != str(right_df.dtypes[column])
+        }
+        if type_cast_mapping:
+            debug(
+                f"{worker_name} (type_cast_mapping: {repr(type_cast_mapping)}"
+            )  # make black auto-formatting prettier
+        type_cast_mapping.update(join_dict)
+        debug(f"{worker_name} (join_dict: {repr(join_dict)})")
+        try:
+            left_df = left_df.astype(type_cast_mapping)
+            right_df = right_df.astype(type_cast_mapping)
+            merged_df = pd.merge(
+                left=left_df,
+                right=right_df,
+                how="outer",
+                on=list(
+                    set(join_dict.keys())
+                    | (set(left_df.columns) & set(right_df.columns))
+                ),
+                copy=False,
+            )
+            merged_df = merged_df.drop_duplicates(ignore_index=True)
+            if all(
+                (
+                    key_col in merged_df.columns,
+                    "date" in merged_df.columns,
+                )
+            ):
+                debug(
+                    f"{worker_name} started trimming multiple records"
+                    f" about the same ({key_col}, date)"
+                )
+                t0 = time()
+                merged_df = (
+                    merged_df.reset_index(drop=True)
+                    .set_index(keys=[key_col, "date"])
+                    .sort_values("date")
+                    .groupby([key_col, "date"])
+                    .apply(
+                        lambda df: df.fillna(method="bfill")
+                        .fillna(method="ffill")
+                        .tail(1)  # keep at most a record for each patient-date
+                    )
+                )  # df should now be indexed twice by tuple (key_col, date)
+                while len(merged_df.index.levels) > 2:
+                    # we need only a two level index to do the next reset
+                    merged_df = merged_df.droplevel(0)
+                # move (key_col, date) back in columns
+                merged_df = merged_df.reset_index()
+                debug(
+                    f"Trimming of multiple records {' ' * 61}"
+                    f"took {time() - t0:10.6f} seconds.\t({worker_name})"
+                )
+        except Exception as e:
+            debug(f"{worker_name} failed")
+            error_queue.put(e)
+            output_queue.put(SheetMergerOutput(left_name, left_df))
+            output_queue.put(SheetMergerOutput(right_name, right_df))
+        else:
+            error_queue.put(None)
+            output_queue.put(
+                SheetMergerOutput(f"({left_name} + {right_name})", merged_df)
+            )
+            debug(f"{worker_name} succeeded")
+        finally:
+            debug(f"{worker_name} ended")
+            run_garbage_collector()
+
+    # ack to termination signal
+    debug("Sheet merger worker is ready to rest in peace")
+    output_queue.put(None)
+    error_queue.put(None)
+
+
 def _sheet_worker_body(input_queue, output_queue, error_queue):
     filename, old_sheet_name, df = input_queue.get()
     debug(
@@ -1044,6 +1144,135 @@ def find_valid_keys(aux_df, selector, ids_columns, new_key, stats):
         )
     _join_all(new_key_workers, "new_key workers")
     return (aux_df, stats)
+
+
+@black_magic
+def merge_sheets(
+    df_dict, key_col, key_col_dtype, enable_automagic=True, **kwargs
+):
+    max_cpus = cpu_count()
+    set_vml_num_threads(1)  # we are already using multiprocessing
+    set_num_threads(1)  # we are already using multiprocessing
+
+    sm_input_queue, sm_output_queue, sm_error_queue = InputOutputErrorQueues(
+        Queue(), Queue(), Queue()
+    )
+    sheet_merger_workers = [
+        Process(
+            target=_sheet_merger_worker_body,
+            args=(sm_input_queue, sm_output_queue, sm_error_queue, key_col),
+        )
+        for _ in range(min(round(len(df_dict) / 2), max_cpus))
+    ]
+    for sm_worker in sheet_merger_workers:
+        sm_worker.start()
+
+    preferred_join_order = (
+        # http://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html
+        {"date": "datetime64[ns]", "": "Int64"},
+        {"date": "datetime64[ns]", key_col: key_col_dtype},
+        {key_col: key_col_dtype},
+    )
+
+    output_to_wait, last_debug_msg = 0, ""
+    while len(df_dict) > 1 or output_to_wait > 0:
+        for join_dict in preferred_join_order:
+            sheet_list = [
+                sheet_name
+                for sheet_name, df in df_dict.items()
+                if all(col in df.columns for col in join_dict)
+            ]
+            if sheet_list:
+                msg = "sheet_list: " + str(", ".join(sheet_list))
+                if msg != last_debug_msg:
+                    last_debug_msg = msg
+                    debug(msg)
+            while len(sheet_list) >= 2:
+                left_name, right_name = sheet_list.pop(0), sheet_list.pop(0)
+                sm_input_queue.put(
+                    SheetMergerInput(
+                        left_name,
+                        right_name,
+                        df_dict.pop(left_name),
+                        df_dict.pop(right_name),
+                        join_dict,
+                    )
+                )
+                output_to_wait += 1
+            if output_to_wait > 0:
+                try:
+                    exception = sm_error_queue.get(
+                        block=True,
+                        timeout=0.5,  # seconds
+                    )
+                except EmptyQueue:
+                    continue
+                debug(f"output_to_wait: {output_to_wait}")
+                output_to_wait -= 1
+                if exception is None:
+                    sheet_merger_output = sm_output_queue.get()
+                    assert sheet_merger_output is not None
+                    merged_name, merged_df = sheet_merger_output
+                    debug(
+                        f"added '{merged_name}' to df_dict "
+                        f"{repr(merged_df.columns.tolist())}"
+                    )
+                    df_dict[merged_name] = merged_df
+                else:
+                    names, dataframes = dict(), dict()
+                    for pos in ("left", "right"):
+                        output = sm_output_queue.get()
+                        assert output is not None
+                        names[pos] = output.name
+                        dataframes[pos] = output.df
+                        df_dict[output.name] = output.df
+                    debug(f"\n\n{'~' * 80}\n\n")
+                    for pos in ("left", "right"):
+                        sheet_name, df = names[pos], dataframes[pos]
+                        debug(f"Sheet '{sheet_name}':")
+                        for column in sorted(df.columns, key=str.lower):
+                            debug(
+                                " ".join(
+                                    (
+                                        str(df.dtypes[column]).ljust(16),
+                                        repr(column),
+                                    )
+                                )
+                            )
+                    warning(
+                        f"While merging '{names['left']}' and "
+                        f"'{names['right']}' got the following "
+                        f"exception: {str(exception)}"
+                    )
+            else:
+                continue  # no couple of sheets found with join_dict criterion
+            break  # at least a couple was found, retry all join_dict criteria
+    assert output_to_wait == 0
+    assert len(df_dict) == 1
+
+    for sm_worker in sheet_merger_workers:
+        sm_input_queue.put(None)  # send termination signal
+
+    for i, _ in enumerate(sheet_merger_workers):
+        assert (
+            sm_output_queue.get() is None
+        ), f"output-{i+1}-of-{len(sheet_merger_workers)}"
+        assert (
+            sm_error_queue.get() is None
+        ), f"output-{i+1}-of-{len(sheet_merger_workers)}"
+
+    for i, q in enumerate((sm_input_queue, sm_output_queue, sm_error_queue)):
+        assert q.empty, f"Queue {i+1} is not empty"
+
+    _join_all(sheet_merger_workers, "sheet merger workers")
+
+    merged_order, merged_df = df_dict.popitem()
+
+    for col in sorted(merged_df.columns, key=str.lower):
+        debug(f"{str(merged_df.dtypes[col]).ljust(16)} {repr(col)}")
+
+    info(f"Sheets were merged in the following order:\n    {merged_order}")
+    return merged_df
 
 
 @black_magic
