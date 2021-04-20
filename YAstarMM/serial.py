@@ -54,6 +54,10 @@ from .column_rules import (
     NORMALIZED_TIMESTAMP_COLUMNS,
     rename_helper,
 )
+from .parallel import (
+    fill_rows_matching_truth,
+    update_all_sheets,
+)
 from .utility import (
     AVERAGE_DAYS_PER_YEAR,
     black_magic,
@@ -84,6 +88,53 @@ ENUM_TO_MAXIMISE = [
 
 def duplicated_columns(df):
     return sorted(df.loc[:, df.columns.duplicated()].columns)
+
+
+def _auxiliary_dataframe(df_dict, aux_cols, new_empty_col, sortby=list()):
+    ret = pd.DataFrame(columns=sorted(aux_cols, key=str.lower))
+    for df in df_dict.values():
+        sub_df = df.loc[:, [c for c in aux_cols if c in df.columns]]
+        ret = pd.concat(
+            [
+                ret,
+                sub_df.assign(
+                    **{
+                        c: pd.Series([np.nan for _ in range(df.shape[0])])
+                        for c in set(aux_cols).difference(set(sub_df.columns))
+                    }
+                ),
+            ],
+            join="outer",
+            ignore_index=True,
+        ).drop_duplicates()
+    if new_empty_col is not None:
+        ret = ret.assign(
+            **{
+                new_empty_col: pd.Series(
+                    [np.nan for _ in range(ret.shape[0])]
+                ),
+            }
+        )
+    return (
+        ret.astype(
+            {
+                col: pd.Int64Dtype()
+                for col in ret.columns
+                if all(
+                    (
+                        # pd.Timestamp
+                        "date" not in col.lower(),
+                        not matches_date_time_rule(col),
+                        # string
+                        "" not in col.lower(),
+                        col != rename_helper(""),
+                    )
+                )
+            }
+        )
+        .sort_values([c for c in sortby if c in ret.columns])
+        .reset_index(drop=True)
+    )
 
 
 def _convert_single_cell_boolean(cell, column_name=None):
@@ -202,6 +253,21 @@ def _merge_multiple_columns(sheet_name, df, col):
         f"df.shape[0]: {df.shape[0]}"
     )
     return df.drop(columns=col).assign(**{col: pd.Series(data)})
+
+
+def _read_only_copy(aux_df, key_col, excluded_cols=list()):
+    assert key_col in aux_df.columns, str(
+        f"key_col '{key_col}' must be in aux_df.columns"
+    )
+    return (
+        aux_df.loc[
+            aux_df[key_col].notna(),
+            [col for col in aux_df.columns if col not in excluded_cols],
+        ]
+        .drop_duplicates()
+        .sort_values(key_col)
+        .reset_index(drop=True)
+    )
 
 
 def cast_columns_to_booleans(df_dict):
@@ -444,6 +510,87 @@ def deduplicate_dataframe_columns(
             + "."
         )
     return new_df
+
+
+@black_magic
+def fill_guessable_nan_keys(df_dict, key_col, aux_cols, **kwargs):
+    if key_col != "":
+        warning(
+            f"This function was designed to fill missing "
+            "but guessable '' values.\nIts usage against "
+            f"'{key_col}' was not tested, YOU HAVE BEEN WARNED!"
+        )
+    new_key_col = f"GUESSED_{key_col}".upper()
+
+    debug(
+        f"building auxiliary dataframe with columns {repr(aux_cols)}"
+        " from all sheets"  # make black auto-formatting prettier
+    )
+    aux_df = _auxiliary_dataframe(
+        df_dict,
+        aux_cols=aux_cols,
+        new_empty_col=new_key_col,
+        sortby=["", "", "admission_date", "discharge_date"],
+    )
+    stats = Counter()
+    debug(f"finding existing and valid '{key_col}' values")
+    for key_value, df in (
+        aux_df.drop(
+            columns=set(("date", new_key_col)).intersection(
+                set(aux_df.columns),
+            )
+        )
+        .dropna()
+        .groupby(key_col)
+    ):
+        aux_df.loc[df.index, new_key_col] = int(key_value)
+        stats.update(
+            {
+                " ".join(
+                    (
+                        "successfully identified by an existing",
+                        repr(key_col.upper()),
+                    )
+                ): len(list(df.index.array))
+            }
+        )
+
+    debug("building read only table with found valid values")
+    read_only_truth = _read_only_copy(
+        aux_df, key_col=new_key_col, excluded_cols=["date"]
+    )
+
+    debug(
+        f"fill missing '{new_key_col}' values of records matching"
+        " those in the read only table"
+    )
+    aux_df, stats = fill_rows_matching_truth(
+        aux_df,
+        read_only_truth,
+        empty_columns=list(),
+        new_key=new_key_col,
+        indirect_obj=key_col,
+        stats=stats,
+    )
+
+    debug("updating all sheets with the successfully guessed key values")
+    df_dict = update_all_sheets(
+        df_dict,
+        aux_df.drop(columns=["date"] if "date" in aux_df.columns else []),
+        receiver=key_col,
+        giver=new_key_col,
+    )  # make black auto-formatting prettier
+
+    tot = sum(qty for _, qty in stats.most_common())
+    pad = len(str(stats.most_common(1)[0][1]))
+    for msg, count in stats.most_common():
+        info(
+            f"{str(count).rjust(pad)} ({100 * count / tot:5.2f}%) records "
+            + msg.split("\n")[0].lstrip()
+        )
+        for line in msg.split("\n")[1:]:
+            info(f"{' ' * (pad + 10 + len('records'))} {line.lstrip()}")
+    return df_dict
 
 
 @black_magic

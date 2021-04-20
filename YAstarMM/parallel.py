@@ -43,6 +43,8 @@ from .column_rules import (
 )
 from .utility import (
     black_magic,
+    row_selector,
+    swap_month_and_day,
 )
 from collections import Counter, namedtuple, OrderedDict
 from datetime import datetime, timedelta
@@ -117,6 +119,11 @@ GroupWorkerError = namedtuple("GroupWorkerError", ["group_name", "exception"])
 
 InputOutputErrorQueues = namedtuple(
     "InputOutputErrorQueues", ["input_queue", "output_queue", "error_queue"]
+)
+
+RowFillerError = namedtuple("RowFillerError", ["row", "exception"])
+RowFillerOutput = namedtuple(
+    "RowFillerOutput", ["row_index", "chosen_id", "stats"]
 )
 
 SheetWorkerError = namedtuple(
@@ -367,6 +374,132 @@ def _file_writer_body(filename, sheet_dict, bkp_ext=".bkp"):
     )
 
 
+def _fill_rows_matching_truth_body(
+    input_queue,
+    output_queue,
+    error_queue,
+    read_only_truth,
+    empty_columns,
+    new_key,
+    indirect_obj,
+    added_date_cols,
+    use_all_available_dates,
+):
+    debug("Row filler started")
+
+    stats = Counter()
+    while True:
+        row = input_queue.get()
+        if row is None:
+            debug("Row filler got a termination signal")
+            break
+
+        try:
+            selector = row_selector(index=read_only_truth.index)
+            assert isinstance(row, dict)
+            assert "Index" in row
+            for col, cell_value in row.items():
+                if (
+                    pd.notna(cell_value)
+                    and col not in ("date", "Index")
+                    and col not in added_date_cols
+                ):
+                    selector = (selector) & (
+                        read_only_truth[col] == cell_value
+                    )
+            for col in empty_columns:
+                selector = (selector) & (read_only_truth[col].isna())
+            possible_ids = set(
+                read_only_truth.loc[selector, new_key].dropna().tolist(),
+            )
+            if len(possible_ids) == 0:
+                stats.update([f"did not match any existing '{indirect_obj}'"])
+                continue
+            elif len(possible_ids) == 1:
+                stats.update(
+                    [f"successfully matched a single '{indirect_obj}'"]
+                )
+                chosen_id = possible_ids.pop()
+            else:
+                date_columns = ["date"]
+                if use_all_available_dates:
+                    date_columns += added_date_cols
+                chosen_id = None
+                for date_col in date_columns:
+                    date = row.get(date_col, None)
+                    if pd.isna(date):
+                        continue
+                    normalized_date = pd.to_datetime(
+                        pd.to_datetime(date).date()
+                    )
+                    sub_df = read_only_truth.loc[
+                        read_only_truth.loc[:, new_key].isin(possible_ids),
+                        ["admission_date", "discharge_date", new_key],
+                    ]
+                    possible_ids = set()
+                    possible_ids_considering_date_typos = set()
+                    for sub_row in sub_df.itertuples():
+                        start = getattr(sub_row, "admission_date")
+                        if pd.isna(start):
+                            continue
+                        end = getattr(sub_row, "discharge_date")
+                        if pd.isna(end):
+                            end = pd.to_datetime(datetime.now().date())
+                        if normalized_date in pd.date_range(
+                            start, end, freq="D", normalize=True
+                        ):
+                            possible_ids.add(getattr(sub_row, new_key))
+                        try:
+                            mistyped_date = swap_month_and_day(normalized_date)
+                        except ValueError:
+                            pass
+                        else:
+                            if mistyped_date in pd.date_range(
+                                start, end, freq="D", normalize=True
+                            ):
+                                possible_ids_considering_date_typos.add(
+                                    getattr(sub_row, new_key)
+                                )
+                    if len(possible_ids) == 1:
+                        stats.update(
+                            [
+                                "successfully matched several "
+                                f"'{indirect_obj}' and\n"
+                                "only one also matched the date range"
+                            ]
+                        )
+                        chosen_id = possible_ids.pop()
+                        break
+                    elif len(possible_ids_considering_date_typos) == 1:
+                        stats.update(
+                            [
+                                "successfully matched several "
+                                f"'{indirect_obj}' and\n"
+                                "only one (having a typo in the 'date')"
+                                " also\nmatched the date range"
+                            ]
+                        )
+                        chosen_id = possible_ids_considering_date_typos.pop()
+                        break
+                if chosen_id is None:
+                    stats.update(
+                        [
+                            f"matched several '{indirect_obj}' but "
+                            "no date information\nhelped "
+                            "disambiguating among them"
+                        ]
+                    )
+                    continue
+            output_queue.put(RowFillerOutput(row["Index"], chosen_id, None))
+        except Exception as e:
+            error_queue.put(RowFillerError(row, str(e)))
+    output_queue.put(RowFillerOutput(None, None, stats))
+    output_queue.put(None)
+    error_queue.put(None)
+    debug("Row filler acked twice to termination signal")
+    debug("Row filler is ready to rest in peace")
+
+
 def _get_new_sheet_name(filename, old_sheet_name, df):
     global LONGEST_FILENAME_LENGTH
     if df.empty:
@@ -527,6 +660,91 @@ def _timestamp_worker_body(input_queue, output_queue, error_queue):
         )
 
 
+def _update_all_sheets(
+    input_queue, output_queue, error_queue, lookup_table, receiver, giver
+):
+    if not isinstance(receiver, str) or not isinstance(giver, str):
+        warning(
+            "updating with giver/receiver tuples matches records "
+            "only against the first giver/receiver"
+        )
+        assert len(receiver) == len(giver), str(
+            "when using giver/receiver tuples, their length must be the same"
+        )
+
+    if isinstance(receiver, str):
+        receiver_list = [receiver]
+    else:
+        receiver_list = list(receiver)
+    if isinstance(giver, str):
+        giver_list = [giver]
+    else:
+        giver_list = list(giver)
+
+    for giver in giver_list:
+        assert giver in lookup_table.columns, str(
+            f"giver '{giver}' column must be in lookup_table.columns"
+        )
+
+    swi = input_queue.get()
+    sheet_name, df = swi.old_sheet_name, swi.df.loc[:, :]
+    debug(f"Sheet updater in charge of '{sheet_name}' started")
+    try:
+        for giver_value, sub_lookup_table in lookup_table.loc[
+            lookup_table[giver_list[0]].notna(),
+            list(
+                set(
+                    giver_list
+                    + list(
+                        set(lookup_table.columns).intersection(set(df.columns))
+                    ),
+                )
+            ),
+        ].groupby(giver_list[0]):
+            selector = row_selector(index=df.index)
+            for sub_col, sub_series in sub_lookup_table.items():
+                if sub_col in giver_list:
+                    continue
+                selector = (selector) & df[sub_col].isin(sub_series.unique())
+                if not selector.any():
+                    # selector is not selecting any row, go on
+                    break
+            else:
+                df.loc[selector, receiver_list[0]] = giver_value
+                for receiver_col, giver_col in zip(
+                    receiver_list[1:], giver_list[1:]
+                ):
+                    receiver_values = (
+                        lookup_table.loc[
+                            lookup_table[giver_list[0]] == giver_value,
+                            receiver_col,
+                        ]
+                        .dropna()
+                        .tolist()
+                    )
+                    if len(set(receiver_values)) == 1:
+                        df.loc[
+                            (selector) & (df[receiver_list[0]] == giver_value),
+                            receiver_col,
+                        ] = receiver_values.pop()
+                    else:
+                        warning(
+                            "could not choose between so many receiver "
+                            f"values ({repr(receiver_values)}) for "
+                            f"'{receiver_col}' and "
+                            f"'{receiver_list[0]}'=='{giver_value}'"
+                        )
+    except Exception as e:
+        error_queue.put(SheetWorkerError("df_dict", sheet_name, str(e)))
+        output_queue.put(SheetWorkerOutput("df_dict", sheet_name, swi.df))
+    else:
+        error_queue.put(None)
+        output_queue.put(SheetWorkerOutput("df_dict", sheet_name, df))
+    debug(
+        f"Sheet updater in charge of '{sheet_name}' is ready to rest in peace"
+    )
+
+
 @black_magic
 def cast_date_time_columns_to_timestamps(df_dict, **kwargs):
     timestamp_workers = list()
@@ -583,6 +801,83 @@ def cast_date_time_columns_to_timestamps(df_dict, **kwargs):
             f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to pd.Timestamp"
         )
     return df_dict
+
+
+# DO NOT CACHE THIS FUNCTION
+def fill_rows_matching_truth(
+    aux_df,
+    read_only_truth,
+    empty_columns,
+    new_key,
+    indirect_obj,
+    added_date_cols=list(),
+    stats=Counter(),
+    use_all_available_dates=False,
+):
+    assert new_key in aux_df.columns, str(
+        f"new_key ({new_key}) must be a column in aux_df"
+    )
+    assert all(
+        (
+            "admission_date" in read_only_truth.columns,
+            "discharge_date" in read_only_truth.columns,
+        )
+    )
+
+    rf_input_queue, rf_output_queue, rf_error_queue = InputOutputErrorQueues(
+        Queue(), Queue(), Queue()
+    )
+    row_filler_workers = [
+        Process(
+            target=_fill_rows_matching_truth_body,
+            args=(
+                rf_input_queue,
+                rf_output_queue,
+                rf_error_queue,
+                read_only_truth,
+                empty_columns,
+                new_key,
+                indirect_obj,
+                added_date_cols,
+                use_all_available_dates,
+            ),
+        )
+        for _ in range(cpu_count() - 1)
+    ]
+
+    for rf in row_filler_workers:
+        rf.start()
+
+    for row in aux_df.loc[aux_df[new_key].isna(), :].itertuples():
+        # putting the row as it raises PicklingError
+        rf_input_queue.put(
+            {k: v for k, v in row._asdict().items() if pd.notna(v)}
+        )
+    for rf in row_filler_workers:
+        rf_input_queue.put(None)  # sent termination signals
+
+    output_ack, error_ack = len(row_filler_workers), len(row_filler_workers)
+    while output_ack > 0:
+        rfo = rf_output_queue.get()
+        if rfo is None:  # receive ack to termination signal
+            output_ack -= 1
+            continue
+        if rfo.stats is not None:
+            stats.update(rfo.stats)
+        else:
+            aux_df.loc[rfo.row_index, new_key] = rfo.chosen_id
+    while error_ack > 0:
+        rfe = rf_error_queue.get()
+        if rfe is None:  # receive ack to termination signal
+            error_ack -= 1
+            continue
+        warning(
+            "While filling rows matching truth; "
+            f" worker in charge of row: {repr(rfe.row)} got the "
+            f"follwing exception: {str(rfe.exception)}"
+        )
+    _join_all(row_filler_workers, "row filler workers")
+    return (aux_df, stats)
 
 
 @black_magic
@@ -691,6 +986,43 @@ def rename_excel_sheets(*args, **kwargs):
 
     return ret
 
+
+# DO NOT CACHE THIS FUNCTION
+def update_all_sheets(df_dict, lookup_table, receiver, giver):
+    sw_input_queue, sw_output_queue, sw_error_queue = InputOutputErrorQueues(
+        Queue(), Queue(), Queue()
+    )
+
+    sheet_workers = list()
+    for sheet_name in sorted(df_dict.keys()):
+        sw_input_queue.put(
+            SheetWorkerInput("df_dict", sheet_name, df_dict.pop(sheet_name))
+        )
+        sheet_worker = Process(
+            target=_update_all_sheets,
+            args=(
+                sw_input_queue,
+                sw_output_queue,
+                sw_error_queue,
+                lookup_table,
+                receiver,
+                giver,
+            ),
+        )
+        sheet_workers.append(sheet_worker)
+        sheet_worker.start()  # spawn a process for each sheet in df_dict
+
+    for _ in sheet_workers:
+        swe = sw_error_queue.get()
+        if swe is not None:
+            warning(
+                "while updating all sheets against lookup table "
+                f"'{swe.sheet_name}' got {swe.exception}"
+            )
+        _, sheet_name, new_df = sw_output_queue.get()
+        df_dict[sheet_name] = new_df
+    _join_all(sheet_workers, "sheet updaters")
+    return df_dict
 
 
 if __name__ == "__main__":
