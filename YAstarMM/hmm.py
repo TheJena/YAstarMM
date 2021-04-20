@@ -23,13 +23,6 @@
    TODO HERE
 """
 
-from .column_rules import rename_helper
-from .constants import (
-    EPSILON,
-    LOGGING_LEVEL,
-    PER_STATE_TRANSITION_OBSERVABLES,
-    REGEX_RANGE_OF_FLOATS,
-    REGEX_UNDER_THRESHOLD_FLOAT,
 from .charlson_index import (
     compute_charlson_index,
     estimated_ten_year_survival,
@@ -37,17 +30,18 @@ from .charlson_index import (
     most_common_charlson,
     reset_charlson_counter,
 )
+from .column_rules import rename_helper
+from .constants import LOGGING_LEVEL
 from .flavoured_parser import parsed_args
-
 from .model import State
 from .preprocessing import clear_and_refill_state_transition_columns
 from collections import Counter, defaultdict, namedtuple
 from datetime import datetime
+from multiprocessing import Lock
 from numpy.random import RandomState
 from os import makedirs
 from os.path import join as join_path, isdir
 from sys import stdout, version_info
-from threading import Lock
 from yaml import dump, Dumper, SafeDumper
 import logging
 import numpy as np
@@ -84,73 +78,6 @@ MIN_MAX_DICT = {
     }.items()
 }
 """Built considering 0.03 and 0.97 percentile of the respective columns."""
-
-def test_float(f):
-    try:
-        f = float(str(f).replace(",", "."))  # italians sometimes use comma
-    except ValueError:
-        return BAD_TEST_RESULT
-    else:
-        return TestResult(success=True, value=f, msg="")
-
-
-def test_float_and_date(f):
-    match_obj = REGEX_FLOAT_AND_DATE.match(repr(f))
-    if match_obj is not None:
-        if match_obj.group(1) is None:
-            # regexp matched but the "float" group is empty, let's use a NaN
-            return NAN_TEST_RESULT
-        else:
-            value = float(match_obj.group(1).replace(",", "."))
-            return TestResult(success=True, value=value, msg=f"{value:e}")
-    return BAD_TEST_RESULT
-
-
-def test_float_range(f):
-    match_obj = REGEX_RANGE_OF_FLOATS.match(repr(f))
-    if match_obj is not None:
-        value = 0.5 * sum(
-            float(match_obj.group(i + 1).replace(",", "."))
-            for i in range(2)  # starts from zero
-        )
-        return TestResult(success=True, value=value, msg=f"{value:e}")
-    return BAD_TEST_RESULT
-
-
-def test_float_under_threshold(f):
-    match_obj = REGEX_UNDER_THRESHOLD_FLOAT.match(repr(f))
-    if match_obj is not None:
-        value = float(match_obj.group(1)) - EPSILON
-        return TestResult(success=True, value=value, msg=f"{value:e}")
-    return BAD_TEST_RESULT
-
-
-def test_missing_value(f):
-    if "missing" in repr(f).lower():
-        return NAN_TEST_RESULT
-    return BAD_TEST_RESULT
-
-
-def float_or_nan(value, log_prefix=""):
-    for func in (  # order does matter, do not change it please
-        test_float,
-        test_missing_value,
-        test_float_under_threshold,
-        test_float_range,
-        lambda _: NAN_TEST_RESULT,
-    ):
-        test_result = func(value)
-        if test_result.success:
-            if test_result.msg:
-                logging.debug(
-                    f"{log_prefix}"  # make black auto-formatting prettier
-                    f" Using {test_result.msg} instead of {repr(value)}"
-                )
-            return test_result.value
-    raise NotImplementedError(
-        "You probably forgot to include a function "
-        "returning a default to use as fallback value"
-    )
 
 
 def aggregate_constant_values(sequence):
@@ -215,39 +142,18 @@ def preprocess_single_patient_df(df, observed_variables):
         list(
             rename_helper(
                 (
+                    "",
+                    "DataRef",
+                    "ActualState_val",
                 )
             )
         )
         + observed_variables,
     ]
 
-    # ensure all columns (except '') contain float (or nan) values
-    max_col_length = max(len(col) for col in df.columns)
-    for col in set(df.columns).difference({""}):
-        df.loc[:, col] = df.loc[:, col].apply(
-            float_or_nan,
-            log_prefix=f"{log_prefix}[column {col.rjust(max_col_length)}]",
-        )
-
-        # dates of interest are those with a valid ActualState_val
-        dates_of_interest = df[df[rename_helper("ActualState_val")].notna()][
-            "date"
-        ]
-
-    if len(dates_of_interest) < 2:
-        return
-
-    # ensure dates of interest are a proper range of dates, i.e. without holes
-    dates_of_interest = pd.date_range(
-        start=min(dates_of_interest),
-        end=max(dates_of_interest),
-        freq="D",
-        normalize=True,
-    )
-
     # add an empty record for each date of interest
-    nan_series = pd.Series([np.nan for _ in range(len(dates_of_interest))])
-    charlson_series = pd.Series([cci for _ in range(len(dates_of_interest))])
+    nan_series = pd.Series([np.nan for _ in range(df.shape[0])])
+    charlson_series = pd.Series([cci for _ in range(df.shape[0])])
     df = pd.concat(
         [
             df,
@@ -255,27 +161,24 @@ def preprocess_single_patient_df(df, observed_variables):
                 defaultdict(
                     lambda _: nan_series,  # default_factory for missing keys
                     {
-                        rename_helper(""): dates_of_interest,
+                        rename_helper(""): charlson_series,
                     },
                 )
             ),
         ]
-    ).sort_values("date")
+    ).sort_values(rename_helper("DataRef"))
 
     # ensure each date has exactly one record; if there are multiple
     # values they will be aggregated by choosing the one which denotes
     # the worst health state
-    df = df.groupby("date", as_index=False).aggregate(
+    df = df.groupby(rename_helper("DataRef"), as_index=False).aggregate(
         {
             col: function_returning_worst_value_for(col)
             for col in df.columns
-            if col != "date"  # otherwise pandas complains
+            if col != rename_helper("DataRef")  # otherwise pandas complains
         }
     )
 
-    # fill forward/backward some columns
-    fill_forward_columns = rename_helper(
-        (
     global NEW_DF, GLOBAL_LOCK
     GLOBAL_LOCK.acquire()
     if NEW_DF is None:
@@ -284,7 +187,7 @@ def preprocess_single_patient_df(df, observed_variables):
         NEW_DF = pd.concat([NEW_DF, df.copy()])
     GLOBAL_LOCK.release()
 
-    return df.sort_values("date")
+    return df.sort_values(rename_helper("DataRef"))
 
 
 def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
@@ -322,13 +225,13 @@ class MetaModel(object):
             for index, row in self._df.iterrows():
                 patient, date = (
                     row[rename_helper("")],
-                    row[rename_helper("")],
+                    row[rename_helper("DataRef")],
                 )
                 if pd.isna(date):
                     continue
                 assert isinstance(date, pd.Timestamp), str(
                     f"Patient '{patient}' has '{repr(date)}' in column "
-                    f"'{rename_helper('')}' instead of a pd.Timestamp"
+                    f"'{rename_helper('DataRef')}' instead of a pd.Timestamp"
                 )
 
                 date = pd.to_datetime(date.date())  # truncate HH:MM:SS
@@ -510,12 +413,14 @@ class MetaModel(object):
                 ),
                 rename_helper(""): self._df_old.loc[
                     :, rename_helper("")
+                rename_helper("DataRef"): self._df_old.loc[
+                    :, rename_helper("DataRef")
                 ].apply(
                     lambda timestamp: pd.to_datetime(timestamp.date())
                 ),  # truncate HH:MM:SS
             }
         )
-        self._df_old.sort_values(rename_helper("")).groupby(
+        self._df_old.sort_values(rename_helper("DataRef")).groupby(
             "",
             as_index=False,
         ).apply(preprocess_single_patient_df, observed_variables)
@@ -588,6 +493,9 @@ class MetaModel(object):
             },
             axis="columns",
         )
+
+        if save_to_dir is not None:
+            self.save_to(save_to_dir)
 
     def _split_dataset(self, ratio=None):
         """Split dataset into training set and validation set"""
@@ -944,19 +852,6 @@ class MetaModel(object):
 
 
     )
-    fill_backward_columns = rename_helper(())
-    for col in fill_forward_columns:
-        if col in df.columns:
-            df.loc[:, col] = df.loc[:, col].fillna(method="ffill")
-    for col in fill_backward_columns:
-        if col in df.columns:
-            df.loc[:, col] = df.loc[:, col].fillna(method="bfill")
-
-    # drop records not in the date range of interest
-    df = df.loc[
-        (df["date")] >= min(dates_of_interest))
-        & (df["date"] <= max(dates_of_interest)),
-    ]
 
     return df.sort_values("date")
 
