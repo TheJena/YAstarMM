@@ -34,6 +34,7 @@
                 matches_boolean_rule,
                 matches_date_time_rule,
                 matches_integer_rule,
+                matches_static_rule,
                 progressive_features,
                 rename_helper,
                 shift_features,
@@ -55,6 +56,7 @@
                 matches_boolean_rule,
                 matches_date_time_rule,
                 matches_integer_rule,
+                matches_static_rule,
                 progressive_features,
                 rename_helper,
                 shift_features,
@@ -1316,6 +1318,29 @@ def matches_integer_rule(column_name):
             not c.startswith("") and c.endswith("_code"),
             not c.startswith("") and c.endswith("_code"),
             not c.startswith("") and c.endswith("_id"),
+
+
+@lru_cache(maxsize=None)
+def matches_static_rule(column_name):
+    return column_name in set(
+        (
+            "admission_code",
+            "admission_date",
+            "admission_id",
+            "age",
+            "discharge_date",
+            "discharge_id",
+            "discharge_mode",
+            "height",
+            "pneumococcal_vaccine",
+            "sex",
+        )
+    ).union(
+        set(
+            rename_helper(
+                (
+                )
+            )
         )
     )
 
@@ -1754,6 +1779,7 @@ assert all(
         "matches_boolean_rule" in globals(),
         "matches_date_time_rule" in globals(),
         "matches_integer_rule" in globals(),
+        "matches_static_rule" in globals(),
         "rename_helper" in globals(),
         "shift_features" in globals(),
         "switch_to_date_features" in globals(),

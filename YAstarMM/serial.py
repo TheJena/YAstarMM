@@ -51,6 +51,7 @@ from .column_rules import (
     matches_boolean_rule,
     matches_date_time_rule,
     matches_integer_rule,
+    matches_static_rule,
     NORMALIZED_TIMESTAMP_COLUMNS,
     rename_helper,
 )
@@ -995,6 +996,22 @@ def fill_missing_days_in_hospital(
     for msg, count in stats.most_common():
         info(f"{str(count).rjust(pad)} {msg}")
     return df
+
+
+@black_magic
+def fill_patient_static_nan_values(df, key_col, **kwargs):
+    assert key_col in df.columns
+    return df.groupby(key_col).apply(
+        lambda patient_df: patient_df.assign(
+            **{
+                col: patient_df.loc[:, col]
+                .fillna(method="bfill")
+                .fillna(method="ffill")
+                for col in patient_df.columns
+                if matches_static_rule(col)
+            }
+        )
+    )
 
 
 @black_magic
