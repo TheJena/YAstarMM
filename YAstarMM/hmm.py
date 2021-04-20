@@ -860,6 +860,88 @@ class MetaModel(object):
             ]
         )
 
+    def save_to(self, dir_name):
+        dir_name = join_path(dir_name, "MetaModel_class")
+        if not isdir(dir_name):
+            makedirs(dir_name)
+
+        with open(f"{dir_name}/input_data.pickle", "wb") as f:
+            pickle.dump(self.input_data, f)
+
+        for object_name in (
+            "input_data",
+            "_random_seed",
+            "observed_variables",
+            "oxygen_states",
+        ):
+            with open(f"{dir_name}/{object_name}.yaml", "w") as f:
+                dump(
+                    getattr(self, object_name),
+                    f,
+                    Dumper=SafeDumper if "data" not in object_name else Dumper,
+                    default_flow_style=False,
+                )
+        with open(f"{dir_name}/oxygen_states.yaml", "a") as f:
+            for state in self.oxygen_states:
+                f.write(f"# State({state}).name == '{State(state).name}'\n")
+
+        with open(f"{dir_name}/clip_out_outliers_dictionary.yaml", "w") as f:
+            dump(MIN_MAX_DICT, f, Dumper=SafeDumper, default_flow_style=False)
+
+        np.savetxt(
+            f"{dir_name}/start_prob.txt",
+            self.start_prob,
+            fmt="%10.9f",
+            header=repr([State(state).name for state in self.oxygen_states]),
+        )
+        np.save(
+            f"{dir_name}/start_prob.npy",
+            self.start_prob,
+            allow_pickle=False,
+        )
+
+        np.save(
+            f"{dir_name}/occurrences_matrix.npy",
+            self.occurrences_matrix,
+            allow_pickle=False,
+        )
+        with open(f"{dir_name}/occurrences_matrix.txt", "w") as f:
+            self.print_matrix(
+                occurrences_matrix=True,
+                file_obj=f,
+            )
+
+        np.save(
+            f"{dir_name}/transition_matrix.npy",
+            self.transition_matrix,
+            allow_pickle=False,
+        )
+        with open(f"{dir_name}/transition_matrix.txt", "w") as f:
+            self.print_matrix(
+                transition_matrix=True,
+                file_obj=f,
+                float_decimals=6,
+            )
+
+        for matrix_name in ("validation_matrix", "training_matrix"):
+            np.savetxt(
+                f"{dir_name}/{matrix_name}.txt",
+                getattr(self, f"{matrix_name}"),
+                fmt="%16.9e",
+                header=str(
+                    list(rename_helper(("ActualState_val",)))
+                    + self.observed_variables
+                ),
+            )
+            np.save(
+                f"{dir_name}/{matrix_name}.npy",
+                getattr(self, f"{matrix_name}"),
+                allow_pickle=False,
+            )
+
+        for df_name in ("_df", "_validation_df", "_training_df"):
+            getattr(self, df_name).to_csv(f"{dir_name}/{df_name}.csv")
+
 
     )
     fill_backward_columns = rename_helper(())
