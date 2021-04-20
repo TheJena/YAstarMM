@@ -287,7 +287,52 @@ def preprocess_single_patient_df(df, observed_variables):
     return df.sort_values("date")
 
 
+def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
+    """Many thanks to https://stackoverflow.com/a/41532180"""
+    if only_columns is None:
+        raise ValueError("only_columns argument should be an iterable")
+
+    only_columns = [col for col in only_columns if col in df.columns]
+
+    if normalize:
+        return (
+            df.loc[:, only_columns]
+            .sub(
+                [MIN_MAX_DICT[col]["min"] for col in only_columns],
+                axis="columns",
+            )
+            .div(
+                [
+                    MIN_MAX_DICT[col]["max"] - MIN_MAX_DICT[col]["min"]
+                    for col in only_columns
+                ],
+                axis="columns",
+            )
+            .to_numpy()
+        )
+    return df.loc[:, only_columns].to_numpy()
+
+
 class MetaModel(object):
+    @property
+    def validation_matrix(self):
+        if self._validation_df is None:
+            self._split_dataset()
+        return dataframe_to_numpy_matrix(
+            self._validation_df,
+            only_columns=list(rename_helper(("ActualState_val",)))
+            + self.observed_variables,
+        )
+
+    @property
+    def training_matrix(self):
+        if self._training_df is None:
+            self._split_dataset()
+        return dataframe_to_numpy_matrix(
+            self._training_df,
+            only_columns=list(rename_helper(("ActualState_val",)))
+            + self.observed_variables,
+        )
 
     def __init__(
         self,
@@ -305,6 +350,8 @@ class MetaModel(object):
             f"got '{repr(observed_variables)}' instead"
         )
 
+        self._training_df = None
+        self._validation_df = None
         self.observed_variables = rename_helper(tuple(observed_variables))
         if not oxygen_states:
             self.oxygen_states = State.values()
@@ -403,6 +450,137 @@ class MetaModel(object):
             },
             axis="columns",
         )
+
+    def _split_dataset(self, ratio=None):
+        """Split dataset into training set and validation set"""
+        assert isinstance(ratio, float) and ratio > 0 and ratio < 1, str(
+            "Validation set ratio (CLI argument --ratio) is not in (0, 1)"
+        )
+        logging.debug(
+            " full dataset shape: "
+            f"{self._df.shape[0]} rows, "
+            f"{self._df.shape[1]} columns"
+        )
+        target_validation_rows = max(1, round(self._df.shape[0] * ratio))
+
+        patients_left = [
+            patient_id
+            for patient_id, _ in Counter(
+                self._df[rename_helper("")].to_list()
+            ).most_common()  # make black auto-formatting prettier
+        ]
+        while (
+            self._validation_df is None
+            or self._validation_df.shape[0] < target_validation_rows
+        ):
+            assert len(patients_left) >= 1, "No patient left"
+            patient_id = patients_left.pop(0)
+            patient_df = self._df[
+                self._df[rename_helper("")].isin([patient_id])
+            ].copy()  # make black auto-formatting prettier
+            if bool(self.random_state.randint(2)):  # toss a coin
+                # try to add all the patient's records to the validation set
+                if (
+                    self._validation_df is None
+                    or patient_df.shape[0] + self._validation_df.shape[0]
+                    <= target_validation_rows
+                ):
+                    if self._validation_df is None:
+                        self._validation_df = patient_df
+                    else:
+                        self._validation_df = pd.concat(
+                            [self._validation_df, patient_df]
+                        )
+                    continue  # successfully added all patients records
+            # try to add the last ratio of patient's records to the
+            # validation set
+            cut_row = round(patient_df.shape[0] * (1 - ratio))
+            if self._validation_df is not None and (
+                patient_df.shape[0]
+                - cut_row  # validation records
+                + self._validation_df.shape[0]
+                > target_validation_rows
+            ):
+                cut_row = patient_df.shape[0]
+                -(target_validation_rows - self._validation_df.shape[0]),
+            if self._training_df is None:
+                self._training_df = patient_df.iloc[:cut_row, :]
+            else:
+                self._training_df = pd.concat(
+                    [self._training_df, patient_df.iloc[:cut_row, :]]
+                )  # make black auto-formatting prettier
+            if self._validation_df is None:
+                self._validation_df = patient_df.iloc[cut_row:, :]
+            else:
+                self._validation_df = pd.concat(
+                    [self._validation_df, patient_df.iloc[cut_row:, :]]
+                )
+        assert self._validation_df.shape[0] == target_validation_rows, str(
+            f"validation matrix has {self._validation_df.shape[0]} "
+            f"rows instead of {target_validation_rows}"
+        )
+        # add patients left to training set
+        self._training_df = pd.concat(
+            [
+                self._training_df,
+                self._df[
+                    self._df[rename_helper("")].isin(patients_left)
+                ].copy(),
+            ]
+        )
+        assert (
+            self._training_df.shape[0] + self._validation_df.shape[0]
+            == self._df.shape[0]
+        ), str(
+            f"training matrix has {self._training_df.shape[0]} "
+            "rows instead of "
+            f"{self._df.shape[0] - self._validation_df.shape[0]}"
+        )
+
+        logging.debug(
+            " training set shape: "
+            f"{self._training_df.shape[0]} rows, "
+            f"{self._training_df.shape[1]} columns"
+        )
+        logging.debug(
+            " validation set shape: "
+            f"{self._validation_df.shape[0]} rows, "
+            f"{self._validation_df.shape[1]} columns"
+        )
+
+    def validation_matrix_labels(self, unordered_model_states):
+        new_index_of_state = {
+            str(state.name).replace(" ", "_"): i
+            for i, state in enumerate(unordered_model_states)
+        }
+
+        for state_enum in self.oxygen_states:
+            state_name = str(State(state_enum)).replace(" ", "_")
+            assert state_name in new_index_of_state, str(
+                f"Could not found any state named '{state_name}'."
+                "\nWhen building the Hidden Markov Model, please "
+                "pass to the 'state_names' argument what you "
+                "passed to the 'oxygen_states' argument in MetaModel "
+                "constructor; i.e. State.names() or a subset of it."
+            )
+            state = getattr(State, state_name)
+            logging.info(
+                "In the current model, state "
+                + repr(str(state)).ljust(2 + max(len(s.name) for s in State))
+                + f" has index {new_index_of_state[state.name]} "
+                f"while its default enum value is {state.value}"
+            )
+
+        return np.array(
+            [
+                new_index_of_state[State(old_index).name]
+                for old_index in self._validation_df.loc[
+                    :, rename_helper("ActualState_val")
+                ].to_list()  # make black auto-formatting prettier
+            ]
+        )
+
+
     )
     fill_backward_columns = rename_helper(())
     for col in fill_forward_columns:
