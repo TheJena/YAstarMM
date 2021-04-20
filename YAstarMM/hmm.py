@@ -60,6 +60,9 @@ NAN_TEST_RESULT = TestResult(
     success=True, value=np.nan, msg=str(np.nan).center(len(f"{0.0:e}"))
 )
 
+GLOBAL_LOCK = Lock()
+NEW_DF = None
+
 MIN_MAX_DICT = {
     rename_helper(k): v
     for k, v in {  # reference ranges in comments
@@ -273,6 +276,132 @@ def preprocess_single_patient_df(df, observed_variables):
     # fill forward/backward some columns
     fill_forward_columns = rename_helper(
         (
+    global NEW_DF, GLOBAL_LOCK
+    GLOBAL_LOCK.acquire()
+    if NEW_DF is None:
+        NEW_DF = df.copy()
+    else:
+        NEW_DF = pd.concat([NEW_DF, df.copy()])
+    GLOBAL_LOCK.release()
+
+    return df.sort_values("date")
+
+
+class MetaModel(object):
+
+    def __init__(
+        self,
+        df,
+        oxygen_states=None,
+        observed_variables=None,
+        random_seed=None,
+        save_to_dir=None,
+    ):
+        assert observed_variables is not None and isinstance(
+            observed_variables,
+            (list, tuple),
+        ), str(
+            "Expected list or tuple as 'observed_variables', "
+            f"got '{repr(observed_variables)}' instead"
+        )
+
+        self.observed_variables = rename_helper(tuple(observed_variables))
+        if not oxygen_states:
+            self.oxygen_states = State.values()
+        else:
+            self.oxygen_states = [
+                getattr(State, state_name).value
+                for state_name in oxygen_states
+            ]
+
+        reset_charlson_counter()
+        self._df_old = df
+        self._df_old = self._df_old.assign(
+            **{
+                rename_helper(""): self._df_old.loc[
+                    :, rename_helper("")
+                ].astype(
+                    np.float64
+                ),
+                rename_helper(""): self._df_old.loc[
+                    :, rename_helper("")
+                ].apply(
+                    lambda timestamp: pd.to_datetime(timestamp.date())
+                ),  # truncate HH:MM:SS
+            }
+        )
+        self._df_old.sort_values(rename_helper("")).groupby(
+            "",
+            as_index=False,
+        ).apply(preprocess_single_patient_df, observed_variables)
+
+        max_col_length = max_charlson_col_length()
+        for charlson_col, count in most_common_charlson():
+            logging.debug(
+                f" {count:6d} patients had necessary data to choose "
+                f"{charlson_col.rjust(max_col_length)} "
+                "to compute Charlson-Index"
+            )
+
+        global GLOBAL_LOCK, NEW_DF
+        GLOBAL_LOCK.acquire()
+        self._df = NEW_DF[
+            # cut away records about oxygen state not of interest
+            NEW_DF[rename_helper("ActualState_val")].isin(self.oxygen_states)
+        ].copy()
+        NEW_DF = None
+        GLOBAL_LOCK.release()
+
+        show_final_hint = False
+        for col, data in MIN_MAX_DICT.items():
+            if col not in self._df.columns:
+                continue
+            logging.debug(
+                f" Statistical description of column '{col}':\t"
+                + repr(
+                    self._df.loc[:, col]
+                    .describe(percentiles=[0.03, 0.25, 0.50, 0.75, 0.97])
+                    .to_dict()
+                )
+            )
+            lower_outliers = self._df[  # make black auto-formatting prettier
+                self._df[col] < MIN_MAX_DICT[col]["min"]
+            ][col].count()
+            upper_outliers = self._df[  # make black auto-formatting prettier
+                self._df[col] > MIN_MAX_DICT[col]["max"]
+            ][col].count()
+            if lower_outliers > 0 or upper_outliers > 0:
+                logging.debug(
+                    f" Column '{col}' has {lower_outliers} values under "
+                    f"the lower limit ({MIN_MAX_DICT[col]['min']}) and "
+                    f"{upper_outliers} values above the upper limit "
+                    f"({MIN_MAX_DICT[col]['max']}); these outliers will"
+                    f" be clipped to the respective limits."
+                )
+                show_final_hint = True
+        if show_final_hint:
+            logging.debug(
+                " To change the above lower/upper limits please "
+                "consider the column percentiles in the debug log"
+            )
+
+        # force outlier values to lower/upper bounds of each column
+        self._df.loc[
+            :, [c for c in MIN_MAX_DICT.keys() if c in self._df.columns]
+        ] = self._df.loc[
+            :, [c for c in MIN_MAX_DICT.keys() if c in self._df.columns]
+        ].clip(
+            lower={
+                col: data["min"]
+                for col, data in MIN_MAX_DICT.items()
+                if col in self._df.columns
+            },
+            upper={
+                col: data["max"]
+                for col, data in MIN_MAX_DICT.items()
+                if col in self._df.columns
+            },
+            axis="columns",
         )
     )
     fill_backward_columns = rename_helper(())
