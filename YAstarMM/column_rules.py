@@ -1007,52 +1007,6 @@ VerticalizeFeatureItem = namedtuple(
 )
 
 
-def matches_boolean_rule(column_name, column_values):
-    if column_name in (
-    ):
-        return True
-    unique_values = set(
-        val.lower() if isinstance(val, str) else val
-        for val in column_values
-        if pd.notna(val)
-    )
-    return all(
-        (
-            not matches_date_time_rule(column_name),
-            len(unique_values) <= len(BOOLEANISATION_MAP),
-            len(
-                unique_values.difference(
-                    set(BOOLEANISATION_MAP.keys()),
-                )
-            )
-            == 0,
-            len(unique_values.difference({float(0.0), float(1.0)})) > 0,
-        )
-    )
-
-
-@lru_cache(maxsize=None)
-def matches_date_time_rule(column_name):
-    c = column_name.lower()
-    return any(
-        (
-            "" in c,
-            c in ("date"),
-            c.endswith(""),
-            c.endswith(""),
-            c.endswith(""),
-            c.endswith(""),
-            c.endswith(""),
-            c.endswith("_from"),
-            c.endswith(""),
-            c.endswith("_start"),
-            c.endswith("_to"),
-            c.startswith("") and not c.endswith(""),
-            c.startswith("") and not c.endswith(""),
-        )
-    )
-
-
 def charlson_enum_rule(column_values):
     charlson_map, unique_values = dict(), set(column_values)
     for val in unique_values:
@@ -1305,6 +1259,54 @@ def matched_enumerated_rule(column_name, column_values):
         else:
             return dtype, conversion_map
     return None, None
+
+
+def matches_boolean_rule(column_name, column_values):
+    if column_name in (
+        "influenza_vaccine",
+        "pneumococcal_vaccine",
+    ):
+        return True
+    unique_values = set(
+        val.lower() if isinstance(val, str) else val
+        for val in column_values
+        if pd.notna(val)
+    )
+    return all(
+        (
+            not matches_date_time_rule(column_name),
+            len(unique_values) <= len(BOOLEANISATION_MAP),
+            len(
+                unique_values.difference(
+                    set(BOOLEANISATION_MAP.keys()),
+                )
+            )
+            == 0,
+            len(unique_values.difference({float(0.0), float(1.0)})) > 0,
+        )
+    )
+
+
+@lru_cache(maxsize=None)
+def matches_date_time_rule(column_name):
+    c = column_name.lower()
+    return any(
+        (
+            "" in c,
+            c in ("date"),
+            c.endswith(""),
+            c.endswith(""),
+            c.endswith(""),
+            c.endswith("_end"),
+            c.endswith(""),
+            c.endswith("_from"),
+            c.endswith(""),
+            c.endswith("_start"),
+            c.endswith("_to"),
+            c.startswith("") and not c.endswith(""),
+            c.startswith("") and not c.endswith(""),
+        )
+    )
 
 
 @lru_cache(maxsize=None)
