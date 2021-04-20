@@ -151,10 +151,20 @@ def black_magic(fun):
         if not isdir(fun_cache_dir):
             mkdir(fun_cache_dir)
         n = 4096  # consider only first N bytes of object representation
-        hashed_input = blake2b(
-            str.encode("".join((repr(args)[:n], repr(kwargs)[:n]))),
-            digest_size=16,
-        ).hexdigest()
+        if fun.__name__ == "merge_sheets":
+            hashed_input = "CHECKPOINT_CHARLIE"
+        elif fun.__name__ == "fill_nan_backward_forward" and any(
+            (
+                len(args) > 0 and "merge" in str(args[0]).lower(),
+                "merge" in kwargs.get("name", "").lower(),
+            )
+        ):
+            hashed_input = "CHECKPOINT_BRAVO"
+        else:
+            hashed_input = blake2b(
+                str.encode("".join((repr(args)[:n], repr(kwargs)[:n]))),
+                digest_size=16,
+            ).hexdigest()
         cache_file = join_path(fun_cache_dir, f"{hashed_input}.pkl.gz")
         if not isfile(cache_file) or not kwargs.get("use_black_magic", True):
             debug(
