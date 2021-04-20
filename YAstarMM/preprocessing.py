@@ -56,6 +56,7 @@ from .parallel import (
     GroupWorkerError,
     GroupWorkerInput,
 )
+from .utility import black_magic
 from collections import namedtuple
 from datetime import timedelta
 from multiprocessing import cpu_count, Lock, Process, Queue
@@ -863,6 +864,7 @@ class Insomnia(DumbyDog):
         super().run()  # build super()._results property
 
 
+@black_magic
 def clear_and_refill_state_transition_columns(
     whole_df,
     patient_key_col,

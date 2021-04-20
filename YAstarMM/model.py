@@ -48,6 +48,7 @@ from .constants import (  # without the dot notebook raises ModuleNotFoundError
     NASTY_SUFFIXES,
     ORDINARILY_HOME_DISCHARGED,
 )
+from .utility import initialize_logging  # noqa: 401
 from datetime import datetime, timedelta
 from enum import IntEnum, unique
 from sys import version_info
@@ -1039,6 +1040,7 @@ class ReleaseEvent(Event):
         # meaningful
         patient_id = HospitalJourney(
             patient_df=self._dataframe,
+            patient_key_col=rename_helper(""),
             log_level=logging.CRITICAL,
         ).patient_id
 
@@ -1227,22 +1229,29 @@ class HospitalJourney(object):
         """Return patient identifier."""
         if self._patient_id is None:
             possible_ids = list(
-                set(int(i) for i in self._patient_df["IdPatient"].unique())
+                set(
+                    str(i)
+                    for i in self._patient_df[self._patient_key_col].unique()
+                )
             )
             assert len(possible_ids) == 1, str(
                 "Could not determine patient_id; "
                 f"several IDs found: {repr(possible_ids)[1:-1]}."
             )
-            self._patient_id: Optional[int] = possible_ids[0]
+            self._patient_id: Optional[str] = possible_ids[0]
         return self._patient_id
 
     def __init__(
         self,
         patient_df: pd.DataFrame,
+        patient_key_col: str,
         log_level: int = LOGGING_LEVEL,
     ) -> None:
         """Populate patient journey from its Pandas DataFrame."""
         self._patient_df = patient_df
+        assert patient_key_col in patient_df.columns, str(
+            f"patient_key_col ({repr(patient_key_col)}) not found in df")
+        self._patient_key_col = patient_key_col
         self._patient_id = None
         if not EXECUTING_IN_JUPYTER_KERNEL:
             logging.basicConfig(
@@ -1252,7 +1261,12 @@ class HospitalJourney(object):
                 style=LOGGING_STYLE,
             )
         else:  # logging should already be configured
-            pass
+            assert "initialize_logging" in globals(), str(
+                "Please update the next assertion message"
+            )
+            assert logging.getLogger().hasHandlers(), str(
+                "Did you call initialize_logging() "
+                "(from YAstarMM.utility) in the jupyter notebook?"
             )
         self._journey = [
             AdmissionEvent(patient_df),
