@@ -737,6 +737,267 @@ def fill_guessable_nan_keys(df_dict, key_col, aux_cols, **kwargs):
 
 
 @black_magic
+def fill_missing_days_in_hospital(
+    df,
+    key_col,
+    date_col,
+    range_start,
+    range_end,
+    fix_range_limits=False,
+    split_multiple_ranges_with_kmeans=False,
+    drop_dates_outside_range=False,
+    fix_key_col_on_range_change=False,
+    birth_date=None,
+    whisker_coeff=1.5,
+    max_iqr_days=70,
+    **kwargs,
+):
+    for col in (key_col, date_col, range_start, range_end):
+        assert col in df.columns, f"'{col}' must be in df.columns"
+    if fix_key_col_on_range_change:
+        assert birth_date is not None, "Please pass also 'birth_date' column"
+
+    stats = Counter()
+    all_ids = set(df[key_col].dropna())
+    while all_ids:
+        patient = all_ids.pop()
+        patient_selector = df[key_col] == patient
+        patient_df = df.loc[
+            patient_selector, [key_col, date_col, range_start, range_end]
+        ]
+        assert len(set(patient_df[range_start].dropna())) == 1, repr(
+            patient_df[range_start].tolist()
+        )
+        assert len(set(patient_df[range_end].dropna())) == 1, repr(
+            patient_df[range_end].tolist()
+        )
+
+        start_date = patient_df[range_start].min(skipna=True)
+        end_date = patient_df[range_end].max(skipna=True)
+        debug(
+            f"patient {repr(patient)} has "
+            f"start_date = {repr(start_date)}; "
+            f"end_date = {repr(end_date)}"
+        )
+        if pd.notna(start_date) and pd.notna(end_date):
+            original_dates = set(
+                pd.date_range(
+                    start=start_date,
+                    end=end_date,
+                    freq="D",
+                    normalize=True,
+                ).array
+            )
+        else:
+            original_dates = set(
+                d for d in (start_date, end_date) if pd.notna(d)
+            )
+        original_dates.update(
+            set(patient_df[date_col].dt.normalize().dropna())
+        )
+        original_dates = pd.Series(sorted(original_dates))
+        debug(f"patient {repr(patient)} has dates = {original_dates.tolist()}")
+        q1, q3 = original_dates.quantile(0.25), original_dates.quantile(0.75)
+        iqr = q3 - q1
+        debug(
+            f"whisker_low = {str(q1 - whisker_coeff * iqr)}, "
+            f"Q1 = {str(q1)}, "
+            f"median = {str(original_dates.median())}, "
+            f"Q3 = {str(q3)}, "
+            f"whisker_up = {str(q3 + whisker_coeff * iqr)}, "
+            f"IQR = {str(iqr)}"
+        )
+        if iqr < timedelta(days=max_iqr_days):
+            whiskers_range = pd.date_range(
+                start=q1 - whisker_coeff * iqr,
+                end=q3 + whisker_coeff * iqr,
+                freq="D",
+                normalize=True,
+            )
+        else:
+            # a too large inter quantile range can introduce strange
+            # behaviours, like merging two separate hospitalization
+            # periods; in order to avoid that let us enlarge the
+            # initial date range
+            if split_multiple_ranges_with_kmeans:
+                raise NotImplementedError("TODO")
+            else:
+                if pd.notna(start_date) and pd.notna(end_date):
+                    debug(
+                        f"patient {repr(patient)} has too large IQR;"
+                        " falling back to original hospitalization "
+                        "period: [{start_date.date()} ÷ {end_date.date()}])"
+                    )
+                    one_week = timedelta(days=7)
+                    whiskers_range = pd.date_range(
+                        start=start_date - one_week,
+                        end=end_date + one_week,
+                        freq="D",
+                        normalize=True,
+                    )
+        replace_map = dict()
+        for date in original_dates:
+            if date.normalize() not in whiskers_range.array:
+                try:
+                    new_date = swap_month_and_day(date)
+                except ValueError:
+                    debug(
+                        f"outlier detected ({date.date()})"
+                        " because not in whisker-range (["
+                        f"{whiskers_range.min().normalize().date()} ÷ "
+                        f"{whiskers_range.max().normalize().date()}])"
+                    )
+                    continue
+                else:
+                    if new_date in whiskers_range.array:
+                        replace_map[date] = new_date
+        for old_date, new_date in replace_map.items():
+            stats.update(
+                {
+                    "fixed records with mistyped dates": (
+                        patient_selector & (df[date_col] == old_date)
+                    ).sum()
+                }
+            )
+            df.loc[
+                patient_selector & (df[date_col] == old_date), date_col
+            ] = new_date
+            debug(
+                f"patient {repr(patient)} mistyped date got fixed "
+                f"({repr(old_date)} into {repr(new_date)})"
+            )
+        new_date_range = set(
+            set(original_dates.dt.normalize()).union(set(replace_map.values()))
+        ).intersection(set(whiskers_range.array))
+        new_start_date, new_end_date = min(new_date_range), max(new_date_range)
+        new_date_range = pd.date_range(
+            start=new_start_date, end=new_end_date, freq="D", normalize=True
+        )
+        if fix_range_limits:
+            if start_date.date() != new_start_date.date():
+                stats.update({f"fixed incorrect {repr(range_start)} dates": 1})
+                df.loc[patient_selector, range_start] = new_start_date
+                start_date = new_start_date
+            if end_date.date() != new_end_date.date():
+                stats.update({f"fixed incorrect {repr(range_end)} dates": 1})
+                df.loc[patient_selector, range_end] = new_end_date
+                end_date = new_end_date
+            if (start_date.date() != new_start_date.date()) or (
+                end_date.date() != new_end_date.date()
+            ):
+                msg = str(
+                    f"{repr(patient)} got hospitalization period fixed "
+                    f"([{str(start_date)} ÷ {str(end_date)}])"
+                )
+                if not fix_key_col_on_range_change:
+                    warning(
+                        f"{msg}\nYou should also fix the '{key_col}' "
+                        "values accordingly by passing "
+                        "'fix_key_col_on_range_change=True'"
+                    )
+                else:
+                    debug(msg)
+                    try:
+                        birth_date_val = Counter(
+                            df.loc[patient_selector, birth_date]
+                            .dropna()
+                            .tolist()
+                        ).most_common(1)[0][0]
+                    except Exception as e:
+                        debug(
+                            f"patient {repr(patient)} birth_date "
+                            "not found in "
+                            + repr(
+                                df.loc[patient_selector, birth_date].tolist()
+                            )
+                            + f"\n(Exception: {str(e)}"
+                        )
+                        birth_date_val = None
+                    assert pd.notna(start_date)
+                    new_patient_key_val = new_key_col_value(
+                        admission_date=start_date,
+                        birth_date=birth_date_val,
+                        discharge_date=end_date
+                        if pd.notna(end_date)
+                        else None,
+                    )
+                    if new_patient_key_val != patient:
+                        debug(
+                            f"patient {repr(patient)} will be renamed "
+                            f"into {repr(new_patient_key_val)}"
+                        )
+                        if new_patient_key_val in set(df[key_col].dropna()):
+                            warning(
+                                "A patient with the same name "
+                                f"already exist ({repr(new_patient_key_val)}),"
+                                " function will be executed again over them"
+                            )
+                            all_ids.add(new_patient_key_val)
+                        stats.update({f"updated '{key_col}' identifiers": 1})
+                        df.loc[patient_selector, key_col] = new_patient_key_val
+                        patient = new_patient_key_val
+        del new_start_date, new_end_date
+        if drop_dates_outside_range:
+            for drop_date in set(
+                df.loc[
+                    patient_selector
+                    & (~df[date_col].dt.normalize().isin(new_date_range)),
+                    date_col,
+                ].dropna()
+            ):
+                drop_rows = patient_selector & (df[date_col] == drop_date)
+                stats.update(
+                    {
+                        f"dropped records with '{date_col}' "
+                        "out of hospitalization period": drop_rows.sum()
+                    }
+                )
+                df = df.drop(index=drop_rows.index[drop_rows])
+        new_records = {
+            key_col: list(),
+            date_col: list(),
+            range_start: list(),
+            range_end: list(),
+        }
+        for fill_date in new_date_range.difference(
+            set(df.loc[patient_selector, date_col].dt.normalize().dropna())
+        ):
+            stats.update(
+                {"added missing records in hospitalization period": 1}
+            )
+            new_records[key_col].append(patient)
+            new_records[date_col].append(fill_date)
+            new_records[range_start].append(start_date)
+            new_records[range_end].append(end_date)
+        df = pd.concat(
+            [
+                df,
+                pd.DataFrame(
+                    {
+                        col: pd.Series(
+                            new_records[col], dtype=df.dtypes[col], name=col
+                        )
+                        if col in new_records
+                        else pd.Series(
+                            [None for _ in new_records[date_col]],
+                            dtype=df.dtypes[col],
+                            name=col,
+                        )
+                        for col in df.columns
+                    }
+                ),
+            ],
+            axis="index",
+            ignore_index=True,
+        )
+        debug("\n\n")
+    pad = len(str(stats.most_common(1)[0][1]))
+    for msg, count in stats.most_common():
+        info(f"{str(count).rjust(pad)} {msg}")
+    return df
+
+
+@black_magic
 def fix_bad_date_range(
     df_dict, start_col, end_col, admit_start_end_swap=False, **kwargs
 ):
