@@ -26,6 +26,7 @@
             from  YAstarMM.serial  import  (
                 cast_columns_to_booleans,
                 cast_columns_to_categorical,
+                cast_columns_to_floating_point,
                 fix_bad_date_range,
                 deduplicate_dataframe_columns
             )
@@ -35,6 +36,7 @@
             from          .serial  import  (
                 cast_columns_to_booleans,
                 cast_columns_to_categorical,
+                cast_columns_to_floating_point,
                 fix_bad_date_range,
                 deduplicate_dataframe_columns,
             )
@@ -43,9 +45,12 @@
 from .column_rules import (
     BOOLEANISATION_MAP,
     does_not_match_categorical_rule,
+    does_not_match_float_rule,
     ENUM_GRAVITY_LIST,
     matched_enumerated_rule,
     matches_boolean_rule,
+    matches_date_time_rule,
+    matches_integer_rule,
     NORMALIZED_TIMESTAMP_COLUMNS,
     rename_helper,
 )
@@ -92,6 +97,51 @@ def _convert_single_cell_boolean(cell, column_name=None):
             cell.lower() if isinstance(cell, str) else cell,
             cell,
         )
+
+
+def _convert_single_cell_float(value, column=None):
+    if pd.isna(value):
+        return np.nan
+    try:
+        ret = str(value).lower()
+        if any(
+            (
+                "" in ret and "" in ret,
+                "" in ret and "" in ret,
+                "" in ret and "" in ret,
+                "" in ret and "" in ret,
+            )
+        ):
+            return np.nan
+        ret = (
+            ret.replace("", " 0 ")
+            .replace("", " 0 ")
+            .replace("", " 0 ")
+        )
+        ret = ret.strip(f"{ascii_letters} /%+=(<@>)")
+        ret = " ".join(ret.split()).replace(",", ".").replace("|", "-")
+        if matches_integer_rule(column) and ret.isnumeric():
+            ret = int(round(float(ret)))  # treat integer numbers
+        elif ret.startswith("-"):  # treat negative numbers
+            ret = -1 * float(ret.strip("-"))
+        else:  # treate positive numbers and range
+            ret = np.mean([float(number) for number in ret.split("-")])
+    except ValueError:
+        debug(
+            f"Could not convert {repr(value)}"
+            f"{' of ' + repr(column) if column is not None else ''} to "
+            f"{'integer' if matches_integer_rule(column) else 'float'} "
+            f"\t(stripped value: {repr(ret)})"
+        )
+        return np.nan
+    else:
+        if repr(value) != repr(ret):
+            debug(
+                f"Converted {repr(value)}"
+                f"{' of ' + repr(column) if column is not None else ''} "
+                f"into floating-point {repr(ret)}"
+            )
+        return ret
 
 
 def _merge_multiple_columns(sheet_name, df, col):
@@ -279,6 +329,78 @@ def cast_columns_to_categorical(df_dict, **kwargs):
             f"Successfully converted {len(new_columns): >2d} columns of "
             f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to Categorical"
         )
+    return df_dict
+
+
+@black_magic
+def cast_columns_to_floating_point(df_dict, **kwargs):
+    new_df_columns = dict()
+    for sheet_name, df in df_dict.items():
+        for column in df.columns:
+            if does_not_match_float_rule(column, df.dtypes[column]):
+                continue
+            new_df_columns[sheet_name] = new_df_columns.get(sheet_name, dict())
+            old_col_repr = repr(df.loc[:, column].tolist())
+            new_df_columns[sheet_name][column] = (
+                df.loc[:, column]
+                .apply(_convert_single_cell_float, args=(column,))
+                .convert_dtypes(
+                    infer_objects=True,
+                    convert_floating=True,
+                    convert_boolean=False,
+                    convert_integer=False,
+                    convert_string=False,
+                )
+            )
+            new_col_repr = repr(new_df_columns[sheet_name][column].tolist())
+            if old_col_repr != new_col_repr:
+                debug(
+                    f"Column '{column}' of sheet '{sheet_name}' was:       "
+                    + old_col_repr
+                )
+                debug(
+                    f"Column '{column}' of sheet '{sheet_name}' now is:    "
+                    + new_col_repr
+                )
+    sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
+    for sheet_name, new_columns in sorted(
+        new_df_columns.items(), key=lambda tup: tup[0].lower()
+    ):
+        amount = sum(
+            str(series.dtype).lower().startswith("float")
+            for series in new_columns.values()
+        )
+        if amount > 0:
+            info(
+                f"Successfully converted {amount: >2d} columns of "
+                f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to "
+                f"floating-point"
+            )
+    for sheet_name, new_columns in sorted(
+        new_df_columns.items(), key=lambda tup: tup[0].lower()
+    ):
+        df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
+    debug(
+        "Please check how cells were casted to floating point numbers "
+        "with this bash command:\n\t"
+        "ls -v1 /tmp/*debugging* "
+        "| tail -n1 "
+        "| xargs grep -i 'converted.*'" + '"\'"' + "' of.*to' "
+        "| grep -iv 'categorical' "
+        "| sort -V "
+        "| uniq "
+        "| less -S"
+    )
+    debug(
+        "Please check which cells failed floating point casting "
+        "with this bash command:\n\t"
+        "ls -v1 /tmp/*debugging* "
+        "| tail -n1 "
+        "| xargs grep -i 'could.*not.*convert.*float'"
+        "| sort -V "
+        "| uniq "
+        "| less -S"
+    )
     return df_dict
 
 

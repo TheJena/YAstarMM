@@ -27,11 +27,13 @@
                 BOOLEANISATION_MAP,
                 DAYFIRST_REGEXP,
                 does_not_match_categorical_rule,
+                does_not_match_float_rule,
                 drop_rules,
                 keep_rules,
                 matched_enumerated_rule,
                 matches_boolean_rule,
                 matches_date_time_rule,
+                matches_integer_rule,
                 progressive_features,
                 rename_helper,
                 shift_features,
@@ -46,11 +48,13 @@
                 BOOLEANISATION_MAP,
                 DAYFIRST_REGEXP,
                 does_not_match_categorical_rule,
+                does_not_match_float_rule,
                 drop_rules,
                 keep_rules,
                 matched_enumerated_rule,
                 matches_boolean_rule,
                 matches_date_time_rule,
+                matches_integer_rule,
                 progressive_features,
                 rename_helper,
                 shift_features,
@@ -1185,6 +1189,36 @@ def does_not_match_categorical_rule(column_name, df):
     return False
 
 
+def does_not_match_float_rule(column_name, dtype):
+    if matches_integer_rule(column_name):
+        return False
+    if any(
+        (
+            str(column_name).lower().endswith("_all_dates"),
+            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("_code"),
+            str(column_name).lower().endswith("_date_range"),
+            str(column_name).lower().endswith("_description"),
+            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("_id"),
+            str(column_name).lower().endswith("_list"),
+            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("_notes"),
+            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("_version"),
+            str(column_name).lower().endswith(""),
+        )
+    ):
+        return True
+    if column_name.lower() in (
+    ):
+        return True
+    if str(dtype) in ("boolean", "category", "datetime64[ns]"):
+        return True
+    return False
+
+
 def drug_enum_rule(column_values):
     drug_map = dict(
     )
@@ -1269,6 +1303,21 @@ def matched_enumerated_rule(column_name, column_values):
         else:
             return dtype, conversion_map
     return None, None
+
+
+@lru_cache(maxsize=None)
+def matches_integer_rule(column_name):
+    if column_name is None:
+        return False
+    c = column_name.lower()
+    return any(
+        (
+            c == "age",
+            not c.startswith("") and c.endswith("_code"),
+            not c.startswith("") and c.endswith("_code"),
+            not c.startswith("") and c.endswith("_id"),
+        )
+    )
 
 
 def oxygen_support_enum_rule(column_values):
@@ -1698,11 +1747,13 @@ assert all(
         "BOOLEANISATION_MAP" in globals(),
         "DAYFIRST_REGEXP" in globals(),
         "does_not_match_categorical_rule" in globals(),
+        "does_not_match_float_rule" in globals(),
         "drop_rules" in globals(),
         "keep_rules" in globals(),
         "matched_enumerated_rule" in globals(),
         "matches_boolean_rule" in globals(),
         "matches_date_time_rule" in globals(),
+        "matches_integer_rule" in globals(),
         "rename_helper" in globals(),
         "shift_features" in globals(),
         "switch_to_date_features" in globals(),
