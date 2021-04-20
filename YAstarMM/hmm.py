@@ -315,6 +315,131 @@ def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
 
 class MetaModel(object):
     @property
+    def input_data(self):
+        """Return { patient: { timestamp: State, ... }, ..., }"""
+        if self._input_data_dict is None:
+            self._input_data_dict = dict()
+            for index, row in self._df.iterrows():
+                patient, date = (
+                    row[rename_helper("")],
+                    row[rename_helper("")],
+                )
+                if pd.isna(date):
+                    continue
+                assert isinstance(date, pd.Timestamp), str(
+                    f"Patient '{patient}' has '{repr(date)}' in column "
+                    f"'{rename_helper('')}' instead of a pd.Timestamp"
+                )
+
+                date = pd.to_datetime(date.date())  # truncate HH:MM:SS
+                state_val = row[rename_helper("ActualState_val")]
+                assert isinstance(state_val, (int, float)), str(
+                    f"Patient '{repr(patient)}' has {repr(state_val)} "
+                    f"in columnn '{rename_helper('ActualState_val')}'"
+                    " instead of a float or integer."
+                )
+                actual_state = State(state_val)
+                if patient not in self._input_data_dict:
+                    self._input_data_dict[patient] = dict()
+                self._input_data_dict[patient][date] = max(
+                    # worst state between the current one and any other
+                    # already inserted for the same patient in the same
+                    # date
+                    self._input_data_dict[patient].get(
+                        date,
+                        actual_state,
+                    ),
+                    actual_state,
+                )
+
+            # ensure each day in between first and last patient timestamp
+            # exist and has a state
+            log_empty_line = False
+            for patient in sorted(self._input_data_dict.keys()):
+                if log_empty_line:
+                    logging.info(
+                        "[PREPROCESSING]"
+                    )  # separate added timestamps of different users
+                    log_empty_line = False
+
+                records = self._input_data_dict[patient]
+                for date in sorted(
+                    pd.date_range(
+                        start=min(records.keys()),
+                        end=max(records.keys()),
+                        freq="D",
+                        normalize=True,
+                    )
+                    .to_series()
+                    .tolist()
+                ):
+                    if date not in records.keys():
+                        log_empty_line = True
+                        prev_date = max(d for d in records.keys() if d < date)
+                        assert (  # make black auto-formatting prettier
+                            date - prev_date
+                        ).total_seconds() == 24 * 60 ** 2, str(
+                            f"Timedelta '{repr(date - prev_date)}' should "
+                            "be a day"  # make black auto-formatting prettier
+                        )
+                        logging.info(
+                            f"[PREPROCESSING]"
+                            f"[patient{int(patient)}] added missing state "
+                            f"({str(State(records[prev_date]))}) "
+                            f"for {repr(date)}"
+                        )
+                        records[date] = records[prev_date]
+        return self._input_data_dict
+
+    @property
+    def occurrences_matrix(self):
+        rows = 1 + max(State)
+        cols = rows
+        ret = np.zeros(shape=(rows, cols), dtype=np.uint16)
+        for patient, records in self.input_data.items():
+            previous_date = None
+            previous_state = State.No_O2  # i.e. the day before admission
+            for current_date in sorted(  # enforce chronological order
+                records.keys()
+            ):  # make black auto-formatting prettier
+                assert current_date != previous_date
+                current_state = self.input_data[patient][current_date]
+
+                if current_state not in self.oxygen_states:
+                    continue
+
+                if current_state != previous_state:
+                    ret[previous_state][current_state] += 1
+                else:
+                    ret[current_state][current_state] += 1
+
+                previous_date = current_date
+                previous_state = current_state
+        return ret
+
+    @property
+    def random_state(self):
+        return self._random_state
+
+    @property
+    def start_prob(self):
+        start_occurrences = np.zeros(
+            shape=(1 + max(State),),
+            dtype=np.uint16,  # 0 to 65535
+        )
+        for patient, records in self.input_data.items():
+            for date in sorted(records.keys()):
+                state = self.input_data[patient][date]
+
+                if state not in self.oxygen_states:
+                    continue
+
+                start_occurrences[state] += 1
+                break  # use just first state of each patient
+        ret = np.array(start_occurrences, dtype=np.float64)
+        return ret / ret.sum()
+
+    @property
     def validation_matrix(self):
         if self._validation_df is None:
             self._split_dataset()
@@ -334,6 +459,16 @@ class MetaModel(object):
             + self.observed_variables,
         )
 
+    @property
+    def transition_matrix(self):
+        ret = np.array(self.occurrences_matrix, dtype=np.float64)
+        for row, row_sum in enumerate(self.occurrences_matrix.sum(axis=1)):
+            if row_sum > 0:
+                ret[row] = ret[row] / float(row_sum)
+            else:  # Avoid divisions by zero
+                ret[row] = np.zeros(ret[row].shape, dtype=np.float64)
+        return ret
+
     def __init__(
         self,
         df,
@@ -350,6 +485,9 @@ class MetaModel(object):
             f"got '{repr(observed_variables)}' instead"
         )
 
+        self._input_data_dict = None
+        self._random_seed = random_seed
+        self._random_state = RandomState(seed=self._random_seed)
         self._training_df = None
         self._validation_df = None
         self.observed_variables = rename_helper(tuple(observed_variables))
