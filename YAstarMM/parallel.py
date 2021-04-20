@@ -24,16 +24,23 @@
 
    Usage:
             from  YAstarMM.parallel  import  (
+                cast_date_time_columns_to_timestamps,
                 rename_excel_sheets,
             )
 
    ( or from within the YAstarMM package )
 
             from          .parallel  import  (
+                cast_date_time_columns_to_timestamps,
                 rename_excel_sheets,
             )
 """
 
+from .column_rules import (
+    DAYFIRST_REGEXP,
+    matches_date_time_rule,
+    NORMALIZED_TIMESTAMP_COLUMNS,
+)
 from .utility import (
     black_magic,
 )
@@ -123,6 +130,17 @@ SheetWorkerOutput = namedtuple(
     "SheetWorkerOutput", ["filename", "new_sheet_name", "new_df"]
 )
 
+TimestampWorkerError = namedtuple(
+    "TimestampWorkerError", ["sheet_name", "column_name", "exception"]
+)
+TimestampWorkerInputOutput = namedtuple(
+    "TimestampWorkerInputOutput", ["sheet_name", "column_name", "series"]
+)
+
+
+_EIGHTEEN_CENTURIES_IN_MINUTES = 18 * 100 * 365 * 24 * 60
+
+
 def _concat_same_name_sheets(all_sheets_dict):
     ret = dict()
     for filename, sheets_dict in all_sheets_dict.items():
@@ -150,6 +168,104 @@ def _concat_same_name_sheets(all_sheets_dict):
     return OrderedDict(
         {k: v for k, v in sorted(ret.items(), key=lambda tup: tup[0].lower())}
     )
+
+
+def _convert_single_cell_timestamp(cell, column_name, sheet_name):
+    global _EIGHTEEN_CENTURIES_IN_MINUTES
+    if pd.isna(cell):
+        timestamp = pd.NaT
+    else:
+        cell_value = (
+            str(cell)
+            .strip(ascii_letters + punctuation + whitespace)
+            .replace(
+                ",",
+                ".",
+            )
+        )
+        if "." not in cell_value:
+            try:
+                cell_value = int(cell_value)
+            except ValueError:
+                pass
+            else:
+                if (
+                    column_name == ""
+                    and cell_value < _EIGHTEEN_CENTURIES_IN_MINUTES
+                ):
+                    # This is a useless incremental timestamp,
+                    # let us drop it
+                    return pd.NaT
+                else:
+                    debug(
+                        f"Could not convert integer {cell_value} from column "
+                        f"'{column_name}' of sheet '{sheet_name}' to timestamp"
+                    )
+                    return cell_value  # integer
+        elif "." in cell_value and column_name == "":
+            try:
+                # Please take your seat before reading further ...
+                #
+                # From trial and error I discovered that the floating
+                # point number in column '' is the number of
+                # minutes passed since three days before 1 January 1AD
+                cell_value = (
+                    datetime.strptime("01/01/0001", "%d/%m/%Y")
+                    + timedelta(minutes=float(cell_value))
+                    - timedelta(days=3)
+                )
+
+            except Exception:
+                debug(
+                    f"Could not convert float {cell_value} from column "
+                    f"'{column_name}' of sheet '{sheet_name}' to timestamp"
+                )
+                return cell_value  # floating point
+            else:
+                debug(
+                    f"Converted {repr(cell).ljust(17)}"
+                    " (minutes after three days before 1 Jan 1 Anno Domini)"
+                    f" into {str(cell_value).ljust(36)} "
+                    f"(column: {column_name}; sheet: {sheet_name})"
+                )
+                return cell_value
+        try:
+            fmt = None
+            if DAYFIRST_REGEXP.match(cell) is not None:
+                if cell[2] == cell[5] and cell[2] in ("/", "-"):
+                    sep = cell[2]
+                    fmt = f"%d{sep}%m{sep}%Y"
+                    if ":" in cell:
+                        fmt += " %H:%M:%S"
+            timestamp = pd.to_datetime(
+                cell_value,
+                dayfirst=DAYFIRST_REGEXP.match(cell) is not None,
+                format=fmt,
+            )
+        except Exception as e:
+            debug(
+                f"Could not convert {repr(cell)} to timestamp in column "
+                f"'{column_name}' of sheet '{sheet_name}': {str(e)}"
+            )
+            return cell  # original value
+        else:
+            if (
+                DAYFIRST_REGEXP.match(cell) is not None
+                and str(DAYFIRST_REGEXP.match(cell).group("day"))
+                != f"{timestamp.day:0>2d}"
+            ):
+                debug(
+                    f"Poorly converted {repr(cell)} to timestamp in column "
+                    f"'{column_name}' of sheet '{sheet_name}': "
+                    "mismatch between the 'day' group of the regexp "
+                    "and the actual 'day' parsed by pandas.to_datetime()"
+                )
+                return cell  # original value
+    debug(
+        f"Converted {repr(cell).ljust(71)} into {repr(timestamp).ljust(36)} "
+        f"(column: {column_name}; sheet: {sheet_name})"
+    )
+    return timestamp
 
 
 def _file_worker_body(input_queue, output_queue, error_queue):
@@ -371,6 +487,104 @@ def _spwan_parallel_excel_writers(all_sheets_dict):
     return parallel_writers
 
 
+def _timestamp_worker_body(input_queue, output_queue, error_queue):
+    sheet_name, column_name, old_series = input_queue.get()
+    debug(
+        f"Timestamp worker in charge of column '{column_name}' "
+        f"in '{sheet_name}' started"
+    )
+    try:
+        assert isinstance(old_series, pd.Series), str(
+            f"Expected a Series; not a '{type(old_series)}'"
+        )
+        new_series = old_series.apply(
+            _convert_single_cell_timestamp, args=(column_name, sheet_name)
+        ).convert_dtypes(
+            infer_objects=True,  # applied function usually returns Timestamps
+            convert_floating=True,  # applied function can return floats
+            convert_boolean=False,
+            convert_integer=False,
+            convert_string=False,
+        )
+    except Exception as e:
+        error_queue.put(TimestampWorkerError(sheet_name, column_name, e))
+        output_queue.put(
+            TimestampWorkerInputOutput(sheet_name, column_name, old_series)
+        )
+    else:
+        debug(
+            f"Timestamp worker in charge of column '{column_name}' "
+            f"in '{sheet_name}' returned a series of type '{new_series.dtype}'"
+        )
+        error_queue.put(None)
+        output_queue.put(
+            TimestampWorkerInputOutput(sheet_name, column_name, new_series)
+        )
+    finally:
+        debug(
+            f"Timestamp worker in charge of column '{column_name}' "
+            f"in '{sheet_name}' ended"
+        )
+
+
+@black_magic
+def cast_date_time_columns_to_timestamps(df_dict, **kwargs):
+    timestamp_workers = list()
+    tw_input_queue, tw_output_queue, tw_error_queue = InputOutputErrorQueues(
+        Queue(), Queue(), Queue()
+    )
+
+    for sheet_name, df in df_dict.items():
+        for column_name in set(df.columns):
+            if matches_date_time_rule(column_name):
+                tw_input_queue.put(
+                    TimestampWorkerInputOutput(
+                        sheet_name, column_name, df.loc[:, column_name]
+                    )
+                )
+                timestamp_worker = Process(
+                    target=_timestamp_worker_body,
+                    args=(tw_input_queue, tw_output_queue, tw_error_queue),
+                )
+                timestamp_workers.append(timestamp_worker)
+                timestamp_worker.start()
+
+    new_df_columns = dict()
+    for _ in timestamp_workers:
+        timestamp_worker_error = tw_error_queue.get()
+        if timestamp_worker_error is not None:
+            sheet_name, column_name, exception = timestamp_worker_error
+            warning(
+                "While converting dates/times of "
+                f"column '{column_name}' in sheet '{sheet_name}' "
+                f"got the following exception: {str(exception)}"
+            )
+    for _ in timestamp_workers:
+        sheet_name, column_name, new_series = tw_output_queue.get()
+        new_df_columns[sheet_name] = new_df_columns.get(sheet_name, dict())
+        if column_name in NORMALIZED_TIMESTAMP_COLUMNS:
+            new_df_columns[sheet_name][column_name] = new_series.astype(
+                "datetime64[ns]"
+            ).dt.normalize()
+        else:
+            new_df_columns[sheet_name][column_name] = new_series
+        debug(
+            f"Added new Timestamp series '{column_name}' to "
+            f"the other ones for '{sheet_name}'"
+        )
+    _join_all(timestamp_workers, "timestamp workers")
+    sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
+    for sheet_name, new_columns in sorted(
+        new_df_columns.items(), key=lambda tup: tup[0].lower()
+    ):
+        df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
+        info(
+            f"Successfully converted {len(new_columns): >2d} columns of "
+            f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to pd.Timestamp"
+        )
+    return df_dict
+
+
 @black_magic
 def rename_excel_sheets(*args, **kwargs):
     """
@@ -490,6 +704,7 @@ assert all(
             "YAstarMM.parallel",
             "parallel",
         ),
+        "cast_date_time_columns_to_timestamps" in globals(),
         "rename_excel_sheets" in globals(),
     )
 ), "Please update 'Usage' section of module docstring"
