@@ -30,6 +30,12 @@ from .constants import (
     PER_STATE_TRANSITION_OBSERVABLES,
     REGEX_RANGE_OF_FLOATS,
     REGEX_UNDER_THRESHOLD_FLOAT,
+from .charlson_index import (
+    compute_charlson_index,
+    estimated_ten_year_survival,
+    max_charlson_col_length,
+    most_common_charlson,
+    reset_charlson_counter,
 )
 from .flavoured_parser import parsed_args
 
@@ -193,6 +199,13 @@ def preprocess_single_patient_df(df, observed_variables):
         )
     ).strip()
 
+    # let's compute the charlson-index before dropping unobserved columns
+    cci = compute_charlson_index(df)
+    if pd.isna(cci):
+        logging.debug(f"{log_prefix} Charlson-Index is not computable.")
+    else:
+        logging.debug(f"{log_prefix} Charlson-Index is {cci:2.0f}")
+
     # drop unobserved columns
     df = df.loc[
         :,
@@ -231,6 +244,7 @@ def preprocess_single_patient_df(df, observed_variables):
 
     # add an empty record for each date of interest
     nan_series = pd.Series([np.nan for _ in range(len(dates_of_interest))])
+    charlson_series = pd.Series([cci for _ in range(len(dates_of_interest))])
     df = pd.concat(
         [
             df,
