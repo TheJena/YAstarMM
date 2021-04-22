@@ -1221,7 +1221,7 @@ def fallback_enum_rule(column_values):
                     )
                 )
                 else str(word)
-                for pos, word in enumerate(val.split())
+                for pos, word in enumerate(str(val).split())
             )
             .replace("anakirna", "anakinra")  # typos are everywhere :_(
             .replace("Anakirna", "Anakinra")  # en.wikipedia.org/wiki/Anakinra
@@ -1411,9 +1411,9 @@ def oxygen_state_enum_rule(column_values):
         "Discharged",
         "Transferred",
     ]
-    if set(str(v).strip().lower() for v in column_values if pd.notna(v)).difference(
-        set(s.lower() for s in oxygen_states)
-    ):
+    if set(
+        str(v).strip().lower() for v in column_values if pd.notna(v)
+    ).difference(set(s.lower() for s in oxygen_states)):
         raise ValueError("Bad guess, retry")
     oxygen_state_map = {
         val: state
@@ -1448,6 +1448,8 @@ def rename_helper(columns):
         columns = tuple([columns])
     ret = list()
     for old_col_name in columns:
+        if old_col_name.startswith("Has "):
+            old_col_name = old_col_name.replace("Has ", "")
         artificial_name = {  # columns not in extraction files
             "ActualState": "oxygen_therapy_state",
             "ActualState_val": "oxygen_therapy_state_value",

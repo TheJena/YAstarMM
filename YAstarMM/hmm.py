@@ -853,7 +853,6 @@ class MetaModel(object):
 
     )
 
-    return df.sort_values("date")
 
 
 if __name__ == "__main__":

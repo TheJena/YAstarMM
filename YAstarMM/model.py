@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2020 Federico Motta <191685@studenti.unimore.it>
+# Copyright (C) 2020-2021 Federico Motta <191685@studenti.unimore.it>
 #
 # This file is part of YAstarMM
 #
@@ -1067,12 +1067,7 @@ class ReleaseEvent(Event):
 
         filtered_df = _select_df_cols(
             self._dataframe,
-            rename_helper(
-                (
-                    "DataDimissione",
-                    "ModalitaDimissione" 
-                )
-            ),
+            rename_helper(("discharge_date", "discharge_mode")),
         )
         data = dict()
         for row in filtered_df.itertuples(index=False, name=None):
@@ -1250,7 +1245,8 @@ class HospitalJourney(object):
         """Populate patient journey from its Pandas DataFrame."""
         self._patient_df = patient_df
         assert patient_key_col in patient_df.columns, str(
-            f"patient_key_col ({repr(patient_key_col)}) not found in df")
+            f"patient_key_col ({repr(patient_key_col)}) not found in df"
+        )
         self._patient_key_col = patient_key_col
         self._patient_id = None
         if not EXECUTING_IN_JUPYTER_KERNEL:

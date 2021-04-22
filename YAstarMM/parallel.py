@@ -166,7 +166,7 @@ def _concat_same_name_sheets(all_sheets_dict):
                 "_",
                 "-",
             )
-            if new_df.empty or sorted(new_df.columns) == []:
+            if new_df.empty or sorted(new_df.columns) == ["Name", "Value"]:
                 debug(f"Dropped empty or unneeded sheet '{new_sheet_name}'")
                 continue
             if new_sheet_name not in ret:
@@ -475,7 +475,7 @@ def _fill_rows_matching_truth_body(
                             [
                                 "successfully matched several "
                                 f"'{indirect_obj}' and\n"
-                                "only one also matched the date range"
+                                "only one also\nmatched the date range"
                             ]
                         )
                         chosen_id = possible_ids.pop()
@@ -679,22 +679,14 @@ def _sheet_merger_worker_body(input_queue, output_queue, error_queue, key_col):
                     f" about the same ({key_col}, date)"
                 )
                 t0 = time()
-                merged_df = (
-                    merged_df.reset_index(drop=True)
-                    .set_index(keys=[key_col, "date"])
-                    .sort_values("date")
-                    .groupby([key_col, "date"])
-                    .apply(
-                        lambda df: df.fillna(method="bfill")
-                        .fillna(method="ffill")
-                        .tail(1)  # keep at most a record for each patient-date
-                    )
-                )  # df should now be indexed twice by tuple (key_col, date)
-                while len(merged_df.index.levels) > 2:
-                    # we need only a two level index to do the next reset
-                    merged_df = merged_df.droplevel(0)
-                # move (key_col, date) back in columns
-                merged_df = merged_df.reset_index()
+                merged_df = fill_nan_backward_forward(
+                    worker_name,
+                    merged_df,
+                    sort_criteria=["date"],
+                    group_criteria=[key_col, "date"],
+                    dropna=False,
+                    tail=1,
+                )
                 debug(
                     f"Trimming of multiple records {' ' * 61}"
                     f"took {time() - t0:10.6f} seconds.\t({worker_name})"
@@ -969,6 +961,7 @@ def fill_nan_backward_forward(
     sort_criteria,
     group_criteria,
     tail,
+    dropna=True,
     **kwargs,
 ):
     max_cpus = cpu_count() - 1
@@ -985,7 +978,9 @@ def fill_nan_backward_forward(
     ]
     for gw in group_workers:
         gw.start()
-    for name, group in df.sort_values(sort_criteria).groupby(group_criteria):
+    for name, group in df.sort_values(sort_criteria).groupby(
+        group_criteria, dropna=dropna
+    ):
         gw_input_queue.put(GroupWorkerInput(name, group))
     for _ in group_workers:
         gw_input_queue.put(None)  # send termination signals
@@ -1171,7 +1166,9 @@ def merge_sheets(
         # http://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html
         {"date": "datetime64[ns]", "": "Int64"},
         {"date": "datetime64[ns]", key_col: key_col_dtype},
+        {"": "Int64"},
         {key_col: key_col_dtype},
+        {"admission_code": "Int64"},
     )
 
     output_to_wait, last_debug_msg = 0, ""

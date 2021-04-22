@@ -39,6 +39,7 @@ from functools import lru_cache
 from logging import (
     basicConfig,
     debug,
+    DEBUG,
     Formatter,
     getLogger,
     INFO,
@@ -153,13 +154,6 @@ def black_magic(fun):
         n = 4096  # consider only first N bytes of object representation
         if fun.__name__ == "merge_sheets":
             hashed_input = "CHECKPOINT_CHARLIE"
-        elif fun.__name__ == "fill_nan_backward_forward" and any(
-            (
-                len(args) > 0 and "merge" in str(args[0]).lower(),
-                "merge" in kwargs.get("name", "").lower(),
-            )
-        ):
-            hashed_input = "CHECKPOINT_BRAVO"
         else:
             hashed_input = blake2b(
                 str.encode("".join((repr(args)[:n], repr(kwargs)[:n]))),
@@ -251,7 +245,7 @@ def extraction_date(filename):
     )
 
 
-def initialize_logging(level=INFO):
+def initialize_logging(level=INFO, debug_mode=False):
     logfile = NamedTemporaryFile(
         prefix=datetime.now().strftime("%Y_%m_%d__%H_%M_%S__"),
         suffix="__00_data_loading_and_manipulation__debugging_log.txt",
@@ -266,11 +260,11 @@ def initialize_logging(level=INFO):
             )
         ),
         style="{",
-        level=level,
+        level=level if not debug_mode else DEBUG,
     )
     root_logger = getLogger()
     stderr_handle = StreamHandler()
-    stderr_handle.setLevel(INFO)
+    stderr_handle.setLevel(INFO if not debug_mode else DEBUG)
     stderr_handle.setFormatter(Formatter("{levelname}: {message}", style="{"))
     root_logger.addHandler(stderr_handle)
 

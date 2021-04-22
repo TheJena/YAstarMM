@@ -46,6 +46,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     pass  # ipython not installed
 
+
 ALLOWED_OUTPUT_FORMATS: Tuple[str, ...] = (
     "csv",
     "json",

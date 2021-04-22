@@ -130,7 +130,7 @@ def _auxiliary_dataframe(df_dict, aux_cols, new_empty_col, sortby=list()):
                         "date" not in col.lower(),
                         not matches_date_time_rule(col),
                         # string
-                        "" not in col.lower(),
+                        "provenance" not in col.lower(),
                         col != rename_helper(""),
                     )
                 )
@@ -499,7 +499,7 @@ def create_new_unique_identifier(
         df_dict,
         aux_cols=aux_cols,
         new_empty_col=new_key_col,
-        sortby=["admission_date", "discharge_date"],
+        sortby=["provenance", "", "admission_date", "discharge_date"],
     ).astype({new_key_col: "string"})
 
     stats = Counter()
@@ -597,12 +597,18 @@ def create_new_unique_identifier(
     if isdir(join_path(expanduser("~"), "RAMDISK")):
         aux_df.sort_values(
             [
-                "admission_date",
-                "discharge_date",
-                "admission_code",
-                "admission_id",
+                c
+                for c in (
+                    "admission_date",
+                    "discharge_date",
+                    "admission_code",
+                    "admission_id",
+                )
+                if c in aux_df.columns
             ]
-        ).drop(columns=["date"]).dropna(
+        ).drop(
+            columns=[c for c in ("date", "provenance") if c in aux_df.columns]
+        ).dropna(
             subset=[""]
         ).drop_duplicates().reset_index(
             drop=True
@@ -675,7 +681,7 @@ def fill_guessable_nan_keys(df_dict, key_col, aux_cols, **kwargs):
         df_dict,
         aux_cols=aux_cols,
         new_empty_col=new_key_col,
-        sortby=["", "", "admission_date", "discharge_date"],
+        sortby=["provenance", "", "admission_date", "discharge_date"],
     )
     stats = Counter()
     debug(f"finding existing and valid '{key_col}' values")

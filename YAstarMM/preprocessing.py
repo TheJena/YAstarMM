@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2020 Federico Motta <191685@studenti.unimore.it>
+# Copyright (C) 2020-2021 Federico Motta <191685@studenti.unimore.it>
 #
 # This file is part of YAstarMM
 #
@@ -69,31 +69,6 @@ import pandas as pd
 GroupWorkerOutput = namedtuple("GroupWorkerOutput", ["df", "stats"])
 
 _LOGGING_LOCK = Lock()
-
-
-def export_df_to_file(df: pd.DataFrame, file_object: Union[TextIO, str]) -> None:
-    if isinstance(file_object, str):
-        file_object = open(file_object, "w")
-
-    extension: str = file_object.name.split(".")[-1]
-    if extension not in ALLOWED_OUTPUT_FORMATS:
-        raise ValueError(
-            f"Output file '{file_object.name}' format is not supported!\n"
-            f"Allowed extensions are: .{', .'.join(ALLOWED_OUTPUT_FORMATS)}"
-        )
-    if extension == "csv":
-        df.to_csv(file_object)
-    elif extension == "json":
-        df.to_json(file_object)
-    elif extension in ("pkl", "pickle"):
-        df.to_pickle(file_object.buffer)  # use underlying binary buffer
-    elif extension == "xlsx":
-        df.to_excel(file_object.buffer)  # use underlying binary buffer
-    else:
-        raise SystemExit(
-            "Please update this switch-case accordingly "
-            "with ALLOWED_OUTPUT_FORMATS constant content"
-        )
 
 
 class DumbyDog(object):
@@ -1114,6 +1089,5 @@ assert all(
             "preprocessing",
         ),
         "clear_and_refill_state_transition_columns" in globals(),
-        "export_df_to_file" in globals(),
     )
 ), "Please update 'Usage' section of module docstring"
