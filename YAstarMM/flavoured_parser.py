@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+# coding: utf-8
+#
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2020 Federico Motta <191685@studenti.unimore.it>
+# Copyright (C) 2020-2021 Federico Motta <191685@studenti.unimore.it>
 #
 # This file is part of YAstarMM
 #
@@ -57,6 +59,71 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help="Excel input file containing the DataFrame to parse",
         metavar="xlsx",
         type=FileType("rb"),
+    ),
+    ("--observed-variables",): dict(
+        action="append",
+        choices=list(
+            rename_helper(
+                (
+                    "Age",
+                    "Charlson_*",
+                    "",
+                    "D_dimer",
+                    "",
+                    "GPT_ALT",
+                    "",
+                    "LDH",
+                    "",
+                    "",
+                    "",
+                    "Urea",
+                    "pCO2",
+                    "pH",
+                    "pO2_FO2",
+                )
+            )
+        ),
+        default=list(),
+        help="Take into account only given observed variables",
+        metavar="str",
+        type=str,
+    ),
+    ("--oxygen-states",): dict(
+        action="append",
+        choices=[
+            "No_O2",
+            "O2",
+            "HFNO",
+            "NIV",
+            "Intubated",
+            "Deceased",
+            "Discharged",
+            "Transferred",
+        ],
+        default=list(),
+        help="Take into account only given oxygen states",
+        metavar="str",
+        type=str,
+    ),
+    ("--hmm-ratio",): dict(
+        default=0.1,
+        dest="validation_set_ratio_hmm",
+        help="Size of the validation set for the HMM",
+        metavar="float",
+        type=float,
+    ),
+    ("--save-dir",): dict(
+        default=None,
+        help="Where results will be stored",
+        metavar="path",
+        type=str,
+    ),
+    ("--seed", "--random-seed",): dict(
+        default=None,
+        dest="random_seed",
+        help="Initialize np.RandomState",
+        metavar="int",
+        type=int,
     ),
 }
 """Command line interface arguments to parse."""

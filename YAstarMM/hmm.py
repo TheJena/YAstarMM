@@ -91,16 +91,32 @@ def aggregate_constant_values(sequence):
 def function_returning_worst_value_for(column):
     if column in rename_helper(
         (
+            "ActualState_val",
+            "Age",
+            "Charlson_*",
+            "",
+            "D_dimer",
+            "",
+            "GPT_ALT",
+            "",
+            "LDH",
+            "",
+            "",
+            "Urea",
         )
     ):  # a higher value means a worst patient health
         return np.max
     elif column in rename_helper(
         (
+            "",
+            "pO2_FO2",
         )
     ):  # a lower value means a worst patient health
         return np.min
     elif column in rename_helper(
         (
+            "pCO2",
+            "pH",
         )
     ):  # both a higher or a lower value mean a worst patient health
         return np.mean
@@ -499,6 +515,8 @@ class MetaModel(object):
 
     def _split_dataset(self, ratio=None):
         """Split dataset into training set and validation set"""
+        if ratio is None:
+            ratio = getattr(parsed_args(), "validation_set_ratio_hmm", 0.1)
         assert isinstance(ratio, float) and ratio > 0 and ratio < 1, str(
             "Validation set ratio (CLI argument --ratio) is not in (0, 1)"
         )
@@ -851,8 +869,44 @@ class MetaModel(object):
             getattr(self, df_name).to_csv(f"{dir_name}/{df_name}.csv")
 
 
+def run():
+    assert getattr(parsed_args(), "save_dir") is not None
+
+    if not isdir(getattr(parsed_args(), "save_dir")):
+        makedirs(getattr(parsed_args(), "save_dir"))
+
+    df = clear_and_refill_state_transition_columns(
+        pd.read_excel(excel_file=parsed_args().input),
+        patient_key_col=rename_helper(""),
+        log_level=getattr(parsed_args(), "log_level", LOGGING_LEVEL),
+        show_statistics=getattr(
+            parsed_args(), "show_preprocessing_statistics", False
+        ),  # make black auto-formatting prettier
+        use_dumbydog=getattr(parsed_args(), "use_dumbydog", False),
+        use_insomnia=getattr(parsed_args(), "use_insomnia", False),
     )
 
+    if getattr(parsed_args(), "random_seed", None) is not None:
+        seed = getattr(parsed_args(), "random_seed")
+        logging.warning(f"Using manually set seed {seed}")
+
+    mm1 = MetaModel(
+        df,
+        oxygen_states=getattr(
+            parsed_args(), "oxygen_states", [state.name for state in State]
+        ),
+        observed_variables=getattr(parsed_args(), "observed_variables"),
+        random_seed=seed,
+        save_to_dir=getattr(parsed_args(), "save_dir"),
+    )
+
+    print("\n")
+    mm1.print_start_probability()
+    mm1.print_matrix(occurrences_matrix=True)
+    mm1.print_matrix(transition_matrix=True)
+
+    print("Validation matrix:\n" + repr(mm1.validation_matrix))
+    print("Training matrix:\n" + repr(mm1.training_matrix))
 
 
 if __name__ == "__main__":
