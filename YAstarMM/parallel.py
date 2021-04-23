@@ -43,6 +43,7 @@ from .column_rules import (
 )
 from .utility import (
     black_magic,
+    enough_ram,
     new_key_col_value,
     row_selector,
     swap_month_and_day,
@@ -57,6 +58,7 @@ from numexpr import set_num_threads, set_vml_num_threads
 from os.path import abspath, basename, isfile
 from queue import Empty as EmptyQueue
 from re import compile, IGNORECASE
+from psutil import virtual_memory
 from shutil import move
 from string import ascii_letters, punctuation, whitespace
 from sys import version_info
@@ -964,6 +966,12 @@ def fill_nan_backward_forward(
     dropna=True,
     **kwargs,
 ):
+    if dropna:
+        warning(
+            f"calling 'fill_nan_backward_forward()' with "
+            f"dropna=True may cause the loss of rows where any of "
+            f"the [{repr(group_criteria).strip('[(,)]')},] is nan"
+        )
     max_cpus = cpu_count() - 1
 
     gw_input_queue, gw_output_queue, gw_error_queue = InputOutputErrorQueues(
@@ -978,10 +986,20 @@ def fill_nan_backward_forward(
     ]
     for gw in group_workers:
         gw.start()
-    for name, group in df.sort_values(sort_criteria).groupby(
+    group_is_not_a_tuple = isinstance(group_criteria, str)
+    for group_name, group_df in df.sort_values(sort_criteria).groupby(
         group_criteria, dropna=dropna
     ):
-        gw_input_queue.put(GroupWorkerInput(name, group))
+        if group_is_not_a_tuple:
+            group_name = [group_name]
+        if not dropna and any(pd.isna(value) for value in group_name):
+            debug(
+                "skipping fill-backward-forward+tail for group "
+                f"{group_name}; since it contains nan "
+            )
+            gw_output_queue.put(group_df.loc[:, :])  # pass a copy of group
+        else:
+            gw_input_queue.put(GroupWorkerInput(group_name, group_df))
     for _ in group_workers:
         gw_input_queue.put(None)  # send termination signals
 
@@ -1004,7 +1022,9 @@ def fill_nan_backward_forward(
             f"follwing exception: {str(group_worker_error.exception)}"
         )
     _join_all(group_workers, "group workers")
-    return pd.concat(all_groups, join="outer", sort=True)
+    return pd.concat(all_groups, join="outer", sort=True).drop_duplicates(
+        ignore_index=True
+    )
 
 
 # DO NOT CACHE THIS FUNCTION
@@ -1145,9 +1165,37 @@ def find_valid_keys(aux_df, selector, ids_columns, new_key, stats):
 def merge_sheets(
     df_dict, key_col, key_col_dtype, enable_automagic=True, **kwargs
 ):
-    max_cpus = cpu_count()
-    set_vml_num_threads(1)  # we are already using multiprocessing
-    set_num_threads(1)  # we are already using multiprocessing
+    """The default amount of ram is an heuristically determined value
+
+    Elapsed (wall clock) time (h:mm:ss or m:ss):     0:07:42
+    Maximum resident set size (kbytes):              6828496
+    """
+    max_cpus = 1
+    needed_gb_ram = 6828496 / 1024 ** 2
+    max_wall_clock_time = timedelta(hours=0, minutes=7, seconds=42)
+    if enable_automagic and enough_ram(needed_gb_ram):
+        info("Automagic discovered enough memory to try multiprocessing")
+        max_cpus = cpu_count()
+        set_vml_num_threads(1)  # we are already using multiprocessing
+        set_num_threads(1)  # we are already using multiprocessing
+    else:
+        debug("Not enough memory to use multiprocessing")
+        set_vml_num_threads(max(1, cpu_count() // 2))  # use numexpr
+        set_num_threads(max(1, cpu_count() // 2))  # multithreading instead
+
+    info(
+        "Congratulations! You just won some free time; "
+        "please come back at:\n\t"
+        f"{(datetime.now()+max_wall_clock_time).strftime('%A %d, %H:%M:%S')}\n"
+        + str(
+            "(since there is not enough RAM available,\n at least "
+            + f"{needed_gb_ram - virtual_memory().available/1024**3:.3f}"
+            + " GiB of swap will be used;\n"
+            + " this could increase the required time)"
+            if virtual_memory().available < needed_gb_ram * 1024 ** 3
+            else ""
+        )
+    )
 
     sm_input_queue, sm_output_queue, sm_error_queue = InputOutputErrorQueues(
         Queue(), Queue(), Queue()

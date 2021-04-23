@@ -1326,14 +1326,12 @@ def matches_integer_rule(column_name):
 def matches_static_rule(column_name):
     return column_name in set(
         (
-            "admission_code",
             "admission_date",
-            "admission_id",
             "age",
             "discharge_date",
-            "discharge_id",
             "discharge_mode",
             "height",
+            "influenza_vaccine",
             "pneumococcal_vaccine",
             "sex",
         )

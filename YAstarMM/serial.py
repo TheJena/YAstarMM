@@ -68,7 +68,7 @@ from .utility import (
     swap_month_and_day,
 )
 from collections import Counter
-from datetime import timedelta
+from datetime import datetime, timedelta
 from logging import debug, info, warning
 from os.path import expanduser, isdir, join as join_path
 from string import ascii_letters
@@ -314,11 +314,13 @@ def cast_columns_to_booleans(df_dict):
                 )
                 if old_col_repr != new_col_repr:
                     debug(
-                        f"Column '{column}' of sheet '{sheet_name}' was:       "
+                        f"Column '{column}' of sheet '{sheet_name}' "
+                        + "was:       "
                         + old_col_repr
                     )
                     debug(
-                        f"Column '{column}' of sheet '{sheet_name}' now is:    "
+                        f"Column '{column}' of sheet '{sheet_name}' "
+                        + "now is:    "
                         + new_col_repr
                     )
     sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
@@ -760,6 +762,14 @@ def fill_missing_days_in_hospital(
     max_iqr_days=70,
     **kwargs,
 ):
+    """Elapsed (wall clock) time (h:mm:ss or m:ss):  0:51:24"""
+    max_wall_clock_time = timedelta(hours=0, minutes=51, seconds=24)
+    info(
+        "Congratulations! You just won some free time; "
+        "please come back at:\n\t"
+        f"{(datetime.now()+max_wall_clock_time).strftime('%A %d, %H:%M:%S')}\n"
+    )
+
     for col in (key_col, date_col, range_start, range_end):
         assert col in df.columns, f"'{col}' must be in df.columns"
     if fix_key_col_on_range_change:
