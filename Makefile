@@ -1,16 +1,32 @@
 # Please define your own dataset path
 DATASETS ?= $(DIR_datasets)
 
-.PHONY: black clean docs init mypy update upgrade
+.PHONY: autopep8 black clean docs init mypy update upgrade
+
+autopep8:
+	clear
+	while true; do							\
+		$(eval PY_FILES := $$(shell				\
+			find . -iname '*.py'				\
+			| grep -v '#'					\
+			| tr -s '\n' ' '))				\
+		inotifywait --quiet --event modify			\
+			$(PY_FILES)					\
+		&& clear						\
+		&& autopep8 --diff --recursive --jobs $(shell nproc)	\
+			    --experimental -aaaaaaaaaa			\
+			$(PY_FILES)					\
+		| source-highlight -f esc -s diff			\
+	; done
 
 # Lets not argue about code style :D
 # https://github.com/psf/black#the-uncompromising-code-formatter
 black:
 	$(eval PY_FILES := $$(shell					\
-		find . -iname '*py'					\
+		find . -iname '*.py'					\
 		| grep -v '#'						\
 		| tr -s '\n' ' '))
-	black --diff --line-length 79 --target-version py36		\
+	black --color --diff --line-length 79 --target-version py36	\
 		$(PY_FILES)						\
 
 # Remove emacs backup files and python compiled bytecode
