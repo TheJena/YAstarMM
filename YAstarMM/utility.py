@@ -24,17 +24,27 @@
 
    Usage:
             from  YAstarMM.utility  import  (
-                debug_start_timer, debug_stop_timer, initialize_logging,
+                black_magic,
+                debug_start_timer,
+                debug_stop_timer,
+                enough_ram,
+                extraction_date,
+                initialize_logging,
             )
 
    ( or from within the YAstarMM package )
 
             from          .utility  import  (
-                debug_start_timer, debug_stop_timer, initialize_logging,
+                black_magic,
+                debug_start_timer,
+                debug_stop_timer,
+                enough_ram,
+                extraction_date,
+                initialize_logging,
             )
 """
 
-from .constants import EXTRACTION_REGEXP
+from .constants import EXTRACTION_REGEXP, MIN_PYTHON_VERSION
 from datetime import datetime, timedelta
 from functools import lru_cache
 from logging import (
@@ -302,17 +312,19 @@ def timestamp_to_hex_date(date, year_offset=0, desired_length=5):
 
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
-assert version_info >= (3, 6), "Please use at least Python 3.6"
-assert all(
-    (
-        __name__
-        in (
-            "analisi.src.YAstarMM.utility",
-            "YAstarMM.utility",
-            "utility",
-        ),
-        "initialize_logging" in globals(),
-        "debug_start_timer" in globals(),
-        "debug_stop_timer" in globals(),
-    )
-), "Please update 'Usage' section of module docstring"
+assert (
+    version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+assert __name__ in (
+    "analisi.src.YAstarMM.utility",
+    "YAstarMM.utility",
+    "utility",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )

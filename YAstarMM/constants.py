@@ -24,25 +24,45 @@
 
    Usage:
             from  YAstarMM.constants  import  (
+                BOOLEANIZATION_MAP,
+                EXECUTING_IN_JUPYTER_KERNEL,
+                EXTRACTION_REGEXP,
+                InputOutputErrorQueues,
                 LOGGING_LEVEL,
+                MIN_PYTHON_VERSION,
+                SHEET_RENAMING_RULES,
+                TITLE_COLUMN_REGEXP,
             )
 
    ( or from within the YAstarMM package )
 
             from          .constants  import  (
+                BOOLEANIZATION_MAP,
+                EXECUTING_IN_JUPYTER_KERNEL,
+                EXTRACTION_REGEXP,
+                InputOutputErrorQueues,
                 LOGGING_LEVEL,
+                MIN_PYTHON_VERSION,
+                SHEET_RENAMING_RULES,
+                TITLE_COLUMN_REGEXP,
             )
 """
 
 from collections import namedtuple, OrderedDict
 from datetime import datetime
-from sys import version_info
 import logging
 import numpy as np
 import pandas as pd
 import re
 import sys
 import yaml
+
+
+MIN_PYTHON_VERSION = (3, 8)
+assert (
+    sys.version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+
 
 try:
     from IPython import get_ipython
@@ -54,12 +74,6 @@ APPLE_GREEN = "#8DB600"
 
 # https://en.wikipedia.org/w/index.php?title=Bissextile_year&redirect=yes
 AVERAGE_DAYS_PER_YEAR = 365 + 1 / 4 - 1 / 100 + 1 / 400
-
-TestResult = namedtuple("TestResult", ("success", "value", "msg"))
-BAD_TEST_RESULT = TestResult(success=False, value=None, msg="")
-NAN_TEST_RESULT = TestResult(
-    success=True, value=np.nan, msg=str(np.nan).center(len(f"{0.0:e}"))
-)
 
 BOOLEANIZATION_MAP = {
     "": np.nan,
@@ -78,7 +92,6 @@ BOOLEANIZATION_MAP = {
     str(int(0)): False,
     str(int(1)): True,
 }
-
 
 CAPRI_BLUE = "#00BFFF"
 
@@ -300,3 +313,20 @@ TITLE_COLUMN_REGEXP = re.compile(
 VerticalizeFeatureItem = namedtuple(
     "VerticalizeFeatureItem", ["date_column", "column_name", "related_columns"]
 )
+
+
+if __name__ == "__main__":
+    raise SystemExit("Please import this script, do not run it!")
+assert __name__ in (
+    "analisi.src.YAstarMM.constants",
+    "YAstarMM.constants",
+    "constants",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )

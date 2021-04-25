@@ -46,6 +46,7 @@ from .constants import (  # without the dot notebook raises ModuleNotFoundError
     LOGGING_LEVEL,
     LOGGING_STREAM,
     LOGGING_STYLE,
+    MIN_PYTHON_VERSION,
     NASTY_SUFFIXES,
     ORDINARILY_HOME_DISCHARGED,
 )
@@ -1336,13 +1337,19 @@ class HospitalJourney(object):
 
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
-assert version_info >= (3, 6), "Please use at least Python 3.6"
-assert all(
-    (
-        __name__ in ("analisi.src.YAstarMM.model", "YAstarMM.model", "model"),
-        "State" in globals(),
-        "AdmissionEvent" in globals(),
-        "ReleaseEvent" in globals(),
-        "HospitalJourney" in globals(),
-    )
-), "Please update 'Usage' section of module docstring"
+assert (
+    version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+assert __name__ in (
+    "analisi.src.YAstarMM.model",
+    "YAstarMM.model",
+    "model",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )

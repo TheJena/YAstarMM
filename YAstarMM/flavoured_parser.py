@@ -40,6 +40,7 @@
 """
 
 from .column_rules import rename_helper
+from .constants import MIN_PYTHON_VERSION
 from argparse import (
     ArgumentDefaultsHelpFormatter,
     ArgumentParser,
@@ -413,10 +414,19 @@ def parsed_args(
 
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
-assert version_info >= (3, 6), "Please use at least Python 3.6"
-assert all(
-    (
-        __name__ in ("YAstarMM.flavoured_parser", "flavoured_parser"),
-        "parsed_args" in globals(),
-    )
-), "Please update 'Usage' section of module docstring"
+assert (
+    version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+assert __name__ in (
+    "analisi.src.YAstarMM.flavoured_parser",
+    "YAstarMM.flavoured_parser",
+    "flavoured_parser",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )

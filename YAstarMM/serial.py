@@ -27,8 +27,11 @@
                 cast_columns_to_booleans,
                 cast_columns_to_categorical,
                 cast_columns_to_floating_point,
+                create_new_unique_identifier,
+                deduplicate_dataframe_columns,
+                fill_guessable_nan_keys,
                 fix_bad_date_range,
-                deduplicate_dataframe_columns
+                identify_remaining_records,
             )
 
    ( or from within the YAstarMM package )
@@ -37,8 +40,11 @@
                 cast_columns_to_booleans,
                 cast_columns_to_categorical,
                 cast_columns_to_floating_point,
-                fix_bad_date_range,
+                create_new_unique_identifier,
                 deduplicate_dataframe_columns,
+                fill_guessable_nan_keys,
+                fix_bad_date_range,
+                identify_remaining_records,
             )
 """
 
@@ -63,6 +69,7 @@ from .constants import (
     COLUMNS_TO_MINIMIZE,
     ENUM_GRAVITY_LIST,
     ENUM_TO_MAXIMIZE,
+    MIN_PYTHON_VERSION,
     NORMALIZED_TIMESTAMP_COLUMNS,
 )
 from .parallel import (
@@ -1422,19 +1429,19 @@ def verticalize_features(df_dict, key_col, **kwargs):
 
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
-assert version_info >= (3, 6), "Please use at least Python 3.6"
-assert all(
-    (
-        __name__
-        in (
-            "analisi.src.YAstarMM.serial",
-            "YAstarMM.serial",
-            "serial",
-        ),
-        "deduplicate_dataframe_columns" in globals(),
-        "cast_columns_to_booleans" in globals(),
-        "cast_columns_to_categorical" in globals(),
-        "cast_columns_to_floating_point" in globals(),
-        "fix_bad_date_range" in globals(),
-    )
-), "Please update 'Usage' section of module docstring"
+assert (
+    version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+assert __name__ in (
+    "analisi.src.YAstarMM.serial",
+    "YAstarMM.serial",
+    "serial",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )

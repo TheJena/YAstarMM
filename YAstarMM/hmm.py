@@ -33,7 +33,7 @@ from .column_rules import (
     minimum_maximum_column_limits,
     rename_helper,
 )
-from .constants import LOGGING_LEVEL
+from .constants import LOGGING_LEVEL, MIN_PYTHON_VERSION
 from .flavoured_parser import parsed_args
 from .model import State
 from .preprocessing import clear_and_refill_state_transition_columns
@@ -905,10 +905,19 @@ def run():
 
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
-assert version_info >= (3, 6), "Please use at least Python 3.6"
-assert all(
-    (
-        __name__ in ("analisi.src.YAstarMM.hmm", "YAstarMM.hmm", "hmm"),
-        # TODO HERE in globals(),
-    )
-), "Please update 'Usage' section of module docstring"
+assert (
+    version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+assert __name__ in (
+    "analisi.src.YAstarMM.hmm",
+    "YAstarMM.hmm",
+    "hmm",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )

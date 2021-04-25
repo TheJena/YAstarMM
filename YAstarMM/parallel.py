@@ -25,6 +25,7 @@
    Usage:
             from  YAstarMM.parallel  import  (
                 cast_date_time_columns_to_timestamps,
+                merge_sheets,
                 rename_excel_sheets,
             )
 
@@ -32,6 +33,7 @@
 
             from          .parallel  import  (
                 cast_date_time_columns_to_timestamps,
+                merge_sheets,
                 rename_excel_sheets,
             )
 """
@@ -49,6 +51,7 @@ from .constants import (
     GroupWorkerError,
     GroupWorkerInput,
     InputOutputErrorQueues,
+    MIN_PYTHON_VERSION,
     NORMALIZED_TIMESTAMP_COLUMNS,
     NewKeyError,
     NewKeyOutput,
@@ -888,6 +891,9 @@ def fill_nan_backward_forward(
     name, df, sort_criteria, group_criteria, tail, dropna=True, **kwargs
 ):
     if dropna:
+        assert "fill_nan_backward_forward" in globals(), str(
+            "Update the following warning message"
+        )
         warning(
             f"calling 'fill_nan_backward_forward()' with "
             f"dropna=True may cause the loss of rows where any of "
@@ -1388,16 +1394,19 @@ def update_all_sheets(df_dict, lookup_table, receiver, giver):
 
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
-assert version_info >= (3, 6), "Please use at least Python 3.6"
-assert all(
-    (
-        __name__
-        in (
-            "analisi.src.YAstarMM.parallel",
-            "YAstarMM.parallel",
-            "parallel",
-        ),
-        "cast_date_time_columns_to_timestamps" in globals(),
-        "rename_excel_sheets" in globals(),
-    )
-), "Please update 'Usage' section of module docstring"
+assert (
+    version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+assert __name__ in (
+    "analisi.src.YAstarMM.parallel",
+    "YAstarMM.parallel",
+    "parallel",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )

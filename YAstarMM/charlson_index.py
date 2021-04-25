@@ -21,11 +21,29 @@
 # along with YAstarMM.  If not, see <https://www.gnu.org/licenses/>.
 """
    Compute Charlson-Index.
+
+   Usage:
+            from  YAstarMM.charlson_index  import  (
+                compute_charlson_index,
+                estimated_ten_year_survival,
+                most_common_charlson,
+                reset_charlson_counter,
+            )
+
+   ( or from within the YAstarMM package )
+
+            from          .charlson_index  import  (
+                compute_charlson_index,
+                estimated_ten_year_survival,
+                most_common_charlson,
+                reset_charlson_counter,
+            )
 """
 
 from .column_rules import rename_helper
-from .constants import BOOLEANIZATION_MAP
+from .constants import BOOLEANIZATION_MAP, MIN_PYTHON_VERSION
 from collections import Counter
+from sys import version_info
 import numpy as np
 import pandas as pd
 
@@ -595,3 +613,23 @@ def most_common_charlson():
 def reset_charlson_counter():
     global _CHARLSON_COUNTER
     _CHARLSON_COUNTER = Counter()
+
+
+if __name__ == "__main__":
+    raise SystemExit("Please import this script, do not run it!")
+assert (
+    version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+assert __name__ in (
+    "analisi.src.YAstarMM.charlson_index",
+    "YAstarMM.charlson_index",
+    "charlson_index",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )

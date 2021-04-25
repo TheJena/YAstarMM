@@ -33,12 +33,7 @@
                 matches_date_time_rule,
                 matches_integer_rule,
                 matches_static_rule,
-                progressive_features,
                 rename_helper,
-                shift_features,
-                summarize_features,
-                switch_to_date_features,
-                verticalize_features,
             )
 
    ( or from within the YAstarMM package )
@@ -53,17 +48,13 @@
                 matches_date_time_rule,
                 matches_integer_rule,
                 matches_static_rule,
-                progressive_features,
                 rename_helper,
-                shift_features,
-                summarize_features,
-                switch_to_date_features,
-                verticalize_features,
             )
 """
 
 from .constants import (
     BOOLEANIZATION_MAP,
+    MIN_PYTHON_VERSION,
     SummarizeFeatureItem,
     SwitchToDateValue,
     VerticalizeFeatureItem,
@@ -1931,29 +1922,19 @@ def verticalize_features():
 
 if __name__ == "__main__":
     raise SystemExit("Please import this script, do not run it!")
-assert version_info >= (3, 6), "Please use at least Python 3.6"
-assert all(
-    (
-        __name__
-        in (
-            "analisi.src.YAstarMM.column_rules",
-            "YAstarMM.column_rules",
-            "column_rules",
-        ),
-        "BOOLEANISATION_MAP" in globals(),
-        "DAYFIRST_REGEXP" in globals(),
-        "does_not_match_categorical_rule" in globals(),
-        "does_not_match_float_rule" in globals(),
-        "drop_rules" in globals(),
-        "keep_rules" in globals(),
-        "matched_enumerated_rule" in globals(),
-        "matches_boolean_rule" in globals(),
-        "matches_date_time_rule" in globals(),
-        "matches_integer_rule" in globals(),
-        "matches_static_rule" in globals(),
-        "rename_helper" in globals(),
-        "shift_features" in globals(),
-        "switch_to_date_features" in globals(),
-        "verticalize_features" in globals(),
-    )
-), "Please update 'Usage' section of module docstring"
+assert (
+    version_info >= MIN_PYTHON_VERSION
+), f"Please use at least Python {'.'.join(str(n) for n in MIN_PYTHON_VERSION)}"
+assert __name__ in (
+    "analisi.src.YAstarMM.column_rules",
+    "YAstarMM.column_rules",
+    "column_rules",
+), "Wrong module name; please update 'Usage' section of module docstring"
+for usage_docstring in __doc__.split("import")[1:]:
+    for fun in "".join(
+        usage_docstring.split(")")[0].lstrip(" (").split()
+    ).split(",")[:-1]:
+        assert fun in globals(), str(
+            f"Function {fun} not found in module;"
+            " please update 'Usage' section of module docstring"
+        )
