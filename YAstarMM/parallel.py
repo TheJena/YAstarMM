@@ -913,6 +913,8 @@ def fill_nan_backward_forward(
     ]
     for gw in group_workers:
         gw.start()
+
+    all_groups = list()
     group_is_not_a_tuple = isinstance(group_criteria, str)
     for group_name, group_df in df.sort_values(sort_criteria).groupby(
         group_criteria, dropna=dropna
@@ -924,13 +926,12 @@ def fill_nan_backward_forward(
                 "skipping fill-backward-forward+tail for group "
                 f"{group_name}; since it contains nan "
             )
-            gw_output_queue.put(group_df.loc[:, :])  # pass a copy of group
+            all_groups.append(group_df.copy(deep=True))
         else:
             gw_input_queue.put(GroupWorkerInput(group_name, group_df))
     for _ in group_workers:
         gw_input_queue.put(None)  # send termination signals
 
-    all_groups = list()
     output_ack, error_ack = len(group_workers), len(group_workers)
     while output_ack > 0:
         group_df = gw_output_queue.get()
