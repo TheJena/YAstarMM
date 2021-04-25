@@ -24,21 +24,24 @@
 
    Usage:
             from  YAstarMM.preprocessing  import  (
-                clear_and_refill_state_transition_columns, export_df_to_file,
+                clear_and_refill_state_transition_columns,
             )
 
    ( or from within the YAstarMM package )
 
             from          .preprocessing  import  (
-                clear_and_refill_state_transition_columns, export_df_to_file,
+                clear_and_refill_state_transition_columns,
             )
 """
 
 from .column_rules import rename_helper
 from .constants import (  # without the dot notebook raises ModuleNotFoundError
-    ALLOWED_OUTPUT_FORMATS,
     EXECUTING_IN_JUPYTER_KERNEL,
+    InputOutputErrorQueues,
     LOGGING_LEVEL,
+    GroupWorkerError,
+    GroupWorkerInput,
+    GroupWorkerOutput,
     NASTY_SUFFIXES,
 )
 from .model import (  # without the dot notebook raises ModuleNotFoundError
@@ -51,22 +54,14 @@ from .model import (  # without the dot notebook raises ModuleNotFoundError
     State,
     new_columns_to_add,
 )
-from .parallel import (
-    InputOutputErrorQueues,
-    GroupWorkerError,
-    GroupWorkerInput,
-)
 from .utility import black_magic
-from collections import namedtuple
 from datetime import timedelta
 from multiprocessing import cpu_count, Lock, Process, Queue
 from sys import version_info
-from typing import Iterator, List, Optional, TextIO, Tuple, Union
+from typing import Iterator, List, Optional, Tuple
 import logging
 import numpy as np
 import pandas as pd
-
-GroupWorkerOutput = namedtuple("GroupWorkerOutput", ["df", "stats"])
 
 _LOGGING_LOCK = Lock()
 
@@ -311,7 +306,9 @@ class DumbyDog(object):
         self,
         df_len: int,
     ) -> Iterator[Tuple[str, pd.Series]]:
-        """Return iterator over (columns, wiped_series) to wipe real patient df."""
+        """Return iterator over (columns, wiped_series) to wipe real
+        patient df.
+        """
         nan_series = pd.Series([np.nan for _ in range(df_len)])
         for state in State:
             for nasty_suffix in NASTY_SUFFIXES:
@@ -787,7 +784,9 @@ class Insomnia(DumbyDog):
             self.info(repr(next_ev))
 
     def fix_just_admission_discharge_patients(self) -> None:
-        """Set No O2 state for patients with only admission and discharge dates."""
+        """Set No O2 state for patients with only admission and
+        discharge dates.
+        """
         admission_ev = self.journey.beginning
         discharge_ev = self.journey.ending
         assert not discharge_ev.is_nat, str(
@@ -899,7 +898,8 @@ def clear_and_refill_state_transition_columns(
         ]
         for pw in parallel_workers:
             pw.start()
-        # Sort whole_df by DataRef and fill State Transition cols of each patient
+        # Sort whole_df by DataRef and fill State Transition cols of
+        # each patient
         for group_name, patient_df in whole_df.sort_values(
             rename_helper("DataRef")
         ).groupby(patient_key_col):

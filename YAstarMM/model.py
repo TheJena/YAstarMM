@@ -28,18 +28,19 @@
 
    Usage:
             from  YAstarMM.model  import  (
-                State, AdmissionEvent, ... , ReleaseEvent, HospitalJourney,
+                State, AdmissionEvent, ReleaseEvent, HospitalJourney,
             )
 
    ( or from within the YAstarMM package )
 
             from          .model  import  (
-                State, AdmissionEvent, ... , ReleaseEvent, HospitalJourney,
+                State, AdmissionEvent, ReleaseEvent, HospitalJourney,
             )
 """
 
 from .column_rules import rename_helper
 from .constants import (  # without the dot notebook raises ModuleNotFoundError
+    DECEASED,
     EXECUTING_IN_JUPYTER_KERNEL,
     LOGGING_FORMAT,
     LOGGING_LEVEL,
@@ -984,7 +985,7 @@ class ReleaseEvent(Event):
 
             # death wins over any possible other reason
             for r in reasons:
-                if "deceduto" in r.lower():
+                if DECEASED.lower() in r.lower():
                     self._reason = State.Deceased
                     return self._reason
 
@@ -1067,7 +1068,7 @@ class ReleaseEvent(Event):
 
         filtered_df = _select_df_cols(
             self._dataframe,
-            rename_helper(("discharge_date", "discharge_mode")),
+            rename_helper(("DataDimissione", "ModalitaDimissione")),
         )
         data = dict()
         for row in filtered_df.itertuples(index=False, name=None):

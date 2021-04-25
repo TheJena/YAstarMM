@@ -34,87 +34,36 @@
             )
 """
 
+from .constants import EXTRACTION_REGEXP
 from datetime import datetime, timedelta
 from functools import lru_cache
 from logging import (
-    basicConfig,
-    debug,
     DEBUG,
     Formatter,
-    getLogger,
     INFO,
-    info,
     StreamHandler,
     WARNING,
-    warning,
+    basicConfig,
+    debug,
+    getLogger,
+    info,
 )
 from hashlib import blake2b
+from multiprocessing import Lock
 from os import mkdir
 from os.path import abspath, expanduser, isdir, isfile, join as join_path
-from multiprocessing import Lock
 from psutil import virtual_memory, swap_memory
 from sys import version_info
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import time
 import gzip
-import numpy as np
 import pandas as pd
 import pickle
-import re
 
 _CACHE_DIR = None  # where do you prefer to save @black_magic ?
 _DISABLE_BLACK_MAGIC_GLOBALLY = False
 
 _CACHE_LOCK, _PERF_LOCK = Lock(), Lock()
-
-# https://en.wikipedia.org/w/index.php?title=Bissextile_year&redirect=yes
-AVERAGE_DAYS_PER_YEAR = 365 + 1 / 4 - 1 / 100 + 1 / 400
-
-EXTRACTION_REGEXP = re.compile(
-    r"(Estrazione|Extraction)"
-    r"[ _-]*"  # separator
-    r"(?P<year>2[01]\d\d)"  # valid until 2199
-    r"[ _-]*"  # separator
-    r"(?P<month>0[1-9]|1[012])"
-    r"[ _-]*"  # separator
-    r"(?P<day>[012][1-9]|30|31)"
-    r".*",  # whatever
-    re.IGNORECASE,
-)
-assert datetime.today().year < 2200, "Please fix the above regular expression"
-
-
-def _hex_date_to_timestamp(
-    hex_str,
-    year_offset=0,
-    time_offset=timedelta(seconds=0),
-    drop_first_digits=0,
-):
-    assert isinstance(hex_str, str)
-    while drop_first_digits > 0:
-        d, hex_str = hex_str[0], hex_str[1:]
-        assert d == "0", f"digits to drop should be zeros, got '{d}' instead"
-        drop_first_digits -= 1
-    assert len(hex_str) == 5
-    return pd.to_datetime(
-        datetime(
-            year=year_offset + int(hex_str[:2], base=16),
-            month=int(hex_str[2:-2], base=16),
-            day=int(hex_str[-2:], base=16),
-        )
-        + time_offset
-    )
-
-
-def _timestamp_to_hex_date(date, year_offset=0, desired_length=5):
-    date = pd.to_datetime(date)
-    ret = (  # X means hexadecimal notation
-        f"{date.year-year_offset:X}".rjust(desired_length - 3, "0")
-        + f"{date.month:X}".rjust(1, "0")
-        + f"{date.day:X}".rjust(2, "0")
-    )
-    assert len(ret) == desired_length, f"len({repr(ret)}) != {desired_length}"
-    return ret
 
 
 def black_magic(fun):
@@ -231,6 +180,19 @@ def debug_stop_timer(event_name):
     )
 
 
+def duplicated_columns(df):
+    return sorted(df.loc[:, df.columns.duplicated()].columns)
+
+
+@lru_cache(maxsize=None, typed=True)
+def enough_ram(gb):
+    if virtual_memory().available + swap_memory().free > gb * 1024 ** 3:
+        debug(f"There is enough memory to allocate {gb} GiB")
+        return True
+    debug(f"There is not enough memory to allocate {gb} GiB")
+    return False
+
+
 def extraction_date(filename):
     m = EXTRACTION_REGEXP.match(filename)
     if m is not None:
@@ -246,6 +208,28 @@ def extraction_date(filename):
         "\n\t- Estrazione_2000_12_31_whatever.xlsx"
         "\n\t- Extraction_2000_12_31_whatever.xlsx"
         f"\n\n(Please fix {filename} accordingly)"
+    )
+
+
+def hex_date_to_timestamp(
+    hex_str,
+    year_offset=0,
+    time_offset=timedelta(seconds=0),
+    drop_first_digits=0,
+):
+    assert isinstance(hex_str, str)
+    while drop_first_digits > 0:
+        d, hex_str = hex_str[0], hex_str[1:]
+        assert d == "0", f"digits to drop should be zeros, got '{d}' instead"
+        drop_first_digits -= 1
+    assert len(hex_str) == 5
+    return pd.to_datetime(
+        datetime(
+            year=year_offset + int(hex_str[:2], base=16),
+            month=int(hex_str[2:-2], base=16),
+            day=int(hex_str[-2:], base=16),
+        )
+        + time_offset
     )
 
 
@@ -283,140 +267,6 @@ def initialize_logging(level=INFO, debug_mode=False):
     debug("")
 
 
-def new_key_col_value(admission_date, birth_date=None, discharge_date=None):
-    """This function assumes that two people:
-    1) born on the same year-month-day
-    2) AND taken in charge at the same year-month-day+hour:minute
-    3) AND discharged the same year-month-day+hour:minute
-    are really rare and almost impossible to found.
-    """
-    if pd.isna(admission_date):
-        return np.nan
-    admission_date = pd.to_datetime(admission_date).to_pydatetime()
-    assert admission_date.year >= 2000, str(
-        "Please add more hex-digit to the admission_date.year below"
-    )
-    if admission_date.second != 0:
-        debug(
-            f"seconds in admission_date ({admission_date}) "
-            "will be rounded to the closer minute"
-        )
-    admission_timedelta_sec = (
-        round(
-            timedelta(
-                hours=admission_date.time().hour,
-                minutes=admission_date.time().minute,
-                seconds=admission_date.time().second,
-            ).total_seconds()
-            / 60.0
-        )
-        * 60
-    )
-    admission_date = pd.to_datetime(admission_date.date()) + timedelta(
-        seconds=admission_timedelta_sec
-    )
-
-    days_in_hospital = int("EEE", base=16)  # still in charge
-    discharge_timedelta_sec = 0.0  # midnight
-    if pd.notna(discharge_date):
-        days_in_hospital = (
-            pd.to_datetime(discharge_date).to_pydatetime().date()
-            - admission_date.date()
-        ).days
-        if discharge_date.second != 0:
-            debug(
-                f"seconds in discharge_date ({discharge_date}) "
-                "will be rounded to the closer minute"
-            )
-        discharge_timedelta_sec = (
-            round(
-                timedelta(
-                    hours=discharge_date.time().hour,
-                    minutes=discharge_date.time().minute,
-                    seconds=discharge_date.time().second,
-                ).total_seconds()
-                / 60.0
-            )
-            * 60
-        )
-        discharge_date = pd.to_datetime(discharge_date.date()) + timedelta(
-            seconds=discharge_timedelta_sec
-        )
-        if days_in_hospital < 0:
-            warning(
-                f"admission_date '{str(admission_date)}' occurs after "
-                f"discharge_date '{str(discharge_date)}'"
-            )
-            days_in_hospital = int("FFF", base=16)  # bad date range
-            discharge_timedelta_sec = 0.0  # midnight
-
-    if pd.notna(birth_date):
-        birth_date = pd.to_datetime(birth_date).to_pydatetime()
-    else:
-        # fake a birthday in the future to distinguish patients once sorted
-        birth_date = datetime(
-            year=1900 + int("F1", base=16),  # 2141
-            month=int("1", base=16),  # January
-            day=int("1F", base=16),  # 31th
-        )
-    ret = (
-        _timestamp_to_hex_date(
-            admission_date.date(), year_offset=2000, desired_length=5
-        )
-        + _timestamp_to_hex_date(
-            birth_date.date(), year_offset=1900, desired_length=2 + 5
-        )
-        + f"{days_in_hospital:X}".rjust(2 + 3, "0")
-        # next line counts the minutes since midnight of admission_date
-        + f"{round(admission_timedelta_sec / 60.0):X}".rjust(1 + 3, "0")
-        # next line counts the minutes since midnight of discharge_date
-        + f"{round(discharge_timedelta_sec / 60.0):X}".rjust(3, "0")
-    ).upper()
-    debug(
-        f"new key {repr(ret)} identifies the patient with ("
-        + repr(
-            {
-                "admission_date": str(admission_date),
-                "birth_date": str(birth_date),
-                "days_in_hospital": str(days_in_hospital),
-                "discharge_date": str(discharge_date),
-            }
-        )[1:-1].replace("': ", "'==")
-        + ")."
-    )
-    assert revert_new_key_col_value(ret) == (
-        admission_date,
-        birth_date,
-        None
-        if discharge_date is None or days_in_hospital >= int("EEE", base=16)
-        else discharge_date,
-    ), f"revert returned: {repr(revert_new_key_col_value(ret))}"
-    return ret
-
-
-def revert_new_key_col_value(new_key_col):
-    assert isinstance(new_key_col, str) and len(new_key_col) == 24
-    discharge_timedelta_sec = int(new_key_col[-3:], base=16) * 60
-    admission_timedelta_sec = int(new_key_col[-1 - 3 - 3 : -3], base=16) * 60
-    admission_date = _hex_date_to_timestamp(
-        new_key_col[:5],
-        year_offset=2000,
-        time_offset=timedelta(seconds=admission_timedelta_sec),
-    )
-    birth_date = _hex_date_to_timestamp(
-        new_key_col[5 : 5 + 2 + 5], year_offset=1900, drop_first_digits=2
-    )
-    days_in_hospital = int(new_key_col[5 + 2 + 5 : -1 - 3 - 3], base=16)
-    if days_in_hospital >= int("EEE", base=16):
-        discharge_date = None
-    else:
-        discharge_date = pd.to_datetime(
-            admission_date.normalize().to_pydatetime()
-            + timedelta(days=days_in_hospital, seconds=discharge_timedelta_sec)
-        )
-    return (admission_date, birth_date, discharge_date)
-
-
 def row_selector(default_bool=True, index=None, size=None):
     assert (index is not None or size is not None) and (
         index is None or size is None
@@ -437,6 +287,17 @@ def swap_month_and_day(date):
     if ret > datetime.today():
         raise ValueError(f"{ret} is in the future")
     return pd.to_datetime(ret)
+
+
+def timestamp_to_hex_date(date, year_offset=0, desired_length=5):
+    date = pd.to_datetime(date)
+    ret = (  # X means hexadecimal notation
+        f"{date.year-year_offset:X}".rjust(desired_length - 3, "0")
+        + f"{date.month:X}".rjust(1, "0")
+        + f"{date.day:X}".rjust(2, "0")
+    )
+    assert len(ret) == desired_length, f"len({repr(ret)}) != {desired_length}"
+    return ret
 
 
 if __name__ == "__main__":

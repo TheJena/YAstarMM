@@ -25,17 +25,19 @@
 
 from .charlson_index import (
     compute_charlson_index,
-    estimated_ten_year_survival,
     max_charlson_col_length,
     most_common_charlson,
     reset_charlson_counter,
 )
-from .column_rules import rename_helper
+from .column_rules import (
+    minimum_maximum_column_limits,
+    rename_helper,
+)
 from .constants import LOGGING_LEVEL
 from .flavoured_parser import parsed_args
 from .model import State
 from .preprocessing import clear_and_refill_state_transition_columns
-from collections import Counter, defaultdict, namedtuple
+from collections import Counter, defaultdict
 from datetime import datetime
 from multiprocessing import Lock
 from numpy.random import RandomState
@@ -48,36 +50,8 @@ import numpy as np
 import pandas as pd
 import pickle
 
-TestResult = namedtuple("TestResult", ("success", "value", "msg"))
-BAD_TEST_RESULT = TestResult(success=False, value=None, msg="")
-NAN_TEST_RESULT = TestResult(
-    success=True, value=np.nan, msg=str(np.nan).center(len(f"{0.0:e}"))
-)
-
-GLOBAL_LOCK = Lock()
-NEW_DF = None
-
-MIN_MAX_DICT = {
-    rename_helper(k): v
-    for k, v in {  # reference ranges in comments
-        "": dict(min=0, max=150),
-        "": dict(min=0, max=37),
-        "": dict(min=0, max=15),  # 0.7 - 1.3 mg/dL
-        "": dict(min=50, max=40000),  # 0 - 1700 g/mL
-        "": dict(min=12, max=40),
-        "": dict(min=5, max=255),  # <= 45 IU/L
-        "": dict(min=0, max=1),  # just a boolean
-        "": dict(min=50, max=1550),  # 50 - 150 U/L
-        "": dict(min=0, max=100),  # % on total
-        "": dict(min=0, max=50),  # 0 - 0.7 ???
-        "": dict(min=0, max=10),  # 0 - 0.5 ng/mL
-        "": dict(min=5, max=155),  # 15 - 55 mg/dL
-        "": dict(min=20, max=80),  # 35 - 45 mmHg
-        "": dict(min=6, max=8),  # ???
-        "": dict(min=50, max=450),  #  ???
-    }.items()
-}
-"""Built considering 0.03 and 0.97 percentile of the respective columns."""
+_NEW_DF_LOCK = Lock()
+_NEW_DF = None
 
 
 def aggregate_constant_values(sequence):
@@ -92,31 +66,31 @@ def function_returning_worst_value_for(column):
     if column in rename_helper(
         (
             "ActualState_val",
-            "Age",
-            "Charlson_*",
-            "",
-            "D_dimer",
-            "",
+            "AGE",
+            "CHARLSON-INDEX",
+            "CREATININE",
+            "D_DIMER",
+            "RESPIRATORY_RATE",
             "GPT_ALT",
-            "",
+            "DYSPNEA",
             "LDH",
-            "",
-            "",
+            "LYMPHOCYTE",
+            "PROCALCITONIN",
             "Urea",
         )
     ):  # a higher value means a worst patient health
         return np.max
     elif column in rename_helper(
         (
-            "",
-            "pO2_FO2",
+            "PHOSPHOCREATINE",
+            "HOROWITZ_INDEX",
         )
     ):  # a lower value means a worst patient health
         return np.min
     elif column in rename_helper(
         (
-            "pCO2",
-            "pH",
+            "CARBON_DIOXIDE_PARTIAL_PRESSURE",
+            "PH",
         )
     ):  # both a higher or a lower value mean a worst patient health
         return np.mean
@@ -177,7 +151,7 @@ def preprocess_single_patient_df(df, observed_variables):
                 defaultdict(
                     lambda _: nan_series,  # default_factory for missing keys
                     {
-                        rename_helper(""): charlson_series,
+                        rename_helper("CHARLSON-INDEX"): charlson_series,
                     },
                 )
             ),
@@ -195,13 +169,13 @@ def preprocess_single_patient_df(df, observed_variables):
         }
     )
 
-    global NEW_DF, GLOBAL_LOCK
-    GLOBAL_LOCK.acquire()
-    if NEW_DF is None:
-        NEW_DF = df.copy()
+    global _NEW_DF, _NEW_DF_LOCK
+    _NEW_DF_LOCK.acquire()
+    if _NEW_DF is None:
+        _NEW_DF = df.copy()
     else:
-        NEW_DF = pd.concat([NEW_DF, df.copy()])
-    GLOBAL_LOCK.release()
+        _NEW_DF = pd.concat([_NEW_DF, df.copy()])
+    _NEW_DF_LOCK.release()
 
     return df.sort_values(rename_helper("DataRef"))
 
@@ -217,12 +191,16 @@ def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
         return (
             df.loc[:, only_columns]
             .sub(
-                [MIN_MAX_DICT[col]["min"] for col in only_columns],
+                [
+                    minimum_maximum_column_limits[col]["min"]
+                    for col in only_columns
+                ],
                 axis="columns",
             )
             .div(
                 [
-                    MIN_MAX_DICT[col]["max"] - MIN_MAX_DICT[col]["min"]
+                    minimum_maximum_column_limits[col]["max"]
+                    - minimum_maximum_column_limits[col]["min"]
                     for col in only_columns
                 ],
                 axis="columns",
@@ -449,17 +427,17 @@ class MetaModel(object):
                 "to compute Charlson-Index"
             )
 
-        global GLOBAL_LOCK, NEW_DF
-        GLOBAL_LOCK.acquire()
-        self._df = NEW_DF[
+        global _NEW_DF_LOCK, _NEW_DF
+        _NEW_DF_LOCK.acquire()
+        self._df = _NEW_DF[
             # cut away records about oxygen state not of interest
-            NEW_DF[rename_helper("ActualState_val")].isin(self.oxygen_states)
+            _NEW_DF[rename_helper("ActualState_val")].isin(self.oxygen_states)
         ].copy()
-        NEW_DF = None
-        GLOBAL_LOCK.release()
+        _NEW_DF = None
+        _NEW_DF_LOCK.release()
 
         show_final_hint = False
-        for col, data in MIN_MAX_DICT.items():
+        for col, data in minimum_maximum_column_limits.items():
             if col not in self._df.columns:
                 continue
             logging.debug(
@@ -471,18 +449,19 @@ class MetaModel(object):
                 )
             )
             lower_outliers = self._df[  # make black auto-formatting prettier
-                self._df[col] < MIN_MAX_DICT[col]["min"]
+                self._df[col] < minimum_maximum_column_limits[col]["min"]
             ][col].count()
             upper_outliers = self._df[  # make black auto-formatting prettier
-                self._df[col] > MIN_MAX_DICT[col]["max"]
+                self._df[col] > minimum_maximum_column_limits[col]["max"]
             ][col].count()
             if lower_outliers > 0 or upper_outliers > 0:
                 logging.debug(
                     f" Column '{col}' has {lower_outliers} values under "
-                    f"the lower limit ({MIN_MAX_DICT[col]['min']}) and "
+                    "the lower limit "
+                    f"({minimum_maximum_column_limits[col]['min']}) and "
                     f"{upper_outliers} values above the upper limit "
-                    f"({MIN_MAX_DICT[col]['max']}); these outliers will"
-                    f" be clipped to the respective limits."
+                    f"({minimum_maximum_column_limits[col]['max']}); these "
+                    "outliers will be clipped to the respective limits."
                 )
                 show_final_hint = True
         if show_final_hint:
@@ -493,18 +472,28 @@ class MetaModel(object):
 
         # force outlier values to lower/upper bounds of each column
         self._df.loc[
-            :, [c for c in MIN_MAX_DICT.keys() if c in self._df.columns]
+            :,
+            [
+                c
+                for c in minimum_maximum_column_limits.keys()
+                if c in self._df.columns
+            ],
         ] = self._df.loc[
-            :, [c for c in MIN_MAX_DICT.keys() if c in self._df.columns]
+            :,
+            [
+                c
+                for c in minimum_maximum_column_limits.keys()
+                if c in self._df.columns
+            ],
         ].clip(
             lower={
                 col: data["min"]
-                for col, data in MIN_MAX_DICT.items()
+                for col, data in minimum_maximum_column_limits.items()
                 if col in self._df.columns
             },
             upper={
                 col: data["max"]
-                for col, data in MIN_MAX_DICT.items()
+                for col, data in minimum_maximum_column_limits.items()
                 if col in self._df.columns
             },
             axis="columns",
@@ -812,7 +801,12 @@ class MetaModel(object):
                 f.write(f"# State({state}).name == '{State(state).name}'\n")
 
         with open(f"{dir_name}/clip_out_outliers_dictionary.yaml", "w") as f:
-            dump(MIN_MAX_DICT, f, Dumper=SafeDumper, default_flow_style=False)
+            dump(
+                minimum_maximum_column_limits,
+                f,
+                Dumper=SafeDumper,
+                default_flow_style=False,
+            )
 
         np.savetxt(
             f"{dir_name}/start_prob.txt",

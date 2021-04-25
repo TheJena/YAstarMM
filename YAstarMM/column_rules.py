@@ -24,8 +24,6 @@
 
    Usage:
             from  YAstarMM.column_rules  import  (
-                BOOLEANISATION_MAP,
-                DAYFIRST_REGEXP,
                 does_not_match_categorical_rule,
                 does_not_match_float_rule,
                 drop_rules,
@@ -46,8 +44,6 @@
    ( or from within the YAstarMM package )
 
             from          .column_rules  import  (
-                BOOLEANISATION_MAP,
-                DAYFIRST_REGEXP,
                 does_not_match_categorical_rule,
                 does_not_match_float_rule,
                 drop_rules,
@@ -66,10 +62,17 @@
             )
 """
 
-from collections import namedtuple, OrderedDict
-from datetime import datetime
+from .constants import (
+    BOOLEANIZATION_MAP,
+    SummarizeFeatureItem,
+    SwitchToDateValue,
+    VerticalizeFeatureItem,
+)
+from .utility import hex_date_to_timestamp, timestamp_to_hex_date
+from collections import OrderedDict
+from datetime import datetime, timedelta
 from functools import lru_cache
-from logging import debug
+from logging import debug, warning
 from random import random
 from re import compile, IGNORECASE
 from string import digits, punctuation
@@ -77,73 +80,83 @@ from sys import version_info
 import numpy as np
 import pandas as pd
 
-BOOLEANISATION_MAP = {
-    "": np.nan,
-    "nan": np.nan,
-    False: False,
-    True: True,
-    float(0.0): False,
-    float(1.0): True,
-    int(0): False,
-    int(1): True,
-    np.nan: np.nan,
-    pd.NA: np.nan,
-    pd.NaT: np.nan,
-    str(float(0.0)): False,
-    str(float(1.0)): True,
-    str(int(0)): False,
-    str(int(1)): True,
-}
-
-ENUM_GRAVITY_LIST = [  # from lower gravity
-    "Absent",
-    "With reservoir bag",
-    "Venturi mask",
-    "Venturi mask without reservoir bag",
-    "Venturi mask with reservoir bag",
-    "Nasal cannula",
-    "HFNO",
-    "NIV",
-]  # to higher gravity
-
-
-#
-# Some reminders about regexp:
-#
-# \d is equivalent to [0-9]
-# \D is equivalent to [^0-9]
-# \w is equivalent to [a-zA-Z0-9_]
-
-DAYFIRST_REGEXP = compile(
-    str(
-        r"[^0-9]*"  # junk text
-        r"(?P<day>[012][1-9]|30|31)"
-        r"[^a-zA-Z0-9]"  # separator
-        r"(?P<month>0[1-9]|1[012])"
-        r"[^a-zA-Z0-9]"  # separator
-        r"(?P<year>1[89]\d\d|2[01]\d\d)"  # years between 1800 and 2199
-        r"\s*"  # white space
-        r"("  # optional time start
-        r"(?P<hour>[01]\d|2[0123])"
-        r":"  # separator
-        r"(?P<minute>[012345]\d)"
-        r":"  # separator
-        r"(?P<second>[012345]\d)"
-        r")?"  # optional time end
-        r"[^0-9]*"  # junk text
-    )
+drop_rules = OrderedDict(
+    {
+        reason: [
+            compile(case_insensitive_regexp, IGNORECASE)
+            for case_insensitive_regexp in list_of_rules
+        ]
+        for reason, list_of_rules in sorted(
+            dict(
+                redundant_boolean_information=[
+                    r"",
+                    r"",
+                ],
+                sensitive_doctors_data=[
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    str(
+                        r""
+                        r""
+                        r""
+                    ),
+                ],
+                sensitive_patients_data=[
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                ],
+                unnecessary_information=[
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    r"",
+                    str(
+                        r""
+                    ),
+                    str(
+                        r""
+                    ),
+                    str(
+                        r""
+                    ),
+                    str(
+                        r""
+                    ),
+                    str(
+                        r""
+                    ),
+                    str(
+                        r""
+                    ),
+                    str(
+                        r""
+                        r""
+                        r""
+                    ),
+                ],
+            ).items()
+        )
+    }
 )
-assert datetime.today().year < 2200, "Please fix DAYFIRST regular expression"
-
-NORMALIZED_TIMESTAMP_COLUMNS = [
-    # These are the columns we are going to use in "db-like-join"
-    # merge operations between sheets; for this reason it is important
-    # that two record do not differ for a few seconds/minutes (since
-    # we are interested in a daly time granularity). So we are going
-    # to keep the date information and drop the time information.
-    "date",
-]
-
 
 keep_rules = OrderedDict(
     {
@@ -919,94 +932,6 @@ keep_rules = OrderedDict(
 )
 
 
-drop_rules = OrderedDict(
-    {
-        reason: [
-            compile(case_insensitive_regexp, IGNORECASE)
-            for case_insensitive_regexp in list_of_rules
-        ]
-        for reason, list_of_rules in sorted(
-            dict(
-                redundant_boolean_information=[
-                    r"",
-                    r"",
-                ],
-                sensitive_doctors_data=[
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    str(
-                        r""
-                        r""
-                        r""
-                    ),
-                ],
-                sensitive_patients_data=[
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                ],
-                unnecessary_information=[
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"
-                    str(  # fraction_inspired_oxygen_symptoms_id
-                        r""
-                    ),
-                    str(  # horowitz_index_emogas_id
-                        r""
-                    ),
-                    str(  # oxygen_symptoms_id
-                        r""
-                    ),
-                    str(  # pab_symptoms_id
-                        r""
-                    ),
-                    str(  # patient_journey_generation_date
-                        r""
-                    ),
-                    str(  # respiratory_rate_symptoms_id
-                        r""
-                    ),
-                    str(
-                        r""
-                        r""
-                        r""
-                    ),
-                ],
-            ).items()
-        )
-    }
-)
-SummarizeFeatureItem = namedtuple(
-    "SummarizeFeatureItem", ["old_columns", "old_values_checker", "new_enum"]
-)
-
-SwitchToDateValue = namedtuple("SwitchToDateValue", ["true_val", "date_col"])
-
-VerticalizeFeatureItem = namedtuple(
-    "VerticalizeFeatureItem", ["date_column", "column_name", "related_columns"]
-)
-
-
 def charlson_enum_rule(column_values):
     charlson_map, unique_values = dict(), set(column_values)
     for val in unique_values:
@@ -1014,7 +939,7 @@ def charlson_enum_rule(column_values):
             (
                 "0" in str(val),
                 "=" in str(val) or ("<" in str(val) and "50" in str(val)),
-                BOOLEANISATION_MAP.get(
+                BOOLEANIZATION_MAP.get(
                     str(val)
                     .replace("50", "@@")
                     .strip("0.= ()")
@@ -1035,7 +960,7 @@ def charlson_enum_rule(column_values):
                 (
                     f"{i}=" in "".join(str(val).split()),
                     str(i) == str(val).strip(".0 "),
-                    # the following line treats stuff in 
+                    # the following line treats stuff in CHARLSON_AGE
                     str(i) == " ".join(str(val).split("(")[:1]).strip(".0 "),
                 )
             ):
@@ -1055,10 +980,10 @@ def charlson_enum_rule(column_values):
                 if str(i) in str(value) and (
                     any(
                         (
-                            "-" in str(value),  # 
-                            "<" in str(value),  # 
-                            "=" in str(value),  # 
-                            ">" in str(value),  # 
+                            "-" in str(value),  # CHARLSON_AGE
+                            "<" in str(value),  # CHARLSON_AGE
+                            "=" in str(value),  # other CHARLSON_*
+                            ">" in str(value),  # CHARLSON_AGE
                         )
                     )
                 ):
@@ -1104,12 +1029,12 @@ def does_not_match_categorical_rule(column_name, df):
             str(df.dtypes[column_name])
             in ("boolean", "datetime64[ns]"),  # already casted
             "" in column_name.lower(),  # free text notes
-            "" in column_name.lower(),  # free text notes
+            "_description" in column_name.lower(),  # free text notes
             "" in column_name.lower(),  # exam results
-            "" in column_name.lower(),  # free text notes
-            "" in column_name.lower(),
-            "" in column_name.lower(),
-            "" in column_name.lower(),  # dates
+            "_notes" in column_name.lower(),  # free text notes
+            "_date_range" in column_name.lower(),
+            "_vaccine" in column_name.lower(),
+            "sapsii" in column_name.lower(),  # dates
             column_name.lower().startswith(""),
         )
     ):
@@ -1168,6 +1093,14 @@ def does_not_match_float_rule(column_name, dtype):
     ):
         return True
     if column_name.lower() in (
+        "antibiotic_therapy",
+        "apacheii",  # APACHEII score + (date)
+        "charlson",  # Charlson-Index value + (date)
+        "",
+        "",
+        "",
+        "sapsii",  # SAPSII score + (date)
+        "sofa_score",  # SOFA score + (date)
     ):
         return True
     if str(dtype) in ("boolean", "category", "datetime64[ns]"):
@@ -1182,7 +1115,7 @@ def drug_enum_rule(column_values):
     drug_map.update(
         {
             k: f"{'' if not v else ''}"
-            for k, v in BOOLEANISATION_MAP.items()
+            for k, v in BOOLEANIZATION_MAP.items()
             if pd.notna(v)
         }
     )
@@ -1239,7 +1172,7 @@ def fallback_enum_rule(column_values):
 def matched_enumerated_rule(column_name, column_values):
     unique_values = set(v for v in column_values if pd.notna(v))
     for enum_rule in (
-        oxygen_state_enum_rule,  # keep before  !
+        oxygen_state_enum_rule,  # keep before oxygen_support !
         # ---------------------- #
         oxygen_support_enum_rule,  # very fragile, keep before Charlson !
         # ------------------------ # ---------------------------------- #
@@ -1275,10 +1208,10 @@ def matches_boolean_rule(column_name, column_values):
     return all(
         (
             not matches_date_time_rule(column_name),
-            len(unique_values) <= len(BOOLEANISATION_MAP),
+            len(unique_values) <= len(BOOLEANIZATION_MAP),
             len(
                 unique_values.difference(
-                    set(BOOLEANISATION_MAP.keys()),
+                    set(BOOLEANIZATION_MAP.keys()),
                 )
             )
             == 0,
@@ -1339,10 +1272,175 @@ def matches_static_rule(column_name):
         set(
             rename_helper(
                 (
+                    "",
+                    "BLOOD_DISEASES",
+                    "CARDIOVASCULAR_DISEASE",
+                    "CHARLSON-INDEX",
+                    "CHARLSON_AIDS",
+                    "CHARLSON_BLOOD_DISEASE",
+                    "CHARLSON_CONNECTIVE_TISSUE_DISEASE",
+                    "CHARLSON_COPD",
+                    "CHARLSON_CVA_OR_TIA",
+                    "CHARLSON_DIABETES",
+                    "CHARLSON_HEART_FAILURE",
+                    "CHARLSON_KIDNEY_DISEASE",
+                    "CHARLSON_LIVER_DISEASE",
+                    "CHARLSON_PEPTIC_ULCER_DISEASE",
+                    "CHARLSON_SOLID_TUMOR",
+                    "CHARLSON_VASCULAR_DISEASE",
+                    "CHRONIC_KIDNEY_DISEASE",
+                    "CHRONIC_OBSTRUCTIVE_PULMONARY_DISEASE",
+                    "COPATOLOGIES",
+                    "DIABETES",
+                    "HEPATITIS_B",
+                    "HEPATITIS_C",
+                    "HIV",
+                    "HYPERTENSION",
+                    "LIVER_FAILURE",
+                    "NEOPLASMS",
+                    "OBESITY",
+                    "ORGAN_TRANSPLANT",
                 )
             )
         )
     )
+
+
+@lru_cache(maxsize=None)
+def minimum_maximum_column_limits():
+    """Built considering 0.03 and 0.97 percentile of the respective columns."""
+    return {
+        rename_helper(k): v
+        for k, v in {  # reference ranges in comments
+            "ActualState_val": dict(min=0, max=6),
+            "AGE": dict(min=0, max=150),
+            "CHARLSON-INDEX": dict(min=0, max=37),
+            "CREATININE": dict(min=0.7, max=1.3),  # mg/dL
+            "D_DIMER": dict(min=0, max=1700),  # g/mL
+            "RESPIRATORY_RATE": dict(min=12, max=40),  # breaths per min
+            "GPT_ALT": dict(min=0, max=45),  # IU/L
+            "DYSPNEA": dict(min=0, max=1),  # just a boolean
+            "LDH": dict(min=50, max=150),  # U/L
+            "LYMPHOCYTE": dict(min=0, max=100),  # % on total white blood cells
+            "PHOSPHOCREATINE": dict(min=0, max=0.7),
+            "PROCALCITONIN": dict(min=0, max=0.5),  # ng/mL
+            "UREA": dict(min=15, max=55),  # mg/dL
+            "CARBON_DIOXIDE_PARTIAL_PRESSURE": dict(min=35, max=45),  # mmHg
+            "PH": dict(min=7.35, max=7.45),
+            "HOROWITZ_INDEX": dict(min=350, max=450),
+        }.items()
+    }
+
+
+def new_key_col_value(admission_date, birth_date=None, discharge_date=None):
+    """This function assumes that two people:
+    1) born on the same year-month-day
+    2) AND taken in charge at the same year-month-day+hour:minute
+    3) AND discharged the same year-month-day+hour:minute
+    are really rare and almost impossible to found.
+    """
+    if pd.isna(admission_date):
+        return np.nan
+    admission_date = pd.to_datetime(admission_date).to_pydatetime()
+    assert admission_date.year >= 2000, str(
+        "Please add more hex-digit to the admission_date.year below"
+    )
+    if admission_date.second != 0:
+        debug(
+            f"seconds in admission_date ({admission_date}) "
+            "will be rounded to the closer minute"
+        )
+    admission_timedelta_sec = (
+        round(
+            timedelta(
+                hours=admission_date.time().hour,
+                minutes=admission_date.time().minute,
+                seconds=admission_date.time().second,
+            ).total_seconds()
+            / 60.0
+        )
+        * 60
+    )
+    admission_date = pd.to_datetime(admission_date.date()) + timedelta(
+        seconds=admission_timedelta_sec
+    )
+
+    days_in_hospital = int("EEE", base=16)  # still in charge
+    discharge_timedelta_sec = 0.0  # midnight
+    if pd.notna(discharge_date):
+        days_in_hospital = (
+            pd.to_datetime(discharge_date).to_pydatetime().date()
+            - admission_date.date()
+        ).days
+        if discharge_date.second != 0:
+            debug(
+                f"seconds in discharge_date ({discharge_date}) "
+                "will be rounded to the closer minute"
+            )
+        discharge_timedelta_sec = (
+            round(
+                timedelta(
+                    hours=discharge_date.time().hour,
+                    minutes=discharge_date.time().minute,
+                    seconds=discharge_date.time().second,
+                ).total_seconds()
+                / 60.0
+            )
+            * 60
+        )
+        discharge_date = pd.to_datetime(discharge_date.date()) + timedelta(
+            seconds=discharge_timedelta_sec
+        )
+        if days_in_hospital < 0:
+            warning(
+                f"admission_date '{str(admission_date)}' occurs after "
+                f"discharge_date '{str(discharge_date)}'"
+            )
+            days_in_hospital = int("FFF", base=16)  # bad date range
+            discharge_timedelta_sec = 0.0  # midnight
+
+    if pd.notna(birth_date):
+        birth_date = pd.to_datetime(birth_date).to_pydatetime()
+    else:
+        # fake a birthday in the future to distinguish these patients
+        birth_date = datetime(
+            year=1900 + int("F1", base=16),  # 2141
+            month=int("1", base=16),  # January
+            day=int("1F", base=16),  # 31th
+        )
+    ret = (
+        timestamp_to_hex_date(
+            admission_date.date(), year_offset=2000, desired_length=5
+        )
+        + timestamp_to_hex_date(
+            birth_date.date(), year_offset=1900, desired_length=2 + 5
+        )
+        + f"{days_in_hospital:X}".rjust(2 + 3, "0")
+        # next line counts the minutes since midnight of admission_date
+        + f"{round(admission_timedelta_sec / 60.0):X}".rjust(1 + 3, "0")
+        # next line counts the minutes since midnight of discharge_date
+        + f"{round(discharge_timedelta_sec / 60.0):X}".rjust(3, "0")
+    ).upper()
+    debug(
+        f"new key {repr(ret)} identifies the patient with ("
+        + repr(
+            {
+                "admission_date": str(admission_date),
+                "birth_date": str(birth_date),
+                "days_in_hospital": str(days_in_hospital),
+                "discharge_date": str(discharge_date),
+            }
+        )[1:-1].replace("': ", "'==")
+        + ")."
+    )
+    assert revert_new_key_col_value(ret) == (
+        admission_date,
+        birth_date,
+        None
+        if discharge_date is None or days_in_hospital >= int("EEE", base=16)
+        else discharge_date,
+    ), f"revert returned: {repr(revert_new_key_col_value(ret))}"
+    return ret
 
 
 def oxygen_support_enum_rule(column_values):
@@ -1428,6 +1526,36 @@ def progressive_features():
     return iter(
         rename_helper(
             (
+                "ANAKINRA",
+                "ANAKINRA_1ST_DOSE",
+                "ANAKINRA_SAMPLE_T0",
+                "ANAKINRA_SAMPLE_T2",
+                "ANAKINRA_SAMPLE_T7",
+                "ANTIBIOTIC",
+                "DYSPNEA_START",
+                "ICU_TRANSFER",
+                "IMMUNOLOGICAL_THERAPY",
+                "INFECTIOUS_DISEASES_UNIT_TRANSFER,
+                "INTUBATION_END",
+                "INTUBATION_START",
+                "NIV_END",
+                "NIV_START",
+                "OXYGEN THERAPY_END",
+                "OXYGEN_THERAPY_START",
+                "PLAQUENIL",
+                "PLAQUENIL_1ST_DATE",
+                "REMDESIVIR",
+                "REMDESIVIR_1ST_DATE",
+                "",
+                "",
+                "SWAB",
+                "SYMPTOMS_START",
+                "TOCILIZUMAB",
+                "TOCILIZUMAB_1ST_DOSE",
+                "TOCILIZUMAB_2ND_DOSE",
+                "TOCILIZUMAB_SAMPLE_T0",
+                "TOCILIZUMAB_SAMPLE_T2",
+                "TOCILIZUMAB_SAMPLE_T7",
             )
         )
     )
@@ -1449,10 +1577,12 @@ def rename_helper(columns):
         if old_col_name.startswith("Has "):
             old_col_name = old_col_name.replace("Has ", "")
         artificial_name = {  # columns not in extraction files
+            # OLD_NAME: NEW_NAME
             "ActualState": "oxygen_therapy_state",
             "ActualState_val": "oxygen_therapy_state_value",
             "DayCount": "days_since_admission",
             "day_count": "days_since_admission",
+            "USE_OXYGEN": "use_oxygen",
         }.get(old_col_name, None)
         if artificial_name is not None:
             ret.append(artificial_name)
@@ -1474,7 +1604,10 @@ def rename_helper(columns):
                     for new_col_name, rule in mapping.items():
                         if new_col_name == "":
                             continue
-                        if rule.match(old_col_name) is not None:
+                        if (
+                            old_col_name.lower() == new_col_name
+                            or rule.match(old_col_name) is not None
+                        ):
                             ret.append(new_col_name)
                             raise StopIteration(
                                 "New name found, continue with next column"
@@ -1492,6 +1625,29 @@ def rename_helper(columns):
     if input_was_a_string:
         return ret.pop()  # return just a string
     return tuple(ret)
+
+
+def revert_new_key_col_value(new_key_col):
+    assert isinstance(new_key_col, str) and len(new_key_col) == 24
+    discharge_timedelta_sec = int(new_key_col[-3:], base=16) * 60
+    admission_timedelta_sec = int(new_key_col[-1 - 3 - 3 : -3], base=16) * 60
+    admission_date = hex_date_to_timestamp(
+        new_key_col[:5],
+        year_offset=2000,
+        time_offset=timedelta(seconds=admission_timedelta_sec),
+    )
+    birth_date = hex_date_to_timestamp(
+        new_key_col[5 : 5 + 2 + 5], year_offset=1900, drop_first_digits=2
+    )
+    days_in_hospital = int(new_key_col[5 + 2 + 5 : -1 - 3 - 3], base=16)
+    if days_in_hospital >= int("EEE", base=16):
+        discharge_date = None
+    else:
+        discharge_date = pd.to_datetime(
+            admission_date.normalize().to_pydatetime()
+            + timedelta(days=days_in_hospital, seconds=discharge_timedelta_sec)
+        )
+    return (admission_date, birth_date, discharge_date)
 
 
 def sex_enum_rule(column_values, sex_map=None):
@@ -1525,8 +1681,21 @@ def shift_features(sheet_name):
         rename_helper(
             dict(
                 emogas=(
+                    "BICARBONATE",
+                    "CARBON_DIOXIDE_PARTIAL_PRESSURE",
+                    "HOROWITZ_INDEX",
+                    "LACTATES",
+                    "OXYGEN_PARTIAL_PRESSURE",
+                    "OXYGEN_SATURATION",
+                    "PH",
                 ),
                 symptoms=(
+                    "DIASTOLIC_PRESSURE",
+                    "DYSPNEA",
+                    "HEARTH_RATE",
+                    "RESPIRATORY_RATE",
+                    "SYSTOLIC_PRESSURE",
+                    "TEMPERATURE",
                 ),
             ).get(
                 sheet_name, tuple()
@@ -1603,22 +1772,22 @@ def summarize_features():
             ],
             "oxygen_therapy": [
                 SummarizeFeatureItem(
-                    [""],
+                    ["use_oxygen"],
                     [False],
                     "no oxygen used",
                 ),
                 SummarizeFeatureItem(
-                    ["", ""],
+                    ["use_oxygen", "RESPIRATORY_RATE"],
                     [True, lambda rr: pd.notna(rr) and float(rr) < 30],
                     "oxygen used and respiratory rate < 30",
                 ),
                 SummarizeFeatureItem(
-                    ["", ""],
+                    ["use_oxygen", "RESPIRATORY_RATE"],
                     [True, lambda rr: pd.notna(rr) and float(rr) >= 30],
                     "oxygen used and respiratory rate >= 30",
                 ),
                 SummarizeFeatureItem(
-                    [""],
+                    ["NIV"],
                     [True],
                     "non-invasive ventilation",
                 ),

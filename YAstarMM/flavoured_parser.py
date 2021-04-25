@@ -40,8 +40,6 @@
 """
 
 from .column_rules import rename_helper
-
-
 from argparse import (
     ArgumentDefaultsHelpFormatter,
     ArgumentParser,
@@ -65,21 +63,21 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         choices=list(
             rename_helper(
                 (
-                    "Age",
-                    "Charlson_*",
-                    "",
-                    "D_dimer",
-                    "",
+                    "AGE",
+                    "CHARLSON-INDEX",
+                    "CREATININE",
+                    "D_DIMER",
+                    "RESPIRATORY_RATE",
                     "GPT_ALT",
-                    "",
+                    "DYSPNEA",
                     "LDH",
-                    "",
-                    "",
-                    "",
+                    "LYMPHOCYTE",
+                    "PHOSPHOCREATINE",
+                    "PROCALCITONIN",
                     "Urea",
-                    "pCO2",
+                    "CARBON_DIOXIDE_PARTIAL_PRESSURE",
                     "pH",
-                    "pO2_FO2",
+                    "HOROWITZ_INDEX",
                 )
             )
         ),

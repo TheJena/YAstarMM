@@ -43,18 +43,27 @@
 """
 
 from .column_rules import (
-    BOOLEANISATION_MAP,
     does_not_match_categorical_rule,
     does_not_match_float_rule,
-    ENUM_GRAVITY_LIST,
     matched_enumerated_rule,
     matches_boolean_rule,
     matches_date_time_rule,
     matches_integer_rule,
     matches_static_rule,
-    NORMALIZED_TIMESTAMP_COLUMNS,
+    new_key_col_value,
     rename_helper,
     verticalize_features as _verticalize_features,
+)
+from .constants import (
+    AVERAGE_DAYS_PER_YEAR,
+    BOOLEANIZATION_MAP,
+    COLUMNS_TO_BOOLEANIZE,
+    COLUMNS_TO_JOIN,
+    COLUMNS_TO_MAXIMIZE,
+    COLUMNS_TO_MINIMIZE,
+    ENUM_GRAVITY_LIST,
+    ENUM_TO_MAXIMIZE,
+    NORMALIZED_TIMESTAMP_COLUMNS,
 )
 from .parallel import (
     fill_rows_matching_truth,
@@ -62,9 +71,8 @@ from .parallel import (
     update_all_sheets,
 )
 from .utility import (
-    AVERAGE_DAYS_PER_YEAR,
     black_magic,
-    new_key_col_value,
+    duplicated_columns,
     swap_month_and_day,
 )
 from collections import Counter
@@ -75,23 +83,6 @@ from string import ascii_letters
 from sys import version_info
 import numpy as np
 import pandas as pd
-
-
-# The following list of columns are only considered during the merge
-# of multiple columns with the same name.
-COLUMNS_TO_BOOLEANISE = [
-]
-COLUMNS_TO_JOIN = [
-]
-COLUMNS_TO_MAXIMISE = [
-]
-COLUMNS_TO_MINIMISE = list()
-ENUM_TO_MAXIMISE = [
-]
-
-
-def duplicated_columns(df):
-    return sorted(df.loc[:, df.columns.duplicated()].columns)
 
 
 def _auxiliary_dataframe(df_dict, aux_cols, new_empty_col, sortby=list()):
@@ -143,12 +134,14 @@ def _auxiliary_dataframe(df_dict, aux_cols, new_empty_col, sortby=list()):
 
 def _convert_single_cell_boolean(cell, column_name=None):
     if column_name is not None and column_name in (
+        "influenza_vaccine",
+        "pneumococcal_vaccine",
     ):
         if pd.isna(cell):
             return np.nan
         return bool(" ".join(str(cell).lower().split()) != "")
     else:
-        return BOOLEANISATION_MAP.get(
+        return BOOLEANIZATION_MAP.get(
             cell.lower() if isinstance(cell, str) else cell,
             cell,
         )
@@ -215,8 +208,8 @@ def _merge_multiple_columns(sheet_name, df, col):
             data.append(np.nan)
         elif len(row) == 1:
             data.append(row.pop())
-        elif col in COLUMNS_TO_BOOLEANISE:
-            row = [BOOLEANISATION_MAP.get(cell, cell) for cell in row]
+        elif col in COLUMNS_TO_BOOLEANIZE:
+            row = [BOOLEANIZATION_MAP.get(cell, cell) for cell in row]
             assert all((isinstance(cell, bool) for cell in row)), str(
                 f"row of booleans for column '{col}' has spurious values: "
                 + repr(sorted(row)).strip("[]")
@@ -232,15 +225,15 @@ def _merge_multiple_columns(sheet_name, df, col):
             row = " ".join(str(".¿@?".join(row)).split()).replace("¿@?", "\n")
             debug(f"row of '{col}' after joining cells: {repr(row)}")
             data.append(row)  # it is now a single string
-        elif col in COLUMNS_TO_MAXIMISE:
+        elif col in COLUMNS_TO_MAXIMIZE:
             debug(f"row of '{col}' before using maximum value: {repr(row)}")
             data.append(max(row))
             debug(f"row of '{col}' after using maximum value: {max(row)}")
-        elif col in COLUMNS_TO_MINIMISE:
+        elif col in COLUMNS_TO_MINIMIZE:
             debug(f"row of '{col}' before using minimum value: {repr(row)}")
             data.append(min(row))
             debug(f"row of '{col}' after using minimum value: {min(row)}")
-        elif col in ENUM_TO_MAXIMISE:
+        elif col in ENUM_TO_MAXIMIZE:
             debug(f"row of '{col}' before using maximum value: {repr(row)}")
             max_value = ENUM_GRAVITY_LIST[
                 max(ENUM_GRAVITY_LIST.index(cell) for cell in row)

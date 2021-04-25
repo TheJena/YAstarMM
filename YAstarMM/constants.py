@@ -24,22 +24,25 @@
 
    Usage:
             from  YAstarMM.constants  import  (
-                ALLOWED_OUTPUT_FORMATS, LOGGING_LEVEL,
+                LOGGING_LEVEL,
             )
 
    ( or from within the YAstarMM package )
 
             from          .constants  import  (
-                ALLOWED_OUTPUT_FORMATS, LOGGING_LEVEL,
+                LOGGING_LEVEL,
             )
 """
 
-from .column_rules import rename_helper
-from re import VERBOSE, compile
-from typing import Dict, Tuple
+from collections import namedtuple, OrderedDict
+from datetime import datetime
+from sys import version_info
 import logging
+import numpy as np
 import pandas as pd
+import re
 import sys
+import yaml
 
 try:
     from IPython import get_ipython
@@ -47,85 +50,99 @@ except (ImportError, ModuleNotFoundError):
     pass  # ipython not installed
 
 
-ALLOWED_OUTPUT_FORMATS: Tuple[str, ...] = (
-    "csv",
-    "json",
-    "pickle",
-    "pkl",
-    "xlsx",
-)
-"""Allowed DataFrame export formats."""
-
 APPLE_GREEN = "#8DB600"
-CAPRI_BLUE = "#00BFFF"
 
+# https://en.wikipedia.org/w/index.php?title=Bissextile_year&redirect=yes
+AVERAGE_DAYS_PER_YEAR = 365 + 1 / 4 - 1 / 100 + 1 / 400
 
-COLUMNS_AFTER_STATE_TRANSITION_COLUMNS = rename_helper(
-    (
-        #
-        # Order does matter, do not change it please
-        #
-    )
+TestResult = namedtuple("TestResult", ("success", "value", "msg"))
+BAD_TEST_RESULT = TestResult(success=False, value=None, msg="")
+NAN_TEST_RESULT = TestResult(
+    success=True, value=np.nan, msg=str(np.nan).center(len(f"{0.0:e}"))
 )
 
-COLUMNS_BEFORE_STATE_TRANSITION_COLUMNS = rename_helper(
-    (
-        #
-        # Order does matter, do not change it please
-        #
-    )
-)
-
-COLUMNS_CONTAINING_EXAM_DATE = rename_helper(
-    (
-    )
-)
-
-COLUMNS_NOT_SO_EASY_TO_MERGE = rename_helper(
-    (  # because of contraddicting data
-    )
-)
-
-COLUMNS_TO_KEEP_DICTIONARY = {
-    rename_helper(k): v
-    for k, v in {
-        # column_name: column_type,
-    }.items()
+BOOLEANIZATION_MAP = {
+    "": np.nan,
+    "nan": np.nan,
+    False: False,
+    True: True,
+    float(0.0): False,
+    float(1.0): True,
+    int(0): False,
+    int(1): True,
+    np.nan: np.nan,
+    pd.NA: np.nan,
+    pd.NaT: np.nan,
+    str(float(0.0)): False,
+    str(float(1.0)): True,
+    str(int(0)): False,
+    str(int(1)): True,
 }
 
-COLUMNS_TO_MAXIMIZE = rename_helper(
-    (
+
+CAPRI_BLUE = "#00BFFF"
+
+# The following list of columns are only considered during the merge
+# of multiple columns with the same name.
+COLUMNS_TO_BOOLEANIZE = [
+    "remdesivir",
+]
+COLUMNS_TO_JOIN = [
+    "symptoms_list",
+    "free_text_notes",
+]
+COLUMNS_TO_MAXIMIZE = [
+]
+COLUMNS_TO_MINIMIZE = [
+]
+
+
+#
+# Some reminders about regexp:
+#
+# \d is equivalent to [0-9]
+# \D is equivalent to [^0-9]
+# \w is equivalent to [a-zA-Z0-9_]
+DAYFIRST_REGEXP = re.compile(
+    str(
+        r"[^0-9]*"  # junk text
+        r"(?P<day>[012][1-9]|30|31)"
+        r"[^a-zA-Z0-9]"  # separator
+        r"(?P<month>0[1-9]|1[012])"
+        r"[^a-zA-Z0-9]"  # separator
+        r"(?P<year>1[89]\d\d|2[01]\d\d)"  # years between 1800 and 2199
+        r"\s*"  # white space
+        r"("  # optional time start
+        r"(?P<hour>[01]\d|2[0123])"
+        r":"  # separator
+        r"(?P<minute>[012345]\d)"
+        r":"  # separator
+        r"(?P<second>[012345]\d)"
+        r")?"  # optional time end
+        r"[^0-9]*"  # junk text
     )
 )
-COLUMNS_TO_MAXIMIZE_DATE = rename_helper(
-    (
-    )
-)
+assert datetime.today().year < 2200, "Please fix DAYFIRST regular expression"
 
-COLUMNS_TO_MINIMIZE = rename_helper(
-    (
-    )
-)
-COLUMNS_TO_MINIMIZE_DATE = rename_helper(
-    (
-    )
-)
+DECEASED = ""
 
-COLUMN_CONTAINING_PERCENTAGES = rename_helper("")
-COLUMN_HOSPITAL_UNIT = rename_helper("")
-COLUMN_RECALCULATED_AFTERWARDS = rename_helper("")
-COLUMN_WITH_EXECUTED_EXAM = rename_helper("")
-COLUMN_WITH_REASON = rename_helper("")
+EIGHTEEN_CENTURIES_IN_MINUTES = 18 * 100 * AVERAGE_DAYS_PER_YEAR * 24 * 60
 
-DECEASED_VALUE = ""
+ENUM_GRAVITY_LIST = [  # from lower gravity
+    "Absent",
+    "With reservoir bag",
+    "Venturi mask",
+    "Venturi mask without reservoir bag",
+    "Venturi mask with reservoir bag",
+    "Nasal cannula",
+    "HFNO",
+    "NIV",
+]  # to higher gravity
 
-DEFAULT_RENAME_DICT: Dict[str, str]
-DEFAULT_RENAME_DICT = dict(
-)
+ENUM_TO_MAXIMIZE = [
+]
 
 EPSILON = 1e-6
-
-EXECUTED_VALUE = ""
 
 EXECUTING_IN_JUPYTER_KERNEL = (
     False
@@ -137,7 +154,30 @@ EXECUTING_IN_JUPYTER_KERNEL = (
     else getattr(get_ipython(), "kernel", None) is not None
 )
 
-FLOAT_EQUALITY_THRESHOLD = 1e-9
+EXTRACTION_REGEXP = re.compile(
+    r"(Extraction)"
+    r"[ _-]*"  # separator
+    r"(?P<year>2[01]\d\d)"  # valid until 2199
+    r"[ _-]*"  # separator
+    r"(?P<month>0[1-9]|1[012])"
+    r"[ _-]*"  # separator
+    r"(?P<day>[012][1-9]|30|31)"
+    r".*",  # whatever
+    re.IGNORECASE,
+)
+assert datetime.today().year < 2200, "Please fix the above regular expression"
+
+FileWorkerError = namedtuple("FileWorkerError", ["filename", "exception"])
+FileWorkerInput = namedtuple("FileWorkerInput", ["filename", "rename_mapping"])
+FileWorkerOutput = namedtuple("FileWorkerOutput", ["filename", "sheets_dict"])
+
+GroupWorkerError = namedtuple("GroupWorkerError", ["group_name", "exception"])
+GroupWorkerInput = namedtuple("GroupWorkerInput", ["group_name", "dataframe"])
+GroupWorkerOutput = namedtuple("GroupWorkerOutput", ["df", "stats"])
+
+InputOutputErrorQueues = namedtuple(
+    "InputOutputErrorQueues", ["input_queue", "output_queue", "error_queue"]
+)
 
 LOGGING_FORMAT = "[{levelname:^8}][{filename:^16}]{message}"
 # "[%(levelname)s][%(filename)s]%(message)s"
@@ -150,61 +190,113 @@ NASTY_SUFFIXES = (
     "_y",
 ) + tuple(f"_z{'z' * i}" for i in range(16))
 
+NewKeyError = namedtuple("NewKeyError", ["ids_values", "exception"])
+NewKeyOutput = namedtuple("NewKeyOutput", ["selected_rows", "new_value"])
+
+NORMALIZED_TIMESTAMP_COLUMNS = [
+    # These are the columns we are going to use in "db-like-join"
+    # merge operations between sheets; for this reason it is important
+    # that two record do not differ for a few seconds/minutes (since
+    # we are interested in a daily time granularity). So we are going
+    # to keep the date information and drop the time information.
+    "date",
+]
+
 ORDINARILY_HOME_DISCHARGED = ""
 
-PER_STATE_TRANSITION_OBSERVABLES = {
-    ("No O2", "O2"): rename_helper(
-        (
-        )
-    ),
-    ("O2", "NIV"): rename_helper(
-        (
-        )
-    ),
-    ("NIV", "Intubated"): rename_helper(
-        (
-        )
-    ),
-}
-
-PREFIX_OF_COLUMNS_CONTAINING_EXAM_DATE = rename_helper("")
-
-REGEX_FLOAT_AND_DATE = compile(
-    r"""
-    ^'?\s*
-    (\d+[.,]?\d*)?                        # 1st group: the float
-    \s*
-    (\(\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\))?  # 2nd group: the date
-    \s*'?$
-    """,
-    VERBOSE,
+RowFillerError = namedtuple("RowFillerError", ["row", "exception"])
+RowFillerOutput = namedtuple(
+    "RowFillerOutput", ["row_index", "chosen_id", "stats"]
 )
-"""1st group contains the float whilst 2nd group contains the date."""
 
-REGEX_RANGE_OF_FLOATS = compile(
-    r"""
-    ^'?\s*
-    (\d+[.,]?\d*)               # 1st group: range start
-    \s*[-÷]\s*
-    (\d+[.,]?\d*)               # 2nd group: range end
-    \s*'?$
-    """,
-    VERBOSE,
+YamlSafeLoader = getattr(
+    yaml,
+    "CSafeLoader",  # faster compiled (safe) Loader
+    yaml.Loader,  # fallback, slower interpreted (safe) Loader
 )
-"""1st group contains the range start whilst the 2nd the range end."""
 
-REGEX_UNDER_THRESHOLD_FLOAT = compile(
-    r"""
-    ^'?\s*
-    <\s*
-    (\d+[.,]?\d*)               # 1st group: threshold
-    \s*'?$
-    """,
-    VERBOSE,
+SheetMergerInput = namedtuple(
+    "SheetMergerInput",
+    ["left_name", "right_name", "left_df", "right_df", "join_dict"],
 )
-"""1st group contains the float used as threshold."""
+SheetMergerOutput = namedtuple("SheetMergerOutput", ["name", "df"])
 
-TRANSFERRED_VALUE = ""
+SHEET_RENAMING_RULES = OrderedDict(
+    {
+        new_sheet_name: re.compile(case_insensitive_regexp, re.IGNORECASE)
+        for new_sheet_name, case_insensitive_regexp in sorted(
+            dict(
+                anagraphic=r"",
+                DRG=r"",
+                emogas=r"",
+                exams=r"",
+                heparine_and_remdesivir=r"",
+                ICD__9=r"",
+                patient_journey=r"",
+                sofa=r"",
+                sofa_history=r"",
+                symptoms=r"",
+                unit_transfer=r"",
+                anamnesis=str(
+                    r""
+                    r"|"  # logic or
+                    r""
+                    r"|"  # logic or
+                    r""
+                ),
+                diary=r"",
+                steroids=r"",
+                swabs=r"",
+                infections=r"",
+                involved_units=r"",
+                #
+                # post-COVID sheets
+                # v v v v v v v v v
+                cog=r"",
+                fibroscan=r"",
+                frailty=r"",
+                hospitalization=r"",
+                nutrition=r"",
+                pneumological_exam=r"",
+                radiology_report=r"",
+                six_min_walk=r"",
+                therapies=r"",
+                well_being=r"",
+            ).items()
+        )
+    }
+)
 
-TRUTH_DICT = {
-}
+SheetWorkerError = namedtuple(
+    "SheetWorkerError", ["filename", "sheet_name", "exception"]
+)
+SheetWorkerInput = namedtuple(
+    "SheetWorkerInput",
+    ["filename", "old_sheet_name", "df"],
+)
+SheetWorkerOutput = namedtuple(
+    "SheetWorkerOutput", ["filename", "new_sheet_name", "new_df"]
+)
+
+SORTING_PREFIX = "\t"
+
+SummarizeFeatureItem = namedtuple(
+    "SummarizeFeatureItem", ["old_columns", "old_values_checker", "new_enum"]
+)
+
+SwitchToDateValue = namedtuple("SwitchToDateValue", ["true_val", "date_col"])
+
+TimestampWorkerError = namedtuple(
+    "TimestampWorkerError", ["sheet_name", "column_name", "exception"]
+)
+TimestampWorkerInputOutput = namedtuple(
+    "TimestampWorkerInputOutput", ["sheet_name", "column_name", "series"]
+)
+
+TITLE_COLUMN_REGEXP = re.compile(
+    r"^\s*(title|description)\s*$", re.IGNORECASE
+)
+
+VerticalizeFeatureItem = namedtuple(
+    "VerticalizeFeatureItem", ["date_column", "column_name", "related_columns"]
+)

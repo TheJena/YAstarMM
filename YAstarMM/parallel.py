@@ -37,18 +37,41 @@
 """
 
 from .column_rules import (
-    DAYFIRST_REGEXP,
     matches_date_time_rule,
+    new_key_col_value,
+)
+from .constants import (
+    DAYFIRST_REGEXP,
+    EIGHTEEN_CENTURIES_IN_MINUTES,
+    FileWorkerError,
+    FileWorkerInput,
+    FileWorkerOutput,
+    GroupWorkerError,
+    GroupWorkerInput,
+    InputOutputErrorQueues,
     NORMALIZED_TIMESTAMP_COLUMNS,
+    NewKeyError,
+    NewKeyOutput,
+    RowFillerError,
+    RowFillerOutput,
+    SHEET_RENAMING_RULES,
+    SORTING_PREFIX,
+    SheetMergerInput,
+    SheetMergerOutput,
+    SheetWorkerError,
+    SheetWorkerInput,
+    SheetWorkerOutput,
+    TITLE_COLUMN_REGEXP,
+    TimestampWorkerError,
+    TimestampWorkerInputOutput,
 )
 from .utility import (
     black_magic,
     enough_ram,
-    new_key_col_value,
     row_selector,
     swap_month_and_day,
 )
-from collections import Counter, namedtuple, OrderedDict
+from collections import Counter, OrderedDict
 from datetime import datetime, timedelta
 from gc import collect as run_garbage_collector
 from hashlib import blake2b
@@ -57,107 +80,12 @@ from multiprocessing import cpu_count, Process, Queue
 from numexpr import set_num_threads, set_vml_num_threads
 from os.path import abspath, basename, isfile
 from queue import Empty as EmptyQueue
-from re import compile, IGNORECASE
 from psutil import virtual_memory
 from shutil import move
 from string import ascii_letters, punctuation, whitespace
 from sys import version_info
 from time import time
 import pandas as pd
-
-SHEET_RENAMING_RULES = OrderedDict(
-    {
-        new_sheet_name: compile(case_insensitive_regexp, IGNORECASE)
-        for new_sheet_name, case_insensitive_regexp in sorted(
-            dict(
-                anagraphic=r"",
-                DRG=r"",
-                emogas=r"",
-                exams=r"",
-                heparine_and_remdesivir=r"",
-                ICD__9=r"",
-                patient_journey=r"",
-                sofa=r"",
-                sofa_history=r"",
-                symptoms=r"",
-                unit_transfer=r"",
-                anamnesis=str(
-                    r""
-                    r""  # logic or
-                    r""
-                    r""  # logic or
-                    r""
-                ),
-                diary=r"",
-                steroids=r"",
-                swabs=r"",
-                infections=r"",
-                involved_units=r"",
-                #
-                # post-COVID sheets
-                # v v v v v v v v v
-                cog=r"",
-                therapies=r"",
-                hospitalization=r"",
-                fibroscan=r"",
-                frailty=r"",
-                pneumological_exam=r"",
-                radiology_report=r"",
-                six_min_walk=r"",
-                well_being=r"",
-                nutrition=r"",
-            ).items()
-        )
-    }
-)
-SORTING_PREFIX = "\t"
-TITLE_COLUMN_REGEXP = compile(r"", IGNORECASE)
-
-FileWorkerError = namedtuple("FileWorkerError", ["filename", "exception"])
-FileWorkerInput = namedtuple("FileWorkerInput", ["filename", "rename_mapping"])
-FileWorkerOutput = namedtuple("FileWorkerOutput", ["filename", "sheets_dict"])
-
-GroupWorkerInput = namedtuple("GroupWorkerInput", ["group_name", "dataframe"])
-GroupWorkerError = namedtuple("GroupWorkerError", ["group_name", "exception"])
-
-InputOutputErrorQueues = namedtuple(
-    "InputOutputErrorQueues", ["input_queue", "output_queue", "error_queue"]
-)
-
-NewKeyOutput = namedtuple("NewKeyOutput", ["selected_rows", "new_value"])
-NewKeyError = namedtuple("NewKeyError", ["ids_values", "exception"])
-
-RowFillerError = namedtuple("RowFillerError", ["row", "exception"])
-RowFillerOutput = namedtuple(
-    "RowFillerOutput", ["row_index", "chosen_id", "stats"]
-)
-
-SheetMergerInput = namedtuple(
-    "SheetMergerInput",
-    ["left_name", "right_name", "left_df", "right_df", "join_dict"],
-)
-SheetMergerOutput = namedtuple("SheetMergerOutput", ["name", "df"])
-
-SheetWorkerError = namedtuple(
-    "SheetWorkerError", ["filename", "sheet_name", "exception"]
-)
-SheetWorkerInput = namedtuple(
-    "SheetWorkerInput",
-    ["filename", "old_sheet_name", "df"],
-)
-SheetWorkerOutput = namedtuple(
-    "SheetWorkerOutput", ["filename", "new_sheet_name", "new_df"]
-)
-
-TimestampWorkerError = namedtuple(
-    "TimestampWorkerError", ["sheet_name", "column_name", "exception"]
-)
-TimestampWorkerInputOutput = namedtuple(
-    "TimestampWorkerInputOutput", ["sheet_name", "column_name", "series"]
-)
-
-
-_EIGHTEEN_CENTURIES_IN_MINUTES = 18 * 100 * 365 * 24 * 60
 
 
 def _concat_same_name_sheets(all_sheets_dict):
@@ -190,7 +118,6 @@ def _concat_same_name_sheets(all_sheets_dict):
 
 
 def _convert_single_cell_timestamp(cell, column_name, sheet_name):
-    global _EIGHTEEN_CENTURIES_IN_MINUTES
     if pd.isna(cell):
         timestamp = pd.NaT
     else:
@@ -210,7 +137,7 @@ def _convert_single_cell_timestamp(cell, column_name, sheet_name):
             else:
                 if (
                     column_name == ""
-                    and cell_value < _EIGHTEEN_CENTURIES_IN_MINUTES
+                    and cell_value < EIGHTEEN_CENTURIES_IN_MINUTES
                 ):
                     # This is a useless incremental timestamp,
                     # let us drop it
@@ -958,13 +885,7 @@ def cast_date_time_columns_to_timestamps(df_dict, **kwargs):
 
 @black_magic
 def fill_nan_backward_forward(
-    name,
-    df,
-    sort_criteria,
-    group_criteria,
-    tail,
-    dropna=True,
-    **kwargs,
+    name, df, sort_criteria, group_criteria, tail, dropna=True, **kwargs
 ):
     if dropna:
         warning(
