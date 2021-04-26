@@ -20,7 +20,10 @@
 # You should have received a copy of the GNU General Public License
 # along with YAstarMM.  If not, see <https://www.gnu.org/licenses/>.
 """
-   TODO HERE
+   Build model from input.
+
+   Usage:
+            from  YAstarMM.hmm  import  MetaModel, run as run_hmm_training
 """
 
 from .charlson_index import (
@@ -129,15 +132,10 @@ def preprocess_single_patient_df(
     df = df.loc[
         :,
         list(
-            rename_helper(
-                (
-                    "",
-                    "DataRef",
-                    "ActualState_val",
-                )
-            )
-        )
-        + observed_variables,
+            set(
+                rename_helper(("", "DataRef", "ActualState_val"))
+            ).union(set(rename_helper(tuple(observed_variables))))
+        ),
     ]
 
     # add an empty record for each date of interest
@@ -191,15 +189,15 @@ def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
             df.loc[:, only_columns]
             .sub(
                 [
-                    minimum_maximum_column_limits[col]["min"]
+                    minimum_maximum_column_limits()[col]["min"]
                     for col in only_columns
                 ],
                 axis="columns",
             )
             .div(
                 [
-                    minimum_maximum_column_limits[col]["max"]
-                    - minimum_maximum_column_limits[col]["min"]
+                    minimum_maximum_column_limits()[col]["max"]
+                    - minimum_maximum_column_limits()[col]["min"]
                     for col in only_columns
                 ],
                 axis="columns",
@@ -341,8 +339,11 @@ class MetaModel(object):
             self._split_dataset()
         return dataframe_to_numpy_matrix(
             self._validation_df,
-            only_columns=list(rename_helper(("ActualState_val",)))
-            + self.observed_variables,
+            only_columns=list(
+                set(rename_helper(("ActualState_val",))).union(
+                    set(rename_helper(tuple(self.observed_variables)))
+                )
+            ),
         )
 
     @property
@@ -351,8 +352,11 @@ class MetaModel(object):
             self._split_dataset()
         return dataframe_to_numpy_matrix(
             self._training_df,
-            only_columns=list(rename_helper(("ActualState_val",)))
-            + self.observed_variables,
+            only_columns=list(
+                set(rename_helper(("ActualState_val",))).union(
+                    set(rename_helper(tuple(self.observed_variables)))
+                )
+            ),
         )
 
     @property
@@ -442,7 +446,7 @@ class MetaModel(object):
         _NEW_DF_LOCK.release()
 
         show_final_hint = False
-        for col, data in minimum_maximum_column_limits.items():
+        for col, data in minimum_maximum_column_limits().items():
             if col not in self._df.columns:
                 continue
             logging.debug(
@@ -454,18 +458,18 @@ class MetaModel(object):
                 )
             )
             lower_outliers = self._df[  # make black auto-formatting prettier
-                self._df[col] < minimum_maximum_column_limits[col]["min"]
+                self._df[col] < minimum_maximum_column_limits()[col]["min"]
             ][col].count()
             upper_outliers = self._df[  # make black auto-formatting prettier
-                self._df[col] > minimum_maximum_column_limits[col]["max"]
+                self._df[col] > minimum_maximum_column_limits()[col]["max"]
             ][col].count()
             if lower_outliers > 0 or upper_outliers > 0:
                 logging.debug(
                     f" Column '{col}' has {lower_outliers} values under "
                     "the lower limit "
-                    f"({minimum_maximum_column_limits[col]['min']}) and "
+                    f"({minimum_maximum_column_limits()[col]['min']}) and "
                     f"{upper_outliers} values above the upper limit "
-                    f"({minimum_maximum_column_limits[col]['max']}); these "
+                    f"({minimum_maximum_column_limits()[col]['max']}); these "
                     "outliers will be clipped to the respective limits."
                 )
                 show_final_hint = True
@@ -480,25 +484,25 @@ class MetaModel(object):
             :,
             [
                 c
-                for c in minimum_maximum_column_limits.keys()
+                for c in minimum_maximum_column_limits().keys()
                 if c in self._df.columns
             ],
         ] = self._df.loc[
             :,
             [
                 c
-                for c in minimum_maximum_column_limits.keys()
+                for c in minimum_maximum_column_limits().keys()
                 if c in self._df.columns
             ],
         ].clip(
             lower={
                 col: data["min"]
-                for col, data in minimum_maximum_column_limits.items()
+                for col, data in minimum_maximum_column_limits().items()
                 if col in self._df.columns
             },
             upper={
                 col: data["max"]
-                for col, data in minimum_maximum_column_limits.items()
+                for col, data in minimum_maximum_column_limits().items()
                 if col in self._df.columns
             },
             axis="columns",
@@ -807,7 +811,7 @@ class MetaModel(object):
 
         with open(f"{dir_name}/clip_out_outliers_dictionary.yaml", "w") as f:
             dump(
-                minimum_maximum_column_limits,
+                minimum_maximum_column_limits(),
                 f,
                 Dumper=SafeDumper,
                 default_flow_style=False,
@@ -854,8 +858,11 @@ class MetaModel(object):
                 getattr(self, f"{matrix_name}"),
                 fmt="%16.9e",
                 header=str(
-                    list(rename_helper(("ActualState_val",)))
-                    + self.observed_variables
+                    list(
+                        set(rename_helper(("ActualState_val",))).union(
+                            set(rename_helper(tuple(self.observed_variables)))
+                        )
+                    )
                 ),
             )
             np.save(

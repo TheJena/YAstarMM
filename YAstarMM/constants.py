@@ -193,7 +193,6 @@ InputOutputErrorQueues = namedtuple(
 )
 
 LOGGING_FORMAT = "[{levelname:^8}][{filename:^16}]{message}"
-# "[%(levelname)s][%(filename)s]%(message)s"
 LOGGING_LEVEL = logging.WARNING
 LOGGING_STREAM = None  # i.e. stderr
 LOGGING_STYLE = "{"
