@@ -71,7 +71,7 @@ import pandas as pd
 import pickle
 
 _CACHE_DIR = None  # where do you prefer to save @black_magic ?
-_DISABLE_BLACK_MAGIC_GLOBALLY = False
+_DISABLE_BLACK_MAGIC_GLOBALLY = True
 
 _CACHE_LOCK, _PERF_LOCK = Lock(), Lock()
 
@@ -87,6 +87,7 @@ def black_magic(fun):
 
     global _CACHE_DIR, _CACHE_LOCK, _DISABLE_BLACK_MAGIC_GLOBALLY
     if _DISABLE_BLACK_MAGIC_GLOBALLY:
+        debug(f"black_magic decorator is disabled; {fun.__name__} will be run")
         return fun
 
     _CACHE_LOCK.acquire()
