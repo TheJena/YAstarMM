@@ -1112,7 +1112,7 @@ class ReleaseEvent(Event):
                     break
                 data[possible_date] = possible_reason
         if not data:
-            logging.critical(
+            logging.warning(
                 f" Patient '{patient_id}' last discharge reason is"
                 " absent or not easy to guess (due to contraddictions"
                 f" in the input data); '{str(State.Transferred)}'"

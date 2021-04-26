@@ -37,6 +37,7 @@ from .constants import LOGGING_LEVEL, MIN_PYTHON_VERSION
 from .flavoured_parser import parsed_args
 from .model import State
 from .preprocessing import clear_and_refill_state_transition_columns
+from .utility import initialize_logging
 from collections import Counter, defaultdict
 from datetime import datetime
 from multiprocessing import Lock
@@ -864,6 +865,7 @@ class MetaModel(object):
 
 
 def run():
+    initialize_logging(getattr(parsed_args(), "log_level", LOGGING_LEVEL))
     assert getattr(parsed_args(), "save_dir") is not None
 
     if not isdir(getattr(parsed_args(), "save_dir")):
@@ -872,7 +874,7 @@ def run():
     df = clear_and_refill_state_transition_columns(
         pd.read_excel(excel_file=parsed_args().input),
         patient_key_col=rename_helper(""),
-        log_level=getattr(parsed_args(), "log_level", LOGGING_LEVEL),
+        log_level=logging.CRITICAL,
         show_statistics=getattr(
             parsed_args(), "show_preprocessing_statistics", False
         ),  # make black auto-formatting prettier

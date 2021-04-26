@@ -252,18 +252,19 @@ def initialize_logging(level=INFO, debug_mode=False):
     )
     basicConfig(
         filename=logfile.name,
+        force=True,
         format="\t".join(
             (
                 "[{levelname: ^9s}| {module}+L{lineno} | PID-{process}]",
                 "{message}",
             )
         ),
+        level=DEBUG,  # use always the most verbose level for log file
         style="{",
-        level=level if not debug_mode else DEBUG,
     )
     root_logger = getLogger()
     stderr_handle = StreamHandler()
-    stderr_handle.setLevel(INFO if not debug_mode else DEBUG)
+    stderr_handle.setLevel(level if not debug_mode else DEBUG)
     stderr_handle.setFormatter(Formatter("{levelname}: {message}", style="{"))
     root_logger.addHandler(stderr_handle)
 

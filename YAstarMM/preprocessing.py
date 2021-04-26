@@ -289,7 +289,9 @@ class DumbyDog(object):
         super(DumbyDog, self).__init__()
         self._journey: HospitalJourney = journey
         if log_level is not None:
-            logging.getLogger().setLevel(log_level)
+            for hdlr in logging.getLogger().handlers:
+                if not isinstance(hdlr, logging.FileHandler):
+                    hdlr.setLevel(log_level)
 
         # let us try to avoid interleaving of logging records about
         # different patients due to parallelism
