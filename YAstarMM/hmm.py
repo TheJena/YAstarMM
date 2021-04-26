@@ -106,19 +106,17 @@ def function_returning_worst_value_for(column):
     )
 
 
-def preprocess_single_patient_df(df, observed_variables):
+def preprocess_single_patient_df(
+    df, observed_variables, hexadecimal_patient_id=False
+):
     assert (
         len(df.loc[:, rename_helper("")].sort_values().unique()) == 1
     ), str("This function should process one patient at a time")
     patient_id = int(
-        set(df.loc[:, rename_helper("")].to_list()).pop()
+        set(df.loc[:, rename_helper("")].to_list()).pop(),
+        base=16 if hexadecimal_patient_id else 10,
     )
-    log_prefix = "".join(
-        (
-            f"[{preprocess_single_patient_df.__name__}]",
-            f"[patient{patient_id}]",
-        )
-    ).strip()
+    log_prefix = f"[patient {patient_id}]"
 
     # let's compute the charlson-index before dropping unobserved columns
     cci = compute_charlson_index(df)
@@ -374,6 +372,7 @@ class MetaModel(object):
         observed_variables=None,
         random_seed=None,
         save_to_dir=None,
+        hexadecimal_patient_id=False,
     ):
         assert observed_variables is not None and isinstance(
             observed_variables,
@@ -403,11 +402,7 @@ class MetaModel(object):
             **{
                 rename_helper(""): self._df_old.loc[
                     :, rename_helper("")
-                ].astype(
-                    np.float64
-                ),
-                rename_helper(""): self._df_old.loc[
-                    :, rename_helper("")
+                ].astype("string" if hexadecimal_patient_id else "Int64"),
                 rename_helper("DataRef"): self._df_old.loc[
                     :, rename_helper("DataRef")
                 ].apply(
@@ -415,10 +410,19 @@ class MetaModel(object):
                 ),  # truncate HH:MM:SS
             }
         )
+        if hexadecimal_patient_id:
+            logging.debug(
+                f"Assuming key column '{rename_helper('')}'"
+                " contains strings representing hexadecimal values"
+            )
         self._df_old.sort_values(rename_helper("DataRef")).groupby(
             "",
             as_index=False,
-        ).apply(preprocess_single_patient_df, observed_variables)
+        ).apply(
+            preprocess_single_patient_df,
+            observed_variables,
+            hexadecimal_patient_id=hexadecimal_patient_id,
+        )
 
         max_col_length = max_charlson_col_length()
         for charlson_col, count in most_common_charlson():
@@ -894,6 +898,10 @@ def run():
         observed_variables=getattr(parsed_args(), "observed_variables"),
         random_seed=seed,
         save_to_dir=getattr(parsed_args(), "save_dir"),
+        hexadecimal_patient_id=str(
+            pd.api.types.infer_dtype(df.loc[:, rename_helper("")])
+        )
+        == "string",
     )
 
     print("\n")
