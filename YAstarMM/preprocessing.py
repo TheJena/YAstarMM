@@ -57,6 +57,7 @@ from .model import (  # without the dot notebook raises ModuleNotFoundError
 )
 from .utility import black_magic
 from datetime import timedelta
+from io import BufferedIOBase
 from multiprocessing import cpu_count, Lock, Process, Queue
 from sys import version_info
 from typing import Iterator, List, Optional, Tuple
@@ -852,6 +853,12 @@ def clear_and_refill_state_transition_columns(
     *args,
     **kwargs,
 ):
+    if isinstance(whole_df, str):
+        whole_df = open(whole_df, "rb")
+    if isinstance(whole_df, BufferedIOBase):  # df = open('file.xlsx', 'rb')
+        logging.debug(f"Reading whole_df from '{whole_df.name}'")
+        whole_df = pd.read_excel(whole_df)
+    assert isinstance(whole_df, pd.DataFrame)
     assert bool(use_insomnia) != bool(use_dumbydog), str(
         "Please set either use_insomnia=True or use_dumbydog=True"
     )

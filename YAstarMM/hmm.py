@@ -883,7 +883,9 @@ def run():
         makedirs(getattr(parsed_args(), "save_dir"))
 
     df = clear_and_refill_state_transition_columns(
-        pd.read_excel(excel_file=parsed_args().input),
+        parsed_args().input.name
+        if parsed_args().input.name.endswith(".xlsx")
+        else parsed_args().input,
         patient_key_col=rename_helper(""),
         log_level=logging.CRITICAL,
         show_statistics=getattr(
