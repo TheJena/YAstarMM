@@ -122,11 +122,14 @@ def preprocess_single_patient_df(
     log_prefix = f"[patient {patient_id}]"
 
     # let's compute the charlson-index before dropping unobserved columns
+    logging.debug(f"{log_prefix} Start computation of Charlson-Index")
     cci = compute_charlson_index(df)
     if pd.isna(cci):
         logging.debug(f"{log_prefix} Charlson-Index is not computable.")
+        charlson_series = pd.Series([np.nan for _ in range(df.shape[0])])
     else:
         logging.debug(f"{log_prefix} Charlson-Index is {cci:2.0f}")
+        charlson_series = pd.Series([cci for _ in range(df.shape[0])])
 
     # drop unobserved columns
     df = df.loc[
@@ -138,21 +141,10 @@ def preprocess_single_patient_df(
         ),
     ]
 
-    # add an empty record for each date of interest
-    nan_series = pd.Series([np.nan for _ in range(df.shape[0])])
-    charlson_series = pd.Series([cci for _ in range(df.shape[0])])
-    df = pd.concat(
-        [
-            df,
-            pd.DataFrame.from_dict(
-                defaultdict(
-                    lambda _: nan_series,  # default_factory for missing keys
-                    {
-                        rename_helper("CHARLSON-INDEX"): charlson_series,
-                    },
-                )
-            ),
-        ]
+    df = df.assign(
+        **{
+            rename_helper("CHARLSON-INDEX"): charlson_series,
+        }
     ).sort_values(rename_helper("DataRef"))
 
     # ensure each date has exactly one record; if there are multiple
