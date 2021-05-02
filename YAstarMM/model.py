@@ -177,21 +177,21 @@ def ordered_state_transition_columns() -> Tuple[str, ...]:
     # Order does matter, do not change it please
     return rename_helper(
         (
-            "No_Ossigenoterapia_Inizio",
-            "No_Ossigenoterapia",
-            "No_Ossigenoterapia_Fine",
-            "Ossigenoterapia_Inizio",
-            "Ossigenoterapia",
-            "Ossigenoterapia_Fine",
-            "HFNO_Inizio",
-            "HFNO",
-            "HFNO_Fine",
-            "NIV_Inizio",
-            "NIV",
-            "NIV_Fine",
-            "Intubazione_Inizio",
-            "Intubazione",
-            "Intubazione_Fine",
+            "NO_OXYGEN_THERAPY_STATE_START",
+            "NO_OXYGEN_THERAPY_STATE",
+            "NO_OXYGEN_THERAPY_STATE_END",
+            "OXYGEN_THERAPY_STATE_START",
+            "OXYGEN_THERAPY_STATE",
+            "OXYGEN_THERAPY_STATE_END",
+            "HFNO_STATE_START",
+            "HFNO_STATE",
+            "HFNO_STATE_END",
+            "NIV_STATE_START",
+            "NIV_STATE",
+            "NIV_STATE_END",
+            "INTUBATION_STATE_START",
+            "INTUBATION_STATE",
+            "INTUBATION_STATE_END",
             "ActualState",
             "ActualState_val",
         )
@@ -233,11 +233,11 @@ class State(IntEnum):
     def start_col(self) -> str:
         """Column name in Pandas DataFrame denoting state start."""
         return dict(
-            No_O2=rename_helper("No_Ossigenoterapia_Inizio"),
-            O2=rename_helper("Ossigenoterapia_Inizio"),
-            HFNO=rename_helper("HFNO_Inizio"),
-            NIV=rename_helper("NIV_Inizio"),
-            Intubated=rename_helper("Intubazione_Inizio"),
+            No_O2=rename_helper("NO_OXYGEN_THERAPY_STATE_START"),
+            O2=rename_helper("OXYGEN_THERAPY_STATE_START"),
+            HFNO=rename_helper("HFNO_STATE_START"),
+            NIV=rename_helper("NIV_STATE_START"),
+            Intubated=rename_helper("INTUBATION_STATE_START"),
         )[
             self.name
         ]  # can raise a KeyError on release states
@@ -246,11 +246,11 @@ class State(IntEnum):
     def fill_col(self) -> str:
         """Column name in Pandas DataFrame denoting state persistence."""
         return dict(
-            No_O2=rename_helper("No_Ossigenoterapia"),
-            O2=rename_helper("Ossigenoterapia"),
-            HFNO=rename_helper("HFNO"),
-            NIV=rename_helper("NIV"),
-            Intubated=rename_helper("Intubazione"),
+            No_O2=rename_helper("NO_OXYGEN_THERAPY_STATE"),
+            O2=rename_helper("OXYGEN_THERAPY_STATE"),
+            HFNO=rename_helper("HFNO_STATE"),
+            NIV=rename_helper("NIV_STATE"),
+            Intubated=rename_helper("INTUBATION_STATE"),
         )[
             self.name
         ]  # can raise a KeyError on release states
@@ -259,11 +259,11 @@ class State(IntEnum):
     def end_col(self) -> str:
         """Column name in Pandas DataFrame denoting state end."""
         return dict(
-            No_O2=rename_helper("No_Ossigenoterapia_Fine"),
-            O2=rename_helper("Ossigenoterapia_Fine"),
-            HFNO=rename_helper("HFNO_Fine"),
-            NIV=rename_helper("NIV_Fine"),
-            Intubated=rename_helper("Intubazione_Fine"),
+            No_O2=rename_helper("NO_OXYGEN_THERAPY_STATE_END"),
+            O2=rename_helper("OXYGEN_THERAPY_STATE_END"),
+            HFNO=rename_helper("HFNO_STATE_END"),
+            NIV=rename_helper("NIV_STATE_END"),
+            Intubated=rename_helper("INTUBATION_STATE_END"),
         )[
             self.name
         ]  # can raise a KeyError on release states
@@ -564,7 +564,7 @@ class O2StartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        filter_col: str = rename_helper("Ossigenoterapia_Inizio"),
+        filter_col: str = rename_helper("OXYGEN_THERAPY_STATE_START"),
         index: int = 3,
         label: str = "oxygen_therapy_start",
         start: bool = True,
@@ -591,7 +591,7 @@ class O2EndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        filter_col: str = rename_helper("Ossigenoterapia_Fine"),
+        filter_col: str = rename_helper("OXYGEN_THERAPY_STATE_END"),
         index: int = 4,
         label: str = "oxygen_therapy_end",
         state: State = State.O2,
@@ -616,7 +616,7 @@ class HFNOStartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        filter_col: str = rename_helper("HFNO_Inizio"),
+        filter_col: str = rename_helper("HFNO_STATE_START"),
         index: int = 5,
         label: str = "hfno_start",
         start: bool = True,
@@ -643,7 +643,7 @@ class HFNOEndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        filter_col: str = rename_helper("HFNO_Fine"),
+        filter_col: str = rename_helper("HFNO_STATE_END"),
         index: int = 6,
         label: str = "hfno_end",
         state: State = State.HFNO,
@@ -668,7 +668,7 @@ class NIVStartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        filter_col: str = rename_helper("NIV_Inizio"),
+        filter_col: str = rename_helper("NIV_STATE_START"),
         index: int = 7,
         label: str = "niv_start",
         start: bool = True,
@@ -695,7 +695,7 @@ class NIVEndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        filter_col: str = rename_helper("NIV_Fine"),
+        filter_col: str = rename_helper("NIV_STATE_END"),
         index: int = 8,
         label: str = "niv_end",
         state: State = State.NIV,
@@ -720,7 +720,7 @@ class IntubationStartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        filter_col: str = rename_helper("Intubazione_Inizio"),
+        filter_col: str = rename_helper("INTUBATION_STATE_START"),
         index: int = 9,
         label: str = "intubation_start",
         start: bool = True,
@@ -747,7 +747,7 @@ class IntubationEndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        filter_col: str = rename_helper("Intubazione_Fine"),
+        filter_col: str = rename_helper("INTUBATION_STATE_END"),
         index: int = 10,
         label: str = "intubation_end",
         state: State = State.Intubated,
@@ -776,7 +776,7 @@ class PostNIVStartEvent(Event):
         label: str = "post_niv_start",
         start: bool = True,
         state: State = State.NIV,
-        timestamp_col: str = rename_helper("NIV_Post_Inizio_Data"),
+        timestamp_col: str = rename_helper("POST_NIV_STATE_START"),
         **kwargs,
     ) -> None:
         super(PostNIVStartEvent, self).__init__(
@@ -800,7 +800,7 @@ class PostNIVEndEvent(Event):
         index: int = 12,
         label: str = "post_niv_end",
         state: State = State.NIV,
-        timestamp_col: str = rename_helper("NIV_Post_Fine_Data"),
+        timestamp_col: str = rename_helper("POST_NIV_STATE_END"),
         **kwargs,
     ) -> None:
         super(PostNIVEndEvent, self).__init__(
@@ -820,7 +820,7 @@ class PostHFNOStartEvent(Event):
     def __init__(
         self,
         df: pd.DataFrame,
-        filter_col: str = rename_helper("HFNO_Post_Inizio"),
+        filter_col: str = rename_helper("POST_HFNO_STATE_START"),
         index: int = 13,
         label: str = "post_hfno_start",
         start: bool = True,
@@ -847,7 +847,7 @@ class PostHFNOEndEvent(Event):
         self,
         df: pd.DataFrame,
         end: bool = True,
-        filter_col: str = rename_helper("HFNO_Post_Fine"),
+        filter_col: str = rename_helper("POST_HFNO_STATE_END"),
         index: int = 14,
         label: str = "post_hfno_end",
         state: State = State.HFNO,
@@ -876,7 +876,7 @@ class PostO2StartEvent(Event):
         label: str = "post_oxygen_therapy_start",
         start: bool = True,
         state: State = State.O2,
-        timestamp_col: str = rename_helper("Ossigenoterapia_Post_Inizio_Data"),
+        timestamp_col: str = rename_helper("POST_OXYGEN_THERAPY_STATE_START"),
         **kwargs,
     ) -> None:
         super(PostO2StartEvent, self).__init__(
@@ -900,7 +900,7 @@ class PostO2EndEvent(Event):
         index: int = 16,
         label: str = "post_oxygen_therapy_end",
         state: State = State.O2,
-        timestamp_col: str = rename_helper("Ossigenoterapia_Post_Fine_Data"),
+        timestamp_col: str = rename_helper("POST_OXYGEN_THERAPY_STATE_END"),
         **kwargs,
     ) -> None:
         super(PostO2EndEvent, self).__init__(
@@ -1062,7 +1062,7 @@ class ReleaseEvent(Event):
                         )
                     )
                     if EXECUTING_IN_JUPYTER_KERNEL
-                    else repr(sorted(reasons))[1:-1] + ".",
+                    else repr(sorted(reasons))[1:-1],
                 )
             )
         )

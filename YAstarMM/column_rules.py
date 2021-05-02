@@ -54,6 +54,7 @@
 
 from .constants import (
     BOOLEANIZATION_MAP,
+    HARDCODED_COLUMN_NAMES,
     MIN_PYTHON_VERSION,
     SummarizeFeatureItem,
     SwitchToDateValue,
@@ -1263,19 +1264,23 @@ def matches_static_rule(column_name):
         set(
             rename_helper(
                 (
-                    "",
                     "BLOOD_DISEASES",
                     "CARDIOVASCULAR_DISEASE",
-                    "CHARLSON-INDEX",
+                    "CHARLSON_AGE",
                     "CHARLSON_AIDS",
                     "CHARLSON_BLOOD_DISEASE",
                     "CHARLSON_CONNECTIVE_TISSUE_DISEASE",
                     "CHARLSON_COPD",
                     "CHARLSON_CVA_OR_TIA",
+                    "CHARLSON_DEMENTIA",
                     "CHARLSON_DIABETES",
                     "CHARLSON_HEART_FAILURE",
+                    "CHARLSON_HEMIPLEGIA",
+                    "CHARLSON_INDEX",
                     "CHARLSON_KIDNEY_DISEASE",
                     "CHARLSON_LIVER_DISEASE",
+                    "CHARLSON_LIVER_FAILURE",
+                    "CHARLSON_MYOCARDIAL_ISCHEMIA",
                     "CHARLSON_PEPTIC_ULCER_DISEASE",
                     "CHARLSON_SOLID_TUMOR",
                     "CHARLSON_VASCULAR_DISEASE",
@@ -1303,22 +1308,22 @@ def minimum_maximum_column_limits():
     return {
         rename_helper(k): v
         for k, v in {  # reference ranges in comments
-            "ActualState_val": dict(min=0, max=6),
             "AGE": dict(min=0, max=150),
-            "CHARLSON-INDEX": dict(min=0, max=37),
+            "ActualState_val": dict(min=0, max=7),
+            "CARBON_DIOXIDE_PARTIAL_PRESSURE": dict(min=35, max=45),  # mmHg
+            "CHARLSON_INDEX": dict(min=0, max=37),
             "CREATININE": dict(min=0.7, max=1.3),  # mg/dL
-            "D_DIMER": dict(min=0, max=1700),  # g/mL
-            "RESPIRATORY_RATE": dict(min=12, max=40),  # breaths per min
-            "GPT_ALT": dict(min=0, max=45),  # IU/L
             "DYSPNEA": dict(min=0, max=1),  # just a boolean
+            "D_DIMER": dict(min=0, max=1700),  # g/mL
+            "GPT_ALT": dict(min=0, max=45),  # IU/L
+            "HOROWITZ_INDEX": dict(min=350, max=450),
             "LDH": dict(min=50, max=150),  # U/L
             "LYMPHOCYTE": dict(min=0, max=100),  # % on total white blood cells
+            "PH": dict(min=7.35, max=7.45),
             "PHOSPHOCREATINE": dict(min=0, max=0.7),
             "PROCALCITONIN": dict(min=0, max=0.5),  # ng/mL
+            "RESPIRATORY_RATE": dict(min=12, max=40),  # breaths per min
             "UREA": dict(min=15, max=55),  # mg/dL
-            "CARBON_DIOXIDE_PARTIAL_PRESSURE": dict(min=35, max=45),  # mmHg
-            "PH": dict(min=7.35, max=7.45),
-            "HOROWITZ_INDEX": dict(min=350, max=450),
         }.items()
     }
 
@@ -1524,21 +1529,21 @@ def progressive_features():
                 "ANAKINRA_SAMPLE_T7",
                 "ANTIBIOTIC",
                 "DYSPNEA_START",
+                "HOROWITZ_INDEX_UNDER_150",
+                "HOROWITZ_INDEX_UNDER_250",
                 "ICU_TRANSFER",
                 "IMMUNOLOGICAL_THERAPY",
-                "INFECTIOUS_DISEASES_UNIT_TRANSFER,
-                "INTUBATION_END",
-                "INTUBATION_START",
-                "NIV_END",
-                "NIV_START",
-                "OXYGEN THERAPY_END",
-                "OXYGEN_THERAPY_START",
+                "INFECTIOUS_DISEASES_UNIT_TRANSFER",
+                "INTUBATION_STATE_END",
+                "INTUBATION_STATE_START",
+                "NIV_STATE_END",
+                "NIV_STATE_START",
+                "OXYGEN_THERAPY_STATE_END",
+                "OXYGEN_THERAPY_STATE_START",
                 "PLAQUENIL",
                 "PLAQUENIL_1ST_DATE",
                 "REMDESIVIR",
                 "REMDESIVIR_1ST_DATE",
-                "",
-                "",
                 "SWAB",
                 "SYMPTOMS_START",
                 "TOCILIZUMAB",
@@ -1552,70 +1557,66 @@ def progressive_features():
     )
 
 
-@lru_cache(maxsize=None)
-def rename_helper(columns):
-    assert isinstance(columns, (str, tuple)), str(
-        "Argument must be a string or a tuple of strings"
-    )
-    if not columns:
-        return tuple()
-    input_was_a_string = False
+def rename_helper(columns, errors="warn"):
+    assert isinstance(columns, str) or all(
+        isinstance(col, str) for col in columns
+    ), str("Argument must be a string or a sequence of strings")
+    assert errors in ("raise", "warn")
+
     if isinstance(columns, str):
-        input_was_a_string = True
-        columns = tuple([columns])
-    ret = list()
-    for old_col_name in columns:
-        if old_col_name.startswith("Has "):
-            old_col_name = old_col_name.replace("Has ", "")
-        artificial_name = {  # columns not in extraction files
-            # OLD_NAME: NEW_NAME
-            "ActualState": "oxygen_therapy_state",
-            "ActualState_val": "oxygen_therapy_state_value",
-            "DayCount": "days_since_admission",
-            "day_count": "days_since_admission",
-            "USE_OXYGEN": "use_oxygen",
-        }.get(old_col_name, None)
-        if artificial_name is not None:
-            ret.append(artificial_name)
-            continue
-        try:
-            for reason, list_of_rules in drop_rules.items():
-                for rule in list_of_rules:
-                    if rule.match(old_col_name) is not None:
-                        raise StopIteration(
-                            f"Skip column '{old_col_name}'"
-                            " since it was dropped with reason: "
-                            f"{repr(reason)}."
-                        )
-            #
-            # any drop rule matched; let us look for a keep rule
-            #
-            for group, list_of_mappings in keep_rules.items():
-                for mapping in list_of_mappings:
-                    for new_col_name, rule in mapping.items():
-                        if new_col_name == "":
-                            continue
-                        if (
-                            old_col_name.lower() == new_col_name
-                            or rule.match(old_col_name) is not None
-                        ):
-                            ret.append(new_col_name)
-                            raise StopIteration(
-                                "New name found, continue with next column"
-                                f"\t({old_col_name} ~> {new_col_name})"
-                            )
-        except StopIteration as e:
-            debug(str(e))
-            continue
-        else:  # any keep rule matched == no new name
-            ret.append(old_col_name)
-    assert ret, str(
-        f"Column '{old_col_name}' has probably been dropped;"
-        " please adapt your code accordingly.."
-    )
-    if input_was_a_string:
-        return ret.pop()  # return just a string
-    return tuple(ret)
+        return _rename_helper(columns)
+    return tuple(_rename_helper(old_col_name) for old_col_name in columns)
+
+
+@lru_cache(maxsize=None)
+def _rename_helper(old_col_name, errors="warn"):
+    assert isinstance(old_col_name, str)
+    assert errors in ("raise", "warn")
+
+    if old_col_name.startswith("Has "):
+        old_col_name = old_col_name.replace("Has ", "")
+    new_col_name = HARDCODED_COLUMN_NAMES.get(old_col_name, None)
+    if new_col_name is not None:
+        debug(
+            "Hardcoded column name found, replacing it"
+            f"\t({old_col_name} ~> {new_col_name})"
+        )
+        return new_col_name
+
+    for reason, list_of_rules in drop_rules.items():
+        for rule in list_of_rules:
+            if rule.match(old_col_name) is not None:
+                raise NotImplementedError(
+                    str(
+                        f"Column '{old_col_name}' has probably been dropped;"
+                        " please adapt your code accordingly.."
+                    )
+                )
+    #
+    # any drop rule matched; let us look for a keep rule
+    #
+    for group, list_of_mappings in keep_rules.items():
+        for mapping in list_of_mappings:
+            for new_col_name, rule in mapping.items():
+                if new_col_name == "":
+                    continue
+                if (
+                    old_col_name.lower() == new_col_name
+                    or rule.match(old_col_name) is not None
+                ):
+                    debug(
+                        "New name found:\t"
+                        f"({old_col_name} ~> {new_col_name})"
+                    )
+                    return new_col_name
+    if errors == "raise":
+        raise Exception(f"No renaming was found for '{old_col_name}'")
+    else:
+        warning(
+            "Any hardcoded or keep rule matched against "
+            f"'{old_col_name}'; keeping it"
+        )
+        return old_col_name
 
 
 def revert_new_key_col_value(new_key_col):
@@ -1711,7 +1712,7 @@ def summarize_features():
         ]
         for new_categorical_col, summary_rule_list in {
             "dyspnea": [
-                SummarizeFeatureItem([""], [False], "no dyspnea"),
+                SummarizeFeatureItem(["DYSPNEA"], [False], "no dyspnea"),
                 SummarizeFeatureItem(
                     [""],
                     [True],
@@ -1763,26 +1764,24 @@ def summarize_features():
             ],
             "oxygen_therapy": [
                 SummarizeFeatureItem(
-                    ["use_oxygen"],
-                    [False],
-                    "no oxygen used",
+                    ["USE_OXYGEN"], [False], "no oxygen used"
                 ),
                 SummarizeFeatureItem(
-                    ["use_oxygen", "RESPIRATORY_RATE"],
+                    ["USE_OXYGEN", "RESPIRATORY_RATE"],
                     [True, lambda rr: pd.notna(rr) and float(rr) < 30],
                     "oxygen used and respiratory rate < 30",
                 ),
                 SummarizeFeatureItem(
-                    ["use_oxygen", "RESPIRATORY_RATE"],
+                    ["USE_OXYGEN", "RESPIRATORY_RATE"],
                     [True, lambda rr: pd.notna(rr) and float(rr) >= 30],
                     "oxygen used and respiratory rate >= 30",
                 ),
                 SummarizeFeatureItem(
-                    ["NIV"],
-                    [True],
-                    "non-invasive ventilation",
+                    ["NIV_STATE"], [True], "non-invasive ventilation"
                 ),
-                SummarizeFeatureItem([""], [True], "intubated"),
+                SummarizeFeatureItem(
+                    ["INTUBATION_STATE"], [True], "intubated"
+                ),
             ],
         }.items()
     }
@@ -1842,75 +1841,100 @@ def switch_to_date_features(sheet_name):
 
 def verticalize_features():
     for item in [
+        VerticalizeFeatureItem("ANAKINRA", "ANAKINRA", [""]),
         VerticalizeFeatureItem(
+            "ANAKINRA_1ST_DOSE", "ANAKINRA_1ST_DOSE", ["ANAKINRA_1ST_VIA"]
         ),
         VerticalizeFeatureItem(
+            "ANAKINRA_2ND_DOSE", "ANAKINRA_2ND_DOSE", ["ANAKINRA_2ND_VIA"]
         ),
         VerticalizeFeatureItem(
+            "ANAKINRA_SAMPLE_T0", "ANAKINRA_SAMPLE_T0", list()
         ),
         VerticalizeFeatureItem(
+            "ANAKINRA_SAMPLE_T2", "ANAKINRA_SAMPLE_T2", list()
         ),
         VerticalizeFeatureItem(
+            "ANAKINRA_SAMPLE_T7", "ANAKINRA_SAMPLE_T7", list()
         ),
         VerticalizeFeatureItem(
+            "ANTIBIOTIC", "ANTIBIOTIC", ["ANTIBIOTIC_NOTES"]
+        ),
+        VerticalizeFeatureItem("DYSPNEA_START", "DYSPNEA_START", list()),
+        VerticalizeFeatureItem(
+            "", "SYMPTOMS_START", [""]
         ),
         VerticalizeFeatureItem(
+            "INTUBATION_STATE_END", "INTUBATION_STATE_END", list()
         ),
         VerticalizeFeatureItem(
+            "", "INTUBATION_STATE_END", list()
         ),
         VerticalizeFeatureItem(
+            "INTUBATION_STATE_START", "INTUBATION_STATE_START", list()
         ),
         VerticalizeFeatureItem(
+            "", "INTUBATION_STATE_START", list()
+        ),
+        VerticalizeFeatureItem("NIV_STATE_END", "NIV_STATE_END", list()),
+        VerticalizeFeatureItem("", "NIV_STATE_END", list()),
+        VerticalizeFeatureItem("NIV_STATE_START", "NIV_STATE_START", list()),
+        VerticalizeFeatureItem("", "NIV_STATE_START", list()),
+        VerticalizeFeatureItem(
+            "", "OXYGEN_THERAPY_STATE_END", list()
         ),
         VerticalizeFeatureItem(
+            "", "OXYGEN_THERAPY_STATE_START", list()
+        ),
+        VerticalizeFeatureItem("PLAQUENIL", "PLAQUENIL", list()),
+        VerticalizeFeatureItem(
+            "PLAQUENIL_1ST_DATE", "", list()
         ),
         VerticalizeFeatureItem(
+            "", "HOROWITZ_INDEX_UNDER_150", list()
         ),
         VerticalizeFeatureItem(
+            "", "HOROWITZ_INDEX_UNDER_250", list()
+        ),
+        VerticalizeFeatureItem("REMDESIVIR", "REMDESIVIR", list()),
+        VerticalizeFeatureItem(
+            "REMDESIVIR_1ST_DATE", "", list()
+        ),
+        VerticalizeFeatureItem("SWAB_CHECK_DATE", "SWAB", ["SWAB_RESULT"]),
+        VerticalizeFeatureItem(
+            "IMMUNOLOGICAL_THERAPY_DATE",
+            "IMMUNOLOGICAL_THERAPY",
+            ["IMMUNOLOGICAL_THERAPY"],
         ),
         VerticalizeFeatureItem(
+            "TOCILIZUMAB", "TOCILIZUMAB", [""]
         ),
         VerticalizeFeatureItem(
+            "TOCILIZUMAB_1ST_DOSE",
+            "TOCILIZUMAB_1ST_DOSE",
+            ["TOCILIZUMAB_1ST_VIA"],
         ),
         VerticalizeFeatureItem(
+            "TOCILIZUMAB_2ND_DOSE",
+            "TOCILIZUMAB_2ND_DOSE",
+            ["TOCILIZUMAB_2ND_VIA"],
         ),
         VerticalizeFeatureItem(
+            "TOCILIZUMAB_SAMPLE_T0", "TOCILIZUMAB_SAMPLE_T0", list()
         ),
         VerticalizeFeatureItem(
+            "TOCILIZUMAB_SAMPLE_T2", "TOCILIZUMAB_SAMPLE_T2", list()
         ),
         VerticalizeFeatureItem(
+            "TOCILIZUMAB_SAMPLE_T7", "TOCILIZUMAB_SAMPLE_T7", list()
         ),
         VerticalizeFeatureItem(
+            "", "ICU_TRANSFER", list()
         ),
         VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
-        ),
-        VerticalizeFeatureItem(
+            "",
+            "INFECTIOUS_DISEASES_UNIT_TRANSFER",
+            list(),
         ),
     ]:
         yield VerticalizeFeatureItem(

@@ -69,9 +69,9 @@ def aggregate_constant_values(sequence):
 def function_returning_worst_value_for(column):
     if column in rename_helper(
         (
-            "ActualState_val",
             "AGE",
-            "CHARLSON-INDEX",
+            "ActualState_val",
+            "CHARLSON_INDEX",
             "CREATININE",
             "D_DIMER",
             "RESPIRATORY_RATE",
@@ -80,7 +80,7 @@ def function_returning_worst_value_for(column):
             "LDH",
             "LYMPHOCYTE",
             "PROCALCITONIN",
-            "Urea",
+            "UREA",
         )
     ):  # a higher value means a worst patient health
         return np.max
@@ -143,7 +143,7 @@ def preprocess_single_patient_df(
 
     df = df.assign(
         **{
-            rename_helper("CHARLSON-INDEX"): charlson_series,
+            rename_helper("CHARLSON_INDEX"): charlson_series,
         }
     ).sort_values(rename_helper("DataRef"))
 
@@ -333,7 +333,7 @@ class MetaModel(object):
             self._validation_df,
             only_columns=list(
                 set(rename_helper(("ActualState_val",))).union(
-                    set(rename_helper(tuple(self.observed_variables)))
+                    set((self.observed_variables))
                 )
             ),
         )
@@ -346,7 +346,7 @@ class MetaModel(object):
             self._training_df,
             only_columns=list(
                 set(rename_helper(("ActualState_val",))).union(
-                    set(rename_helper(tuple(self.observed_variables)))
+                    set(self.observed_variables)
                 )
             ),
         )
@@ -852,7 +852,7 @@ class MetaModel(object):
                 header=str(
                     list(
                         set(rename_helper(("ActualState_val",))).union(
-                            set(rename_helper(tuple(self.observed_variables)))
+                            set(self.observed_variables)
                         )
                     )
                 ),

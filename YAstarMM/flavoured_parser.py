@@ -65,20 +65,20 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
             rename_helper(
                 (
                     "AGE",
-                    "CHARLSON-INDEX",
+                    "CARBON_DIOXIDE_PARTIAL_PRESSURE",
+                    "CHARLSON_INDEX",
                     "CREATININE",
-                    "D_DIMER",
-                    "RESPIRATORY_RATE",
-                    "GPT_ALT",
                     "DYSPNEA",
+                    "D_DIMER",
+                    "GPT_ALT",
+                    "HOROWITZ_INDEX",
                     "LDH",
                     "LYMPHOCYTE",
+                    "PH",
                     "PHOSPHOCREATINE",
                     "PROCALCITONIN",
-                    "Urea",
-                    "CARBON_DIOXIDE_PARTIAL_PRESSURE",
-                    "pH",
-                    "HOROWITZ_INDEX",
+                    "RESPIRATORY_RATE",
+                    "UREA",
                 )
             )
         ),
