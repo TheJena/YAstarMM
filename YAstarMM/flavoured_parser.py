@@ -144,12 +144,6 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="float",
         type=float,
     ),
-    ("--worker-id",): dict(
-        default=None,
-        help="Split workload among several workers",
-        metavar="int",
-        type=int,
-    ),
 }
 """Command line interface arguments to parse."""
 

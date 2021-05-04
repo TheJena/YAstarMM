@@ -36,14 +36,15 @@ from .column_rules import (
     minimum_maximum_column_limits,
     rename_helper,
 )
-from .constants import LOGGING_LEVEL, MAX_WORKERS, MIN_PYTHON_VERSION
+from .constants import LOGGING_LEVEL, HmmTrainerInput, MIN_PYTHON_VERSION
 from .flavoured_parser import parsed_args
 from .model import State
+from .parallel import _join_all
 from .preprocessing import clear_and_refill_state_transition_columns
 from .utility import initialize_logging
 from collections import Counter
 from datetime import datetime
-from multiprocessing import Lock
+from multiprocessing import cpu_count, Lock, Process, Queue
 from numpy.random import RandomState
 from os import makedirs
 from os.path import join as join_path, isdir
@@ -58,9 +59,123 @@ import logging
 import numpy as np
 import pandas as pd
 import pickle
+import queue
+import signal
 
-_NEW_DF_LOCK = Lock()
 _NEW_DF = None
+_NEW_DF_LOCK = Lock()
+_SIGNAL_QUEUE = Queue()
+_WORKERS_POOL = list()
+
+
+def _hmm_trainer(hti, **kwargs):
+    worker_id, num_workers = hti.worker_id, hti.num_workers
+    assert worker_id >= 0, repr(worker_id)
+    assert num_workers > worker_id, repr(num_workers, worker_id)
+
+    seed = worker_id
+    if getattr(parsed_args(), "random_seed", None) is not None:
+        seed = getattr(parsed_args(), "random_seed")
+        logging.warning(f"Using manually set seed {seed}")
+
+    for i in range(300):  # more or less a day
+        start_time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        meta_model = MetaModel(hti.df, random_seed=seed, **kwargs)
+
+        print("\n")
+        meta_model.print_start_probability()
+        meta_model.print_matrix(occurrences_matrix=True)
+        meta_model.print_matrix(transition_matrix=True)
+
+        hmm_kwargs = dict(
+            algorithm="baum-welch",
+            max_iterations=getattr(parsed_args(), "max_iter", 1e8),
+            n_components=len(meta_model.oxygen_states),
+            n_init=128,  # initialize kmeans n times before taking the best
+            name=f"HMM__seed_{seed:0>6d}",
+            state_names=[
+                State(state).name for state in meta_model.oxygen_states
+            ],
+            stop_threshold=getattr(parsed_args(), "stop_threshold", 1e-9),
+        )
+
+        worker_dir = "/".join(
+            (
+                getattr(parsed_args(), "save_dir"),
+                f"worker_{worker_id}",
+                f"{start_time}__seed_{seed:0>6d}",
+                "HiddenMarkovModel_class",
+            )
+        )
+        makedirs(worker_dir)
+
+        with open(f"{worker_dir}/hmm_constructor_parameters.yaml", "w") as f:
+            dump(hmm_kwargs, f, Dumper=SafeDumper, default_flow_style=False)
+
+        hmm = HiddenMarkovModel.from_samples(
+            X=meta_model.training_matrix,
+            callbacks=[CSVLogger(f"{worker_dir}/training_log.csv")],
+            distribution=NormalDistribution,
+            n_jobs=1,
+            random_state=meta_model.random_state,
+            verbose=getattr(parsed_args(), "log_level", LOGGING_LEVEL)
+            <= logging.INFO,
+            **hmm_kwargs,
+        )
+
+        for k, v in dict(
+            log_probability=hmm.log_probability(meta_model.validation_matrix),
+            predict=hmm.predict(meta_model.validation_matrix, algorithm="map"),
+            score=float(
+                hmm.score(
+                    meta_model.validation_matrix,
+                    meta_model.validation_matrix_labels(hmm.states),
+                )
+            ),
+        ).items():
+            print(f"{k}:\t{repr(v)}")
+            with open(f"{worker_dir}/{k}.yaml", "w") as f:
+                dump(v, f, Dumper=SafeDumper, default_flow_style=False)
+
+        for k, v in dict(
+            predict_proba=hmm.predict_proba(meta_model.validation_matrix),
+            predict_log_proba=hmm.predict_log_proba(
+                meta_model.validation_matrix
+            ),
+            dense_transition_matrix=hmm.dense_transition_matrix(),
+        ).items():
+            np.savetxt(f"{worker_dir}/{k}.txt", v, fmt="%16.9e")
+            np.save(f"{worker_dir}/{k}.npy", v, allow_pickle=False)
+
+        with open(f"{worker_dir}/hmm_trained_and_serialized.json", "w") as f:
+            f.write(hmm.to_json())
+
+        with open(f"{worker_dir}/hmm_trained_and_serialized.yaml", "w") as f:
+            f.write(hmm.to_yaml())
+
+        if getattr(parsed_args(), "random_seed", None) is None:
+            try:
+                if hti.signal_queue.get(timeout=0.5) is None:
+                    logging.info(f"Worker {worker_id} acked to SIGTERM")
+                    break
+            except queue.Empty:
+                seed += num_workers
+        else:
+            logging.warning(
+                "Setting manually the seed forces exit "
+                "after the first model training"
+            )
+            break
+    logging.info(f"Worker {worker_id} is ready to rest in peace")
+
+
+def _sig_handler(sig_num, stack_frame):
+    global _SIGNAL_QUEUE, _WORKERS_POOL
+    for w in _WORKERS_POOL:
+        logging.info(
+            f"Received signal {sig_num}; sending SIGTERM to worker {w.name}"
+        )
+        _SIGNAL_QUEUE.put(None)
 
 
 def aggregate_constant_values(sequence):
@@ -384,12 +499,19 @@ class MetaModel(object):
         self,
         df,
         patient_key_col,
-        oxygen_states=None,
         observed_variables=None,
+        oxygen_states=None,
         random_seed=None,
         save_to_dir=None,
         hexadecimal_patient_id=False,
     ):
+        self._input_data_dict = None
+        self._patient_key_col = patient_key_col
+        self._random_seed = random_seed
+        self._random_state = RandomState(seed=random_seed)
+        self._training_df = None
+        self._validation_df = None
+
         assert observed_variables is not None and isinstance(
             observed_variables,
             (list, tuple),
@@ -397,15 +519,8 @@ class MetaModel(object):
             "Expected list or tuple as 'observed_variables', "
             f"got '{repr(observed_variables)}' instead"
         )
-
-        self._input_data_dict = None
-        self._random_seed = random_seed
-        self._random_state = RandomState(seed=self._random_seed)
-        self._training_df = None
-        self._validation_df = None
-        self._patient_key_col = patient_key_col
         self.observed_variables = rename_helper(tuple(observed_variables))
-        if not oxygen_states:
+        if oxygen_states is None or not oxygen_states:
             self.oxygen_states = State.values()
         else:
             self.oxygen_states = [
@@ -897,9 +1012,7 @@ class MetaModel(object):
 
 
 def run():
-    assert getattr(parsed_args(), "worker_id") is not None
-    assert getattr(parsed_args(), "worker_id") < MAX_WORKERS
-
+    assert getattr(parsed_args(), "max_workers") > 0
     assert getattr(parsed_args(), "save_dir") is not None
     if not isdir(getattr(parsed_args(), "save_dir")):
         makedirs(getattr(parsed_args(), "save_dir"))
@@ -922,106 +1035,48 @@ def run():
         use_insomnia=getattr(parsed_args(), "use_insomnia", False),
     )
 
-    for i in range(300):  # more or less a day
-        start_time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        if getattr(parsed_args(), "random_seed", None) is not None:
-            seed = getattr(parsed_args(), "random_seed")
-            logging.warning(f"Using manually set seed {seed}")
-        else:
-            seed = (i * MAX_WORKERS) + getattr(parsed_args(), "worker_id")
+    meta_model_kwargs = dict(
+        patient_key_col=patient_key_col,
+        oxygen_states=getattr(
+            parsed_args(), "oxygen_states", [state.name for state in State]
+        ),
+        observed_variables=getattr(parsed_args(), "observed_variables"),
+        save_to_dir=getattr(parsed_args(), "save_dir"),
+        hexadecimal_patient_id=str(
+            pd.api.types.infer_dtype(df.loc[:, patient_key_col])
+        )
+        == "string",
+    )
+    num_workers = min(
+        getattr(parsed_args(), "max_workers"),
+        1
+        if getattr(parsed_args(), "random_seed", None) is not None
+        else cpu_count(),
+    )
 
-        meta_model = MetaModel(
-            df,
-            patient_key_col=patient_key_col,
-            oxygen_states=getattr(
-                parsed_args(), "oxygen_states", [state.name for state in State]
+    global _SIGNAL_QUEUE, workers_list
+    for sig_num in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig_num, _sig_handler)
+
+    for i in range(num_workers):
+        w = Process(
+            target=_hmm_trainer,
+            name=str(i),
+            args=(
+                HmmTrainerInput(
+                    signal_queue=_SIGNAL_QUEUE,
+                    df=df,
+                    worker_id=i,
+                    num_workers=num_workers,
+                ),
             ),
-            observed_variables=getattr(parsed_args(), "observed_variables"),
-            random_seed=seed,
-            save_to_dir=getattr(parsed_args(), "save_dir"),
-            hexadecimal_patient_id=str(
-                pd.api.types.infer_dtype(df.loc[:, patient_key_col])
-            )
-            == "string",
+            kwargs=meta_model_kwargs,
         )
-
-        print("\n")
-        meta_model.print_start_probability()
-        meta_model.print_matrix(occurrences_matrix=True)
-        meta_model.print_matrix(transition_matrix=True)
-
-        hmm_kwargs = dict(
-            algorithm="baum-welch",
-            max_iterations=getattr(parsed_args(), "max_iter", 1e8),
-            n_components=len(meta_model.oxygen_states),
-            n_init=128,  # initialize kmeans n times before taking the best
-            name=f"HMM__seed_{seed:0>6d}",
-            state_names=[
-                State(state).name for state in meta_model.oxygen_states
-            ],
-            stop_threshold=getattr(parsed_args(), "stop_threshold", 1e-9),
-        )
-
-        worker_dir = "/".join(
-            (
-                getattr(parsed_args(), "save_dir"),
-                f"worker_{getattr(parsed_args(), 'worker_id')}",
-                f"{start_time}__seed_{seed:0>6d}",
-                "HiddenMarkovModel_class",
-            )
-        )
-        makedirs(worker_dir)
-
-        with open(f"{worker_dir}/hmm_constructor_parameters.yaml", "w") as f:
-            dump(hmm_kwargs, f, Dumper=SafeDumper, default_flow_style=False)
-
-        hmm = HiddenMarkovModel.from_samples(
-            X=meta_model.training_matrix,
-            callbacks=[CSVLogger(f"{worker_dir}/training_log.csv")],
-            distribution=NormalDistribution,
-            n_jobs=1,
-            random_state=meta_model.random_state,
-            verbose=getattr(parsed_args(), "log_level", LOGGING_LEVEL)
-            <= logging.INFO,
-            **hmm_kwargs,
-        )
-
-        for k, v in dict(
-            log_probability=hmm.log_probability(meta_model.validation_matrix),
-            predict=hmm.predict(meta_model.validation_matrix, algorithm="map"),
-            score=float(
-                hmm.score(
-                    meta_model.validation_matrix,
-                    meta_model.validation_matrix_labels(hmm.states),
-                )
-            ),
-        ).items():
-            print(f"{k}:\t{repr(v)}")
-            with open(f"{worker_dir}/{k}.yaml", "w") as f:
-                dump(v, f, Dumper=SafeDumper, default_flow_style=False)
-
-        for k, v in dict(
-            predict_proba=hmm.predict_proba(meta_model.validation_matrix),
-            predict_log_proba=hmm.predict_log_proba(
-                meta_model.validation_matrix
-            ),
-            dense_transition_matrix=hmm.dense_transition_matrix(),
-        ).items():
-            np.savetxt(f"{worker_dir}/{k}.txt", v, fmt="%16.9e")
-            np.save(f"{worker_dir}/{k}.npy", v, allow_pickle=False)
-
-        with open(f"{worker_dir}/hmm_trained_and_serialized.json", "w") as f:
-            f.write(hmm.to_json())
-
-        with open(f"{worker_dir}/hmm_trained_and_serialized.yaml", "w") as f:
-            f.write(hmm.to_yaml())
-
-        if getattr(parsed_args(), "random_seed", None) is not None:
-            logging.warning(
-                "Setting manually the seed forces exit "
-                "after the first model training"
-            )
-            raise SystemExit(0)
+        _WORKERS_POOL.append(w)
+        w.start()
+    while not _SIGNAL_QUEUE.empty():
+        _SIGNAL_QUEUE.get()
+    _join_all(_WORKERS_POOL, "Workers in charge of HMMs training")
 
 
 if __name__ == "__main__":
