@@ -69,9 +69,7 @@ def aggregate_constant_values(sequence):
 def function_returning_worst_value_for(column, patient_key_col):
     if column in rename_helper(
         (
-            "AGE",
             "ActualState_val",
-            "CHARLSON_INDEX",
             "CREATININE",
             "D_DIMER",
             "RESPIRATORY_RATE",
@@ -100,6 +98,8 @@ def function_returning_worst_value_for(column, patient_key_col):
         return np.mean
     elif column in (
         patient_key_col,
+        rename_helper("AGE"),
+        rename_helper("CHARLSON_INDEX"),
     ):  # all values should be the same, check it
         return aggregate_constant_values
     raise NotImplementedError(
@@ -120,15 +120,24 @@ def preprocess_single_patient_df(
     )
     log_prefix = f"[patient {patient_id}]"
 
-    # let's compute the charlson-index before dropping unobserved columns
-    logging.debug(f"{log_prefix}")
-    cci = compute_charlson_index(df)
-    if pd.isna(cci):
-        logging.debug(f"{log_prefix} Charlson-Index is not computable.\n")
-        charlson_series = pd.Series([np.nan for _ in range(df.shape[0])])
-    else:
-        logging.debug(f"{log_prefix} Charlson-Index is = {cci:2.0f}\n")
-        charlson_series = pd.Series([cci for _ in range(df.shape[0])])
+    if any(
+        (
+            rename_helper("CHARLSON_INDEX") in observed_variables,
+            "CHARLSON_INDEX" in observed_variables,
+        )
+    ):
+        # let's compute the charlson-index before dropping unobserved columns
+        logging.debug(f"{log_prefix}")
+        cci = compute_charlson_index(df)
+        logging.debug(
+            f"{log_prefix} Charlson-Index is "
+            + str(f"= {cci:2.0f}" if pd.notna(cci) else "not computable")
+            + "\n"
+        )
+        # assign updated Charlson-Index
+        df.loc[:, rename_helper("CHARLSON_INDEX")] = (
+            float(cci) if pd.notna(cci) else np.nan
+        )
 
     # drop unobserved columns
     df = df.loc[
@@ -139,13 +148,7 @@ def preprocess_single_patient_df(
             .union(set(rename_helper(tuple(observed_variables))))
             .difference({patient_key_col})
         ),
-    ]
-
-    df = df.assign(
-        **{
-            rename_helper("CHARLSON_INDEX"): charlson_series,
-        }
-    ).sort_values(rename_helper("DataRef"))
+    ].sort_values(rename_helper("DataRef"))
 
     # ensure each date has exactly one record; if there are multiple
     # values they will be aggregated by choosing the one which denotes
@@ -455,12 +458,12 @@ class MetaModel(object):
             if col not in self._df.columns:
                 continue
             logging.debug(
-                f"Statistical description of column '{col}':\t"
+                f"Statistical description of column '{col}':\n\t"
                 + repr(
                     self._df.loc[:, col]
                     .describe(percentiles=[0.03, 0.25, 0.50, 0.75, 0.97])
                     .to_dict()
-                )
+                ).replace(" 'min'", "\n\t 'min'")
             )
             lower_outliers = self._df[  # make black auto-formatting prettier
                 self._df[col] < minimum_maximum_column_limits()[col]["min"]
@@ -470,12 +473,13 @@ class MetaModel(object):
             ][col].count()
             if lower_outliers > 0 or upper_outliers > 0:
                 logging.warning(
-                    f"Column '{col}' has {lower_outliers} values under"
-                    " the lower limit "
-                    f"({minimum_maximum_column_limits()[col]['min']}) and "
-                    f"{upper_outliers} values above the upper limit "
-                    f"({minimum_maximum_column_limits()[col]['max']}); these"
-                    " outliers will be clipped to the respective limits."
+                    f"Column '{col}' has:"
+                    f"\n\t{lower_outliers} values under the lower limit "
+                    f"({minimum_maximum_column_limits()[col]['min']})"
+                    f"\n\t{upper_outliers} values above the upper limit "
+                    f"({minimum_maximum_column_limits()[col]['max']})"
+                    "\n\tthese outliers will be clipped "
+                    "to the respective limits."
                 )
                 show_final_hint = True
         if show_final_hint:
