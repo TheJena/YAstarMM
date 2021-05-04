@@ -59,6 +59,12 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="xlsx",
         type=FileType("rb"),
     ),
+    ("--max-iter",): dict(
+        default=1e8,
+        help="Maximum number of iterations",
+        metavar="int",
+        type=int,
+    ),
     ("--observed-variables",): dict(
         action="append",
         choices=list(
@@ -126,7 +132,21 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("--seed", "--random-seed",): dict(
         default=None,
         dest="random_seed",
-        help="Initialize np.RandomState",
+        help="Initialize np.RandomState"
+        " (and exit after training a model with it)",
+        metavar="int",
+        type=int,
+    ),
+    ("--threshold", "--stop-threshold",): dict(
+        default=1e-9,
+        dest="stop_threshold",
+        help="Stop fitting when this threshold improvement ratio is reached",
+        metavar="float",
+        type=float,
+    ),
+    ("--worker-id",): dict(
+        default=None,
+        help="Split workload among several workers",
         metavar="int",
         type=int,
     ),

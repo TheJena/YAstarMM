@@ -36,7 +36,7 @@ from .column_rules import (
     minimum_maximum_column_limits,
     rename_helper,
 )
-from .constants import LOGGING_LEVEL, MIN_PYTHON_VERSION
+from .constants import LOGGING_LEVEL, MAX_WORKERS, MIN_PYTHON_VERSION
 from .flavoured_parser import parsed_args
 from .model import State
 from .preprocessing import clear_and_refill_state_transition_columns
@@ -47,6 +47,11 @@ from multiprocessing import Lock
 from numpy.random import RandomState
 from os import makedirs
 from os.path import join as join_path, isdir
+from pomegranate import (
+    HiddenMarkovModel,
+    NormalDistribution,
+)
+from pomegranate.callbacks import CSVLogger
 from sys import stdout, version_info
 from yaml import dump, Dumper, SafeDumper
 import logging
@@ -474,11 +479,19 @@ class MetaModel(object):
             if lower_outliers > 0 or upper_outliers > 0:
                 logging.warning(
                     f"Column '{col}' has:"
-                    f"\n\t{lower_outliers} values under the lower limit "
-                    f"({minimum_maximum_column_limits()[col]['min']})"
-                    f"\n\t{upper_outliers} values above the upper limit "
-                    f"({minimum_maximum_column_limits()[col]['max']})"
-                    "\n\tthese outliers will be clipped "
+                    + str(
+                        f"\n\t{lower_outliers} values under the lower limit "
+                        f"({minimum_maximum_column_limits()[col]['min']})"
+                        if lower_outliers > 0
+                        else ""
+                    )
+                    + str(
+                        f"\n\t{upper_outliers} values above the upper limit "
+                        f"({minimum_maximum_column_limits()[col]['max']})"
+                        if upper_outliers > 0
+                        else ""
+                    )
+                    + "\n\tthese outliers will be clipped "
                     "to the respective limits."
                 )
                 show_final_hint = True
@@ -884,14 +897,17 @@ class MetaModel(object):
 
 
 def run():
-    initialize_logging(getattr(parsed_args(), "log_level", LOGGING_LEVEL))
-    assert getattr(parsed_args(), "save_dir") is not None
+    assert getattr(parsed_args(), "worker_id") is not None
+    assert getattr(parsed_args(), "worker_id") < MAX_WORKERS
 
+    assert getattr(parsed_args(), "save_dir") is not None
     if not isdir(getattr(parsed_args(), "save_dir")):
         makedirs(getattr(parsed_args(), "save_dir"))
 
+    initialize_logging(getattr(parsed_args(), "log_level", LOGGING_LEVEL))
+
     patient_key_col = rename_helper(
-        getattr(parsed_args(), "patient_key_col", None), errors="raise"
+        getattr(parsed_args(), "patient_key_col"), errors="raise"
     )
     df = clear_and_refill_state_transition_columns(
         parsed_args().input.name
@@ -901,37 +917,111 @@ def run():
         log_level=logging.CRITICAL,
         show_statistics=getattr(
             parsed_args(), "show_preprocessing_statistics", False
-        ),  # make black auto-formatting prettier
+        ),
         use_dumbydog=getattr(parsed_args(), "use_dumbydog", False),
         use_insomnia=getattr(parsed_args(), "use_insomnia", False),
     )
 
-    if getattr(parsed_args(), "random_seed", None) is not None:
-        seed = getattr(parsed_args(), "random_seed")
-        logging.warning(f"Using manually set seed {seed}")
+    for i in range(300):  # more or less a day
+        start_time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        if getattr(parsed_args(), "random_seed", None) is not None:
+            seed = getattr(parsed_args(), "random_seed")
+            logging.warning(f"Using manually set seed {seed}")
+        else:
+            seed = (i * MAX_WORKERS) + getattr(parsed_args(), "worker_id")
 
-    mm1 = MetaModel(
-        df,
-        patient_key_col=patient_key_col,
-        oxygen_states=getattr(
-            parsed_args(), "oxygen_states", [state.name for state in State]
-        ),
-        observed_variables=getattr(parsed_args(), "observed_variables"),
-        random_seed=seed,
-        save_to_dir=getattr(parsed_args(), "save_dir"),
-        hexadecimal_patient_id=str(
-            pd.api.types.infer_dtype(df.loc[:, patient_key_col])
+        meta_model = MetaModel(
+            df,
+            patient_key_col=patient_key_col,
+            oxygen_states=getattr(
+                parsed_args(), "oxygen_states", [state.name for state in State]
+            ),
+            observed_variables=getattr(parsed_args(), "observed_variables"),
+            random_seed=seed,
+            save_to_dir=getattr(parsed_args(), "save_dir"),
+            hexadecimal_patient_id=str(
+                pd.api.types.infer_dtype(df.loc[:, patient_key_col])
+            )
+            == "string",
         )
-        == "string",
-    )
 
-    print("\n")
-    mm1.print_start_probability()
-    mm1.print_matrix(occurrences_matrix=True)
-    mm1.print_matrix(transition_matrix=True)
+        print("\n")
+        meta_model.print_start_probability()
+        meta_model.print_matrix(occurrences_matrix=True)
+        meta_model.print_matrix(transition_matrix=True)
 
-    print("Validation matrix:\n" + repr(mm1.validation_matrix))
-    print("Training matrix:\n" + repr(mm1.training_matrix))
+        hmm_kwargs = dict(
+            algorithm="baum-welch",
+            max_iterations=getattr(parsed_args(), "max_iter", 1e8),
+            n_components=len(meta_model.oxygen_states),
+            n_init=128,  # initialize kmeans n times before taking the best
+            name=f"HMM__seed_{seed:0>6d}",
+            state_names=[
+                State(state).name for state in meta_model.oxygen_states
+            ],
+            stop_threshold=getattr(parsed_args(), "stop_threshold", 1e-9),
+        )
+
+        worker_dir = "/".join(
+            (
+                getattr(parsed_args(), "save_dir"),
+                f"worker_{getattr(parsed_args(), 'worker_id')}",
+                f"{start_time}__seed_{seed:0>6d}",
+                "HiddenMarkovModel_class",
+            )
+        )
+        makedirs(worker_dir)
+
+        with open(f"{worker_dir}/hmm_constructor_parameters.yaml", "w") as f:
+            dump(hmm_kwargs, f, Dumper=SafeDumper, default_flow_style=False)
+
+        hmm = HiddenMarkovModel.from_samples(
+            X=meta_model.training_matrix,
+            callbacks=[CSVLogger(f"{worker_dir}/training_log.csv")],
+            distribution=NormalDistribution,
+            n_jobs=1,
+            random_state=meta_model.random_state,
+            verbose=getattr(parsed_args(), "log_level", LOGGING_LEVEL)
+            <= logging.INFO,
+            **hmm_kwargs,
+        )
+
+        for k, v in dict(
+            log_probability=hmm.log_probability(meta_model.validation_matrix),
+            predict=hmm.predict(meta_model.validation_matrix, algorithm="map"),
+            score=float(
+                hmm.score(
+                    meta_model.validation_matrix,
+                    meta_model.validation_matrix_labels(hmm.states),
+                )
+            ),
+        ).items():
+            print(f"{k}:\t{repr(v)}")
+            with open(f"{worker_dir}/{k}.yaml", "w") as f:
+                dump(v, f, Dumper=SafeDumper, default_flow_style=False)
+
+        for k, v in dict(
+            predict_proba=hmm.predict_proba(meta_model.validation_matrix),
+            predict_log_proba=hmm.predict_log_proba(
+                meta_model.validation_matrix
+            ),
+            dense_transition_matrix=hmm.dense_transition_matrix(),
+        ).items():
+            np.savetxt(f"{worker_dir}/{k}.txt", v, fmt="%16.9e")
+            np.save(f"{worker_dir}/{k}.npy", v, allow_pickle=False)
+
+        with open(f"{worker_dir}/hmm_trained_and_serialized.json", "w") as f:
+            f.write(hmm.to_json())
+
+        with open(f"{worker_dir}/hmm_trained_and_serialized.yaml", "w") as f:
+            f.write(hmm.to_yaml())
+
+        if getattr(parsed_args(), "random_seed", None) is not None:
+            logging.warning(
+                "Setting manually the seed forces exit "
+                "after the first model training"
+            )
+            raise SystemExit(0)
 
 
 if __name__ == "__main__":
