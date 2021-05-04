@@ -1558,14 +1558,17 @@ def progressive_features():
 
 
 def rename_helper(columns, errors="warn"):
-    assert isinstance(columns, str) or all(
-        isinstance(col, str) for col in columns
+    assert columns is not None and (
+        isinstance(columns, str)
+        or all(isinstance(col, str) for col in columns)
     ), str("Argument must be a string or a sequence of strings")
     assert errors in ("raise", "warn")
 
     if isinstance(columns, str):
-        return _rename_helper(columns)
-    return tuple(_rename_helper(old_col_name) for old_col_name in columns)
+        return _rename_helper(columns, errors=errors)
+    return tuple(
+        _rename_helper(old_col_name, errors=errors) for old_col_name in columns
+    )
 
 
 @lru_cache(maxsize=None)
@@ -1938,8 +1941,8 @@ def verticalize_features():
         ),
     ]:
         yield VerticalizeFeatureItem(
-            date_column=rename_helper(item.date_column),
-            column_name=rename_helper(item.column_name),
+            date_column=rename_helper(item.date_column, errors="warn"),
+            column_name=rename_helper(item.column_name, errors="warn"),
             related_columns=rename_helper(tuple(item.related_columns)),
         )
 

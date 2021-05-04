@@ -41,7 +41,7 @@ from .flavoured_parser import parsed_args
 from .model import State
 from .preprocessing import clear_and_refill_state_transition_columns
 from .utility import initialize_logging
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime
 from multiprocessing import Lock
 from numpy.random import RandomState
@@ -66,7 +66,7 @@ def aggregate_constant_values(sequence):
     return sequence.pop() if sequence else np.nan
 
 
-def function_returning_worst_value_for(column):
+def function_returning_worst_value_for(column, patient_key_col):
     if column in rename_helper(
         (
             "AGE",
@@ -98,9 +98,8 @@ def function_returning_worst_value_for(column):
         )
     ):  # both a higher or a lower value mean a worst patient health
         return np.mean
-    elif column in rename_helper(
-        (
-        )
+    elif column in (
+        patient_key_col,
     ):  # all values should be the same, check it
         return aggregate_constant_values
     raise NotImplementedError(
@@ -110,34 +109,35 @@ def function_returning_worst_value_for(column):
 
 
 def preprocess_single_patient_df(
-    df, observed_variables, hexadecimal_patient_id=False
+    df, patient_key_col, observed_variables, hexadecimal_patient_id=False
 ):
-    assert (
-        len(df.loc[:, rename_helper("")].sort_values().unique()) == 1
-    ), str("This function should process one patient at a time")
+    assert len(df.loc[:, patient_key_col].sort_values().unique()) == 1, str(
+        "This function should process one patient at a time"
+    )
     patient_id = int(
-        set(df.loc[:, rename_helper("")].to_list()).pop(),
+        set(df.loc[:, patient_key_col].to_list()).pop(),
         base=16 if hexadecimal_patient_id else 10,
     )
     log_prefix = f"[patient {patient_id}]"
 
     # let's compute the charlson-index before dropping unobserved columns
-    logging.debug(f"{log_prefix} Start computation of Charlson-Index")
+    logging.debug(f"{log_prefix}")
     cci = compute_charlson_index(df)
     if pd.isna(cci):
-        logging.debug(f"{log_prefix} Charlson-Index is not computable.")
+        logging.debug(f"{log_prefix} Charlson-Index is not computable.\n")
         charlson_series = pd.Series([np.nan for _ in range(df.shape[0])])
     else:
-        logging.debug(f"{log_prefix} Charlson-Index is {cci:2.0f}")
+        logging.debug(f"{log_prefix} Charlson-Index is = {cci:2.0f}\n")
         charlson_series = pd.Series([cci for _ in range(df.shape[0])])
 
     # drop unobserved columns
     df = df.loc[
         :,
-        list(
-            set(
-                rename_helper(("", "DataRef", "ActualState_val"))
-            ).union(set(rename_helper(tuple(observed_variables))))
+        [patient_key_col]
+        + list(
+            set(rename_helper(("DataRef", "ActualState_val")))
+            .union(set(rename_helper(tuple(observed_variables))))
+            .difference({patient_key_col})
         ),
     ]
 
@@ -152,7 +152,7 @@ def preprocess_single_patient_df(
     # the worst health state
     df = df.groupby(rename_helper("DataRef"), as_index=False).aggregate(
         {
-            col: function_returning_worst_value_for(col)
+            col: function_returning_worst_value_for(col, patient_key_col)
             for col in df.columns
             if col != rename_helper("DataRef")  # otherwise pandas complains
         }
@@ -207,7 +207,7 @@ class MetaModel(object):
             self._input_data_dict = dict()
             for index, row in self._df.iterrows():
                 patient, date = (
-                    row[rename_helper("")],
+                    row[self.patient_id],
                     row[rename_helper("DataRef")],
                 )
                 if pd.isna(date):
@@ -304,6 +304,17 @@ class MetaModel(object):
         return ret
 
     @property
+    def patient_id(self):
+        assert any(
+            (
+                hasattr(self, "_df_old")
+                and self._patient_key_col in self._df_old,
+                hasattr(self, "_df") and self._patient_key_col in self._df,
+            )
+        )
+        return self._patient_key_col
+
+    @property
     def random_state(self):
         return self._random_state
 
@@ -364,6 +375,7 @@ class MetaModel(object):
     def __init__(
         self,
         df,
+        patient_key_col,
         oxygen_states=None,
         observed_variables=None,
         random_seed=None,
@@ -383,6 +395,7 @@ class MetaModel(object):
         self._random_state = RandomState(seed=self._random_seed)
         self._training_df = None
         self._validation_df = None
+        self._patient_key_col = patient_key_col
         self.observed_variables = rename_helper(tuple(observed_variables))
         if not oxygen_states:
             self.oxygen_states = State.values()
@@ -396,9 +409,9 @@ class MetaModel(object):
         self._df_old = df
         self._df_old = self._df_old.assign(
             **{
-                rename_helper(""): self._df_old.loc[
-                    :, rename_helper("")
-                ].astype("string" if hexadecimal_patient_id else "Int64"),
+                self.patient_id: self._df_old.loc[:, self.patient_id].astype(
+                    "string" if hexadecimal_patient_id else "Int64"
+                ),
                 rename_helper("DataRef"): self._df_old.loc[
                     :, rename_helper("DataRef")
                 ].apply(
@@ -408,24 +421,24 @@ class MetaModel(object):
         )
         if hexadecimal_patient_id:
             logging.debug(
-                f"Assuming key column '{rename_helper('')}'"
+                f"Assuming key column '{self.patient_id}'"
                 " contains strings representing hexadecimal values"
             )
         self._df_old.sort_values(rename_helper("DataRef")).groupby(
-            "",
-            as_index=False,
+            self.patient_id, as_index=False
         ).apply(
             preprocess_single_patient_df,
-            observed_variables,
+            patient_key_col=self.patient_id,
+            observed_variables=observed_variables,
             hexadecimal_patient_id=hexadecimal_patient_id,
         )
 
         max_col_length = max_charlson_col_length()
         for charlson_col, count in most_common_charlson():
             logging.debug(
-                f" {count:6d} patients had necessary data to choose "
-                f"{charlson_col.rjust(max_col_length)} "
-                "to compute Charlson-Index"
+                f"{count:6d} patients had necessary data to choose "
+                f"{charlson_col.rjust(max_col_length)}"
+                " to compute Charlson-Index"
             )
 
         global _NEW_DF_LOCK, _NEW_DF
@@ -442,7 +455,7 @@ class MetaModel(object):
             if col not in self._df.columns:
                 continue
             logging.debug(
-                f" Statistical description of column '{col}':\t"
+                f"Statistical description of column '{col}':\t"
                 + repr(
                     self._df.loc[:, col]
                     .describe(percentiles=[0.03, 0.25, 0.50, 0.75, 0.97])
@@ -456,18 +469,18 @@ class MetaModel(object):
                 self._df[col] > minimum_maximum_column_limits()[col]["max"]
             ][col].count()
             if lower_outliers > 0 or upper_outliers > 0:
-                logging.debug(
-                    f" Column '{col}' has {lower_outliers} values under "
-                    "the lower limit "
+                logging.warning(
+                    f"Column '{col}' has {lower_outliers} values under"
+                    " the lower limit "
                     f"({minimum_maximum_column_limits()[col]['min']}) and "
                     f"{upper_outliers} values above the upper limit "
-                    f"({minimum_maximum_column_limits()[col]['max']}); these "
-                    "outliers will be clipped to the respective limits."
+                    f"({minimum_maximum_column_limits()[col]['max']}); these"
+                    " outliers will be clipped to the respective limits."
                 )
                 show_final_hint = True
         if show_final_hint:
-            logging.debug(
-                " To change the above lower/upper limits please "
+            logging.warning(
+                "To change the above lower/upper limits please "
                 "consider the column percentiles in the debug log"
             )
 
@@ -508,10 +521,11 @@ class MetaModel(object):
         if ratio is None:
             ratio = getattr(parsed_args(), "validation_set_ratio_hmm", 0.1)
         assert isinstance(ratio, float) and ratio > 0 and ratio < 1, str(
-            "Validation set ratio (CLI argument --ratio) is not in (0, 1)"
+            "Validation set ratio (CLI argument --ratio-validation-set) "
+            "is not in (0, 1)"
         )
         logging.debug(
-            " full dataset shape: "
+            "full dataset shape: "
             f"{self._df.shape[0]} rows, "
             f"{self._df.shape[1]} columns"
         )
@@ -520,7 +534,7 @@ class MetaModel(object):
         patients_left = [
             patient_id
             for patient_id, _ in Counter(
-                self._df[rename_helper("")].to_list()
+                self._df[self.patient_id].to_list()
             ).most_common()  # make black auto-formatting prettier
         ]
         while (
@@ -530,7 +544,7 @@ class MetaModel(object):
             assert len(patients_left) >= 1, "No patient left"
             patient_id = patients_left.pop(0)
             patient_df = self._df[
-                self._df[rename_helper("")].isin([patient_id])
+                self._df[self.patient_id].isin([patient_id])
             ].copy()  # make black auto-formatting prettier
             if bool(self.random_state.randint(2)):  # toss a coin
                 # try to add all the patient's records to the validation set
@@ -577,9 +591,7 @@ class MetaModel(object):
         self._training_df = pd.concat(
             [
                 self._training_df,
-                self._df[
-                    self._df[rename_helper("")].isin(patients_left)
-                ].copy(),
+                self._df[self._df[self.patient_id].isin(patients_left)].copy(),
             ]
         )
         assert (
@@ -592,12 +604,12 @@ class MetaModel(object):
         )
 
         logging.debug(
-            " training set shape: "
+            "training set shape: "
             f"{self._training_df.shape[0]} rows, "
             f"{self._training_df.shape[1]} columns"
         )
         logging.debug(
-            " validation set shape: "
+            "validation set shape: "
             f"{self._validation_df.shape[0]} rows, "
             f"{self._validation_df.shape[1]} columns"
         )
@@ -874,11 +886,14 @@ def run():
     if not isdir(getattr(parsed_args(), "save_dir")):
         makedirs(getattr(parsed_args(), "save_dir"))
 
+    patient_key_col = rename_helper(
+        getattr(parsed_args(), "patient_key_col", None), errors="raise"
+    )
     df = clear_and_refill_state_transition_columns(
         parsed_args().input.name
         if parsed_args().input.name.endswith(".xlsx")
         else parsed_args().input,
-        patient_key_col=rename_helper(""),
+        patient_key_col=patient_key_col,
         log_level=logging.CRITICAL,
         show_statistics=getattr(
             parsed_args(), "show_preprocessing_statistics", False
@@ -893,6 +908,7 @@ def run():
 
     mm1 = MetaModel(
         df,
+        patient_key_col=patient_key_col,
         oxygen_states=getattr(
             parsed_args(), "oxygen_states", [state.name for state in State]
         ),
@@ -900,7 +916,7 @@ def run():
         random_seed=seed,
         save_to_dir=getattr(parsed_args(), "save_dir"),
         hexadecimal_patient_id=str(
-            pd.api.types.infer_dtype(df.loc[:, rename_helper("")])
+            pd.api.types.infer_dtype(df.loc[:, patient_key_col])
         )
         == "string",
     )

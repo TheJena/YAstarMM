@@ -104,7 +104,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="str",
         type=str,
     ),
-    ("--hmm-ratio",): dict(
+    ("--patient-key-col",): dict(
+        dest="patient_key_col",
+        help="Column containing patients' identifiers",
+        metavar="str",
+        type=str,
+    ),
+    ("--ratio-validation-set",): dict(
         default=0.1,
         dest="validation_set_ratio_hmm",
         help="Size of the validation set for the HMM",
