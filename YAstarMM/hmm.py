@@ -53,7 +53,7 @@ from pomegranate import (
     NormalDistribution,
 )
 from pomegranate.callbacks import CSVLogger
-from sys import stdout, version_info
+from sys import version_info
 from yaml import dump, Dumper, SafeDumper
 import logging
 import numpy as np
@@ -903,12 +903,12 @@ class MetaModel(object):
         occurrences_matrix=False,
         transition_matrix=False,
         training_matrix=False,
-        file_obj=stdout,
+        file_obj=None,
         #
         # style parameters
         #
-        float_decimals=3,
         cell_pad=2,
+        float_decimals=3,
         separators=True,
     ):
         assert (
@@ -928,6 +928,7 @@ class MetaModel(object):
             "Please set only one flag between "
             "{occurrences,transition,training}_matrix"
         )
+        print_buffer = str()
 
         col_names = State.values()
         if occurrences_matrix:
@@ -966,20 +967,19 @@ class MetaModel(object):
             cell_size = max(cell_size, float_decimals + 2)
 
         header = " " * (3 + 3) + "From / to".center(legend_size) + " " * 3
-        header += "".join(  # make black auto-formatting prettier
+        header += "".join(
             str(col).rjust(cell_size) + " " * cell_pad for col in col_names
         )
         if title:
-            print(title, file=file_obj)
-        print(header, file=file_obj)
+            print_buffer += f"{title}\n"
+        print_buffer += f"{header}\n"
         if separators:
-            print("_" * len(header), file=file_obj)
+            print_buffer += f"{'_' * len(header)}\n"
         for row in State.values():
-            print(
-                f"{row:3d} = " + str(State(row)).center(legend_size),
-                end=" | ",
-                file=file_obj,
+            print_buffer += str(
+                f"{row:3d} = " + str(State(row)).center(legend_size)
             )
+            print_buffer += " | "
             for col in range(len(col_names)):
                 cell_value = matrix[row][col]
                 if isinstance(
@@ -1012,33 +1012,35 @@ class MetaModel(object):
                     raise NotImplementedError(
                         f"Please add support to {type(cell_value)} cells"
                     )
-                print(
-                    cell_str.rjust(cell_size),
-                    end=" " * cell_pad,
-                    file=file_obj,
-                )
-            print("", file=file_obj)
+                print_buffer += f"{cell_str.rjust(cell_size)}{' ' * cell_pad}"
+            print_buffer += "\n"
         if separators:
-            print("_" * len(header), file=file_obj)
-        print(file=file_obj)
+            print_buffer += f"{'_' * len(header)}\n"
+        print_buffer += "\n"
+
+        if file_obj is not None:
+            print(print_buffer, file=file_obj)
+        else:
+            for line in print_buffer.split("\n"):
+                self.info(line)
 
     def print_start_probability(
-        self,
-        float_decimals=3,
-        cell_pad=2,
-        file_obj=stdout,
+        self, float_decimals=3, cell_pad=2, file_obj=None
     ):
-        print("Start probability:  ", end="", file=file_obj)
-        print(
-            str(" " * cell_pad).join(
-                str("{:.16f}".format(round(p, float_decimals)))[
-                    : float_decimals + 2
-                ]  # make black auto-formatting prettier
-                for p in self.start_prob
-            ),
-            end="\n\n",
-            file=file_obj,
+        print_buffer = "\n\nStart probability:  "
+        print_buffer += str(" " * cell_pad).join(
+            str("{:.16f}".format(round(p, float_decimals)))[
+                : float_decimals + 2
+            ]
+            for p in self.start_prob
         )
+        print_buffer += "\n"
+
+        if file_obj is not None:
+            print(print_buffer, file=file_obj)
+        else:
+            for line in print_buffer.split("\n"):
+                self.info(line)
 
     def save_to_disk(self, dir_name=None, pad=32):
         if dir_name is None:
