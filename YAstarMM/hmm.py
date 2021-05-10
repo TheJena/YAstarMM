@@ -47,7 +47,7 @@ from datetime import datetime
 from multiprocessing import cpu_count, Lock, Process, Queue
 from numpy.random import RandomState
 from os import makedirs
-from os.path import join as join_path, isdir
+from os.path import abspath, join as join_path, isdir
 from pomegranate import (
     HiddenMarkovModel,
     NormalDistribution,
@@ -109,9 +109,6 @@ def _hmm_trainer(hti, **kwargs):
         )
         makedirs(worker_dir)
 
-        with open(f"{worker_dir}/hmm_constructor_parameters.yaml", "w") as f:
-            dump(hmm_kwargs, f, Dumper=SafeDumper, default_flow_style=False)
-
         hmm = HiddenMarkovModel.from_samples(
             X=meta_model.training_matrix,
             callbacks=[CSVLogger(f"{worker_dir}/training_log.csv")],
@@ -123,35 +120,17 @@ def _hmm_trainer(hti, **kwargs):
             **hmm_kwargs,
         )
 
-        for k, v in dict(
-            log_probability=hmm.log_probability(meta_model.validation_matrix),
-            predict=hmm.predict(meta_model.validation_matrix, algorithm="map"),
-            score=float(
-                hmm.score(
-                    meta_model.validation_matrix,
-                    meta_model.validation_matrix_labels(hmm.states),
-                )
+
+        save_hidden_markov_model(
+            dir_name=worker_dir,
+            hmm=hmm,
+            hmm_kwargs=hmm_kwargs,
+            validation_matrix=meta_model.validation_matrix,
+            validation_labels=meta_model.validation_matrix_labels(
+                hmm.states
             ),
-        ).items():
-            print(f"{k}:\t{repr(v)}")
-            with open(f"{worker_dir}/{k}.yaml", "w") as f:
-                dump(v, f, Dumper=SafeDumper, default_flow_style=False)
-
-        for k, v in dict(
-            predict_proba=hmm.predict_proba(meta_model.validation_matrix),
-            predict_log_proba=hmm.predict_log_proba(
-                meta_model.validation_matrix
-            ),
-            dense_transition_matrix=hmm.dense_transition_matrix(),
-        ).items():
-            np.savetxt(f"{worker_dir}/{k}.txt", v, fmt="%16.9e")
-            np.save(f"{worker_dir}/{k}.npy", v, allow_pickle=False)
-
-        with open(f"{worker_dir}/hmm_trained_and_serialized.json", "w") as f:
-            f.write(hmm.to_json())
-
-        with open(f"{worker_dir}/hmm_trained_and_serialized.yaml", "w") as f:
-            f.write(hmm.to_yaml())
+            logger=meta_model,
+        )
 
         if getattr(parsed_args(), "random_seed", None) is None:
             try:
@@ -320,6 +299,64 @@ def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
             .to_numpy()
         )
     return df.loc[:, only_columns].to_numpy()
+
+
+def save_hidden_markov_model(
+    dir_name,
+    hmm,
+    hmm_kwargs,
+    validation_matrix,
+    validation_labels,
+    logger=logging,
+    pad=32,
+):
+    logger.info(
+        f"Saving {type(hmm).__name__.ljust(pad-1)} to {abspath(dir_name)}"
+    )
+
+    with open(
+        join_path(dir_name, "hmm_constructor_parameters.yaml"), "w"
+    ) as f:
+        dump(hmm_kwargs, f, Dumper=SafeDumper, default_flow_style=False)
+        logger.info(f"Saved {'hmm_kwargs'.rjust(pad)} to {f.name}")
+
+    for k, v in dict(
+        log_probability=hmm.log_probability(validation_matrix),
+        predict=hmm.predict(validation_matrix, algorithm="map"),
+        score=float(hmm.score(validation_matrix, validation_labels)),
+    ).items():
+        logger.info(f"{k}: {repr(v)}")
+        with open(join_path(dir_name, f"{k}.yaml"), "w") as f:
+            dump(v, f, Dumper=SafeDumper, default_flow_style=False)
+            logger.info(f"Saved {k.rjust(pad)} to {f.name}")
+
+    for k, v in dict(
+        predict_proba=hmm.predict_proba(validation_matrix),
+        predict_log_proba=hmm.predict_log_proba(validation_matrix),
+        dense_transition_matrix=hmm.dense_transition_matrix(),
+    ).items():
+        np.savetxt(join_path(dir_name, f"{k}.txt"), v, fmt="%16.9e")
+        np.save(join_path(dir_name, f"{k}.npy"), v, allow_pickle=False)
+        logger.info(
+            f"Saved {k.rjust(pad)} to {str(join_path(dir_name, k))}"
+            + ".{txt,npy}"
+        )
+
+    with open(
+        join_path(dir_name, "hmm_trained_and_serialized.json"), "w"
+    ) as f:
+        f.write(hmm.to_json())  # logged with the next one
+
+    with open(
+        join_path(dir_name, "hmm_trained_and_serialized.yaml"), "w"
+    ) as f:
+        f.write(hmm.to_yaml())
+        logger.info(
+            f"Saved {str('trained ' + HiddenMarkovModel.__name__).rjust(pad)}"
+            f" to {'.'.join(f.name.split('.')[:-1])}"
+            + ".{json,"
+            + f.name.split(".")[-1]
+            + "}"
 
 
 class MetaModel(object):
