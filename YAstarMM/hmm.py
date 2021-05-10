@@ -165,6 +165,36 @@ def aggregate_constant_values(sequence):
     return sequence.pop() if sequence else np.nan
 
 
+def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
+    """Many thanks to https://stackoverflow.com/a/41532180"""
+    if only_columns is None:
+        raise ValueError("only_columns argument should be an iterable")
+
+    only_columns = [col for col in only_columns if col in df.columns]
+
+    if normalize:
+        return (
+            df.loc[:, only_columns]
+            .sub(
+                [
+                    minimum_maximum_column_limits()[col]["min"]
+                    for col in only_columns
+                ],
+                axis="columns",
+            )
+            .div(
+                [
+                    minimum_maximum_column_limits()[col]["max"]
+                    - minimum_maximum_column_limits()[col]["min"]
+                    for col in only_columns
+                ],
+                axis="columns",
+            )
+            .to_numpy()
+        )
+    return df.loc[:, only_columns].to_numpy()
+
+
 def function_returning_worst_value_for(column, patient_key_col):
     if column in rename_helper(
         (
@@ -271,34 +301,8 @@ def preprocess_single_patient_df(
     return df.sort_values(rename_helper("DataRef"))
 
 
-def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
-    """Many thanks to https://stackoverflow.com/a/41532180"""
-    if only_columns is None:
-        raise ValueError("only_columns argument should be an iterable")
 
-    only_columns = [col for col in only_columns if col in df.columns]
 
-    if normalize:
-        return (
-            df.loc[:, only_columns]
-            .sub(
-                [
-                    minimum_maximum_column_limits()[col]["min"]
-                    for col in only_columns
-                ],
-                axis="columns",
-            )
-            .div(
-                [
-                    minimum_maximum_column_limits()[col]["max"]
-                    - minimum_maximum_column_limits()[col]["min"]
-                    for col in only_columns
-                ],
-                axis="columns",
-            )
-            .to_numpy()
-        )
-    return df.loc[:, only_columns].to_numpy()
 
 
 def save_hidden_markov_model(
