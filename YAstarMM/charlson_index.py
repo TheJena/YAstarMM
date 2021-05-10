@@ -43,10 +43,11 @@
 from .column_rules import charlson_enum_rule, rename_helper
 from .constants import BOOLEANIZATION_MAP, ICD9_CODES, MIN_PYTHON_VERSION
 from collections import Counter, defaultdict
-from logging import debug
 from sys import version_info
+import logging
 import numpy as np
 import pandas as pd
+
 
 _CHARLSON_COUNTER = Counter()
 
@@ -61,6 +62,9 @@ def non_negative_addend(fun):
     """Decorator to raise ColumnNotFoundError on negative returned values"""
 
     def wrapper(*args, **kwargs):
+        logger = kwargs.pop("logger", logging)
+        log_prefix = kwargs.pop("log_prefix", "").rstrip()
+
         addend_name = repr(
             " ".join(
                 f"{fun.__name__}@@END@@".replace("_points@@END@@", "")
@@ -71,9 +75,11 @@ def non_negative_addend(fun):
         ).ljust(56)
         ret = fun(*args, **kwargs)
         if ret < 0:
-            debug(f"{addend_name} = not found")
+            logger.debug(f"{log_prefix} {addend_name} = not found")
             raise ColumnNotFoundError(addend_name)
-        debug(f"{addend_name} = {ret:+.3f}".replace(".000", ""))
+        logger.debug(
+            f"{log_prefix} {addend_name} = {ret:+.3f}".replace(".000", "")
+        )
         return ret
 
     return wrapper
@@ -664,7 +670,9 @@ def charlson_series_to_integer_values(df, col_name):
     return pd.Series([-1 for _ in range(df.shape[0])]).astype(pd.Int64Dtype())
 
 
-def compute_charlson_index(patient_df, valid_column_threshold=8):
+def compute_charlson_index(
+    patient_df, valid_column_threshold=8, logger=logging, log_prefix=""
+):
     """Based on https://www.mdcalc.com/charlson-comorbidity-index-cci
 
     :param valid_column_threshold: is the number of
@@ -714,7 +722,9 @@ def compute_charlson_index(patient_df, valid_column_threshold=8):
         )
     ):
         try:
-            cci += globals()[function_returning_points](patient_df)
+            cci += globals()[function_returning_points](
+                patient_df, logger=logger, log_prefix=log_prefix
+            )
         except ColumnNotFoundError:  # necessary columns were all empty :(
             _CHARLSON_COUNTER.update({function_returning_points: 0})
         else:

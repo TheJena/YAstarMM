@@ -238,7 +238,11 @@ def function_returning_worst_value_for(column, patient_key_col):
 
 
 def preprocess_single_patient_df(
-    df, patient_key_col, observed_variables, hexadecimal_patient_id=False
+    df,
+    patient_key_col,
+    observed_variables,
+    hexadecimal_patient_id=False,
+    logger=logging,
 ):
     assert len(df.loc[:, patient_key_col].sort_values().unique()) == 1, str(
         "This function should process one patient at a time"
@@ -247,7 +251,13 @@ def preprocess_single_patient_df(
         set(df.loc[:, patient_key_col].to_list()).pop(),
         base=16 if hexadecimal_patient_id else 10,
     )
-    log_prefix = f"[patient {patient_id}]"
+    log_prefix = str(
+        "[patient "
+        + str(
+            f"{patient_id:X}" if hexadecimal_patient_id else f"{patient_id:d}"
+        )
+        + "]"
+    )
 
     if any(
         (
@@ -256,9 +266,9 @@ def preprocess_single_patient_df(
         )
     ):
         # let's compute the charlson-index before dropping unobserved columns
-        logging.debug(f"{log_prefix}")
-        cci = compute_charlson_index(df)
-        logging.debug(
+        logger.debug(f"{log_prefix}")
+        cci = compute_charlson_index(df, logger=logger, log_prefix=log_prefix)
+        logger.debug(
             f"{log_prefix} Charlson-Index is "
             + str(f"= {cci:2.0f}" if pd.notna(cci) else "not computable")
             + "\n"
@@ -610,6 +620,7 @@ class MetaModel(object):
             patient_key_col=self.patient_id,
             observed_variables=observed_variables,
             hexadecimal_patient_id=hexadecimal_patient_id,
+            logger=self,
         )
 
         max_col_length = max_charlson_col_length()
