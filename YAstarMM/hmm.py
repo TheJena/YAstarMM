@@ -522,11 +522,11 @@ class MetaModel(object):
         return ret / ret.sum()
 
     @property
-    def validation_matrix(self):
-        if self._validation_df is None:
+    def test_matrix(self):
+        if self._test_df is None:
             self._split_dataset()
         return dataframe_to_numpy_matrix(
-            self._validation_df,
+            self._test_df,
             only_columns=list(
                 set(rename_helper(("ActualState_val",))).union(
                     set((self.observed_variables))
@@ -558,6 +558,19 @@ class MetaModel(object):
         return ret
 
     @property
+    def validation_matrix(self):
+        if self._validation_df is None:
+            self._split_dataset()
+        return dataframe_to_numpy_matrix(
+            self._validation_df,
+            only_columns=list(
+                set(rename_helper(("ActualState_val",))).union(
+                    set((self.observed_variables))
+                )
+            ),
+        )
+
+    @property
     def worker_dir(self):
         if self._save_to_dir is None:
             return None
@@ -575,6 +588,7 @@ class MetaModel(object):
         observed_variables=None,
         oxygen_states=None,
         random_seed=None,
+        ratio=None,
         save_to_dir=None,
         hexadecimal_patient_id=False,
     ):
@@ -585,6 +599,8 @@ class MetaModel(object):
         else:
             self._random_seed = int(random_seed)
         self._random_state = RandomState(seed=self._random_seed)
+        self._ratio = ratio
+        self._test_df = None
         self._training_df = None
         self._validation_df = None
 
@@ -738,20 +754,35 @@ class MetaModel(object):
         )
         logging.log(level, msg)
 
-    def _split_dataset(self, ratio=None):
+    def _split_dataset(self):
         """Split dataset into training set and validation set"""
-        if ratio is None:
-            ratio = getattr(parsed_args(), "validation_set_ratio_hmm", 0.1)
-        assert isinstance(ratio, float) and ratio > 0 and ratio < 1, str(
-            "Validation set ratio (CLI argument --ratio-validation-set) "
+        if self._ratio is None:
+            if True:  # to be continued soon ...
+                self._ratio = getattr(
+                    parsed_args(), "validation_set_ratio_hmm", 0.1
+                )
+                self.debug(f"Validation set ratio is: {self._ratio:.3f}")
+            else:
+                self._ratio = getattr(
+                    parsed_args(), "test_set_ratio_composer", 0.1
+                )
+                self.debug(f"Test set ratio is: {self._ratio:.3f}")
+        assert (
+            isinstance(self._ratio, float)
+            and self._ratio > 0
+            and self._ratio < 1
+        ), str(
+            "Ratio (CLI argument --ratio-{validation,test}-set) "
             "is not in (0, 1)"
         )
+        self.debug(f"Splitting with ratio {self._ratio:.6f}")
         self.debug(
             "full dataset shape: "
             f"{self._df.shape[0]} rows, "
             f"{self._df.shape[1]} columns"
         )
-        target_validation_rows = max(1, round(self._df.shape[0] * ratio))
+        target_df = None
+        target_rows = max(1, round(self._df.shape[0] * self._ratio))
 
         patients_left = [
             patient_id
@@ -759,55 +790,50 @@ class MetaModel(object):
                 self._df[self.patient_id].to_list()
             ).most_common()
         ]
-        while (
-            self._validation_df is None
-            or self._validation_df.shape[0] < target_validation_rows
-        ):
+        while target_df is None or target_df.shape[0] < target_rows:
             assert len(patients_left) >= 1, "No patient left"
             patient_id = patients_left.pop(0)
             patient_df = self._df[
                 self._df[self.patient_id].isin([patient_id])
             ].copy()
             if bool(self.random_state.randint(2)):  # toss a coin
-                # try to add all the patient's records to the validation set
+                # try to add all the patient's records to the validation/test set
                 if (
-                    self._validation_df is None
-                    or patient_df.shape[0] + self._validation_df.shape[0]
-                    <= target_validation_rows
+                    target_df is None
+                    or patient_df.shape[0] + target_df.shape[0] <= target_rows
                 ):
-                    if self._validation_df is None:
-                        self._validation_df = patient_df
+                    if target_df is None:
+                        target_df = patient_df
                     else:
-                        self._validation_df = pd.concat(
-                            [self._validation_df, patient_df]
-                        )
+                        target_df = pd.concat([target_df, patient_df])
                     continue  # successfully added all patients records
             # try to add the last ratio of patient's records to the
-            # validation set
-            cut_row = round(patient_df.shape[0] * (1 - ratio))
-            if self._validation_df is not None and (
+            # validation/test set
+            cut_row = round(patient_df.shape[0] * (1 - self._ratio))
+            if target_df is not None and (
                 patient_df.shape[0]
-                - cut_row  # validation records
-                + self._validation_df.shape[0]
-                > target_validation_rows
+                - cut_row  # validation/test records
+                + target_df.shape[0]
+                > target_rows
             ):
                 cut_row = patient_df.shape[0]
-                -(target_validation_rows - self._validation_df.shape[0]),
+                -(target_rows - target_df.shape[0]),
             if self._training_df is None:
                 self._training_df = patient_df.iloc[:cut_row, :]
             else:
                 self._training_df = pd.concat(
                     [self._training_df, patient_df.iloc[:cut_row, :]]
-                )  # make black auto-formatting prettier
-            if self._validation_df is None:
-                self._validation_df = patient_df.iloc[cut_row:, :]
-            else:
-                self._validation_df = pd.concat(
-                    [self._validation_df, patient_df.iloc[cut_row:, :]]
                 )
-        assert self._validation_df.shape[0] == target_validation_rows, str(
-            f"validation matrix has {self._validation_df.shape[0]} "
-            f"rows instead of {target_validation_rows}"
+            if target_df is None:
+                target_df = patient_df.iloc[cut_row:, :]
+            else:
+                target_df = pd.concat(
+                    [target_df, patient_df.iloc[cut_row:, :]]
+                )
+        assert target_df.shape[0] == target_rows, str(
+            f"{'validation' if True else 'test'} "  # to be continued soon ...
+            f"matrix has {target_df.shape[0]} "
+            f"rows instead of {target_rows}"
         )
         # add patients left to training set
         self._training_df = pd.concat(
@@ -817,12 +843,12 @@ class MetaModel(object):
             ]
         )
         assert (
-            self._training_df.shape[0] + self._validation_df.shape[0]
+            self._training_df.shape[0] + target_df.shape[0]
             == self._df.shape[0]
         ), str(
             f"training matrix has {self._training_df.shape[0]} "
             "rows instead of "
-            f"{self._df.shape[0] - self._validation_df.shape[0]}"
+            f"{self._df.shape[0] - target_df.shape[0]}"
         )
 
         self.debug(
@@ -831,10 +857,40 @@ class MetaModel(object):
             f"{self._training_df.shape[1]} columns"
         )
         self.debug(
-            "validation set shape: "
-            f"{self._validation_df.shape[0]} rows, "
-            f"{self._validation_df.shape[1]} columns"
+            f"{'validation' if True else 'test'} "  # to be continued soon ...
+            "set shape: "
+            f"{target_df.shape[0]} rows, "
+            f"{target_df.shape[1]} columns"
         )
+
+        if True:  # to be continued soon ...
+            self._validation_df = target_df
+        else:
+            self._test_df = target_df
+
+    def _state_name_to_index_mapping(self, unordered_model_states):
+        ret = {
+            str(state.name).replace(" ", "_"): i
+            for i, state in enumerate(unordered_model_states)
+        }
+
+        for state_enum in self.oxygen_states:
+            state_name = str(State(state_enum)).replace(" ", "_")
+            assert state_name in ret, str(
+                f"Could not found any state named '{state_name}'."
+                "\nWhen building the Hidden Markov Model, please "
+                "pass to the 'state_names' argument what you "
+                "passed to the 'oxygen_states' argument in MetaModel "
+                "constructor; i.e. State.names() or a subset of it."
+            )
+            state = getattr(State, state_name)
+            self.info(
+                "In the current model, state "
+                + repr(str(state)).ljust(2 + max(len(s.name) for s in State))
+                + f" has index {ret[state.name]} "
+                f"while its default enum value is {state.value}"
+            )
+        return ret
 
     def debug(self, msg=""):
         """Log debug message."""
@@ -986,37 +1042,6 @@ class MetaModel(object):
             file=file_obj,
         )
 
-    def validation_matrix_labels(self, unordered_model_states):
-        new_index_of_state = {
-            str(state.name).replace(" ", "_"): i
-            for i, state in enumerate(unordered_model_states)
-        }
-
-        for state_enum in self.oxygen_states:
-            state_name = str(State(state_enum)).replace(" ", "_")
-            assert state_name in new_index_of_state, str(
-                f"Could not found any state named '{state_name}'."
-                "\nWhen building the Hidden Markov Model, please "
-                "pass to the 'state_names' argument what you "
-                "passed to the 'oxygen_states' argument in MetaModel "
-                "constructor; i.e. State.names() or a subset of it."
-            )
-            state = getattr(State, state_name)
-            logging.info(
-                "In the current model, state "
-                + repr(str(state)).ljust(2 + max(len(s.name) for s in State))
-                + f" has index {new_index_of_state[state.name]} "
-                f"while its default enum value is {state.value}"
-            )
-
-        return np.array(
-            [
-                new_index_of_state[State(old_index).name]
-                for old_index in self._validation_df.loc[
-                    :, rename_helper("ActualState_val")
-                ].to_list()  # make black auto-formatting prettier
-            ]
-        )
 
     def save_to(self, dir_name):
         dir_name = join_path(dir_name, "MetaModel_class")
@@ -1108,6 +1133,27 @@ class MetaModel(object):
         for df_name in ("_df", "_validation_df", "_training_df"):
             getattr(self, df_name).to_csv(f"{dir_name}/{df_name}.csv")
 
+    def test_matrix_labels(self, unordered_model_states):
+        index_of = self._state_name_to_index_mapping(unordered_model_states)
+        return np.array(
+            [
+                index_of[State(old_index).name]
+                for old_index in self._test_df.loc[
+                    :, rename_helper("ActualState_val")
+                ].to_list()
+            ]
+        )
+
+    def validation_matrix_labels(self, unordered_model_states):
+        index_of = self._state_name_to_index_mapping(unordered_model_states)
+        return np.array(
+            [
+                index_of[State(old_index).name]
+                for old_index in self._validation_df.loc[
+                    :, rename_helper("ActualState_val")
+                ].to_list()
+            ]
+        )
 
     def warning(self, msg=""):
         """Log warning message."""

@@ -116,6 +116,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="str",
         type=str,
     ),
+    ("--ratio-test-set",): dict(
+        default=0.1,
+        dest="test_set_ratio_composer",
+        help="Size of the test set for the composer",
+        metavar="float",
+        type=float,
+    ),
     ("--ratio-validation-set",): dict(
         default=0.1,
         dest="validation_set_ratio_hmm",
