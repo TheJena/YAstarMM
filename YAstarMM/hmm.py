@@ -366,7 +366,7 @@ class MetaModel(object):
             log_empty_line = False
             for patient in sorted(self._input_data_dict.keys()):
                 if log_empty_line:
-                    logging.info(
+                    self.info(
                         "[PREPROCESSING]"
                     )  # separate added timestamps of different users
                     log_empty_line = False
@@ -385,13 +385,13 @@ class MetaModel(object):
                     if date not in records.keys():
                         log_empty_line = True
                         prev_date = max(d for d in records.keys() if d < date)
-                        assert (  # make black auto-formatting prettier
+                        assert (
                             date - prev_date
                         ).total_seconds() == 24 * 60 ** 2, str(
                             f"Timedelta '{repr(date - prev_date)}' should "
                             "be a day"  # make black auto-formatting prettier
                         )
-                        logging.info(
+                        self.info(
                             f"[PREPROCESSING]"
                             f"[patient{int(patient)}] added missing state "
                             f"({str(State(records[prev_date]))}) "
@@ -399,6 +399,11 @@ class MetaModel(object):
                         )
                         records[date] = records[prev_date]
         return self._input_data_dict
+
+    @property
+    def logger_prefix(self):
+        assert self._random_seed >= 0 and self._random_seed <= 999999
+        return f"[seed {str(self._random_seed).rjust(6, '0')}]"
 
     @property
     def occurrences_matrix(self):
@@ -410,7 +415,7 @@ class MetaModel(object):
             previous_state = State.No_O2  # i.e. the day before admission
             for current_date in sorted(  # enforce chronological order
                 records.keys()
-            ):  # make black auto-formatting prettier
+            ):
                 assert current_date != previous_date
                 current_state = self.input_data[patient][current_date]
 
@@ -507,10 +512,15 @@ class MetaModel(object):
     ):
         self._input_data_dict = None
         self._patient_key_col = patient_key_col
-        self._random_seed = random_seed
-        self._random_state = RandomState(seed=random_seed)
+        if random_seed is None:
+            self._random_seed = RandomState(seed=None).randint(0, 999999)
+        else:
+            self._random_seed = int(random_seed)
+        self._random_state = RandomState(seed=self._random_seed)
         self._training_df = None
         self._validation_df = None
+
+        self.info(f"Creating {type(self).__name__}")
 
         assert observed_variables is not None and isinstance(
             observed_variables,
@@ -520,6 +530,10 @@ class MetaModel(object):
             f"got '{repr(observed_variables)}' instead"
         )
         self.observed_variables = rename_helper(tuple(observed_variables))
+        self.debug(
+            f"observed_variables: {repr(self.observed_variables)[1:-1]}."
+        )
+
         if oxygen_states is None or not oxygen_states:
             self.oxygen_states = State.values()
         else:
@@ -527,6 +541,7 @@ class MetaModel(object):
                 getattr(State, state_name).value
                 for state_name in oxygen_states
             ]
+        self.debug(f"oxygen_states: {repr(self.oxygen_states)[1:-1]}.")
 
         reset_charlson_counter()
         self._df_old = df
@@ -543,7 +558,7 @@ class MetaModel(object):
             }
         )
         if hexadecimal_patient_id:
-            logging.debug(
+            self.debug(
                 f"Assuming key column '{self.patient_id}'"
                 " contains strings representing hexadecimal values"
             )
@@ -558,7 +573,7 @@ class MetaModel(object):
 
         max_col_length = max_charlson_col_length()
         for charlson_col, count in most_common_charlson():
-            logging.debug(
+            self.debug(
                 f"{count:6d} patients had necessary data to choose "
                 f"{charlson_col.rjust(max_col_length)}"
                 " to compute Charlson-Index"
@@ -577,7 +592,7 @@ class MetaModel(object):
         for col, data in minimum_maximum_column_limits().items():
             if col not in self._df.columns:
                 continue
-            logging.debug(
+            self.debug(
                 f"Statistical description of column '{col}':\n\t"
                 + repr(
                     self._df.loc[:, col]
@@ -592,7 +607,7 @@ class MetaModel(object):
                 self._df[col] > minimum_maximum_column_limits()[col]["max"]
             ][col].count()
             if lower_outliers > 0 or upper_outliers > 0:
-                logging.warning(
+                self.warning(
                     f"Column '{col}' has:"
                     + str(
                         f"\n\t{lower_outliers} values under the lower limit "
@@ -611,7 +626,7 @@ class MetaModel(object):
                 )
                 show_final_hint = True
         if show_final_hint:
-            logging.warning(
+            self.warning(
                 "To change the above lower/upper limits please "
                 "consider the column percentiles in the debug log"
             )
@@ -644,9 +659,15 @@ class MetaModel(object):
             },
             axis="columns",
         )
+        self.save_to_disk(save_to_dir)
 
-        if save_to_dir is not None:
-            self.save_to(save_to_dir)
+    def _log(self, level, msg):
+        msg = str(
+            f"{self.logger_prefix}"
+            f"{' ' if not msg.startswith('[') else ''}"
+            f"{msg}"
+        )
+        logging.log(level, msg)
 
     def _split_dataset(self, ratio=None):
         """Split dataset into training set and validation set"""
@@ -656,7 +677,7 @@ class MetaModel(object):
             "Validation set ratio (CLI argument --ratio-validation-set) "
             "is not in (0, 1)"
         )
-        logging.debug(
+        self.debug(
             "full dataset shape: "
             f"{self._df.shape[0]} rows, "
             f"{self._df.shape[1]} columns"
@@ -667,7 +688,7 @@ class MetaModel(object):
             patient_id
             for patient_id, _ in Counter(
                 self._df[self.patient_id].to_list()
-            ).most_common()  # make black auto-formatting prettier
+            ).most_common()
         ]
         while (
             self._validation_df is None
@@ -677,7 +698,7 @@ class MetaModel(object):
             patient_id = patients_left.pop(0)
             patient_df = self._df[
                 self._df[self.patient_id].isin([patient_id])
-            ].copy()  # make black auto-formatting prettier
+            ].copy()
             if bool(self.random_state.randint(2)):  # toss a coin
                 # try to add all the patient's records to the validation set
                 if (
@@ -735,16 +756,24 @@ class MetaModel(object):
             f"{self._df.shape[0] - self._validation_df.shape[0]}"
         )
 
-        logging.debug(
+        self.debug(
             "training set shape: "
             f"{self._training_df.shape[0]} rows, "
             f"{self._training_df.shape[1]} columns"
         )
-        logging.debug(
+        self.debug(
             "validation set shape: "
             f"{self._validation_df.shape[0]} rows, "
             f"{self._validation_df.shape[1]} columns"
         )
+
+    def debug(self, msg=""):
+        """Log debug message."""
+        self._log(logging.DEBUG, msg)
+
+    def info(self, msg=""):
+        """Log info message."""
+        self._log(logging.INFO, msg)
 
     def print_matrix(
         self,
@@ -1009,6 +1038,11 @@ class MetaModel(object):
 
         for df_name in ("_df", "_validation_df", "_training_df"):
             getattr(self, df_name).to_csv(f"{dir_name}/{df_name}.csv")
+
+
+    def warning(self, msg=""):
+        """Log warning message."""
+        self._log(logging.WARNING, msg)
 
 
 def run():
