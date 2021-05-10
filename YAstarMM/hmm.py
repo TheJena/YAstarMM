@@ -80,7 +80,7 @@ def _hmm_trainer(hti, **kwargs):
 
     for i in range(300):  # more or less a day
         start_time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        meta_model = MetaModel(hti.df, random_seed=seed, **kwargs)
+        meta_model = MetaModel(hti.df, random_seed=seed, skip_preprocessing=True, **kwargs)
 
         print("\n")
         meta_model.print_start_probability()
@@ -584,6 +584,7 @@ class MetaModel(object):
         random_seed=None,
         ratio=None,
         save_to_dir=None,
+        skip_preprocessing=False,
         hexadecimal_patient_id=False,
     ):
         self._input_data_dict = None
@@ -625,124 +626,138 @@ class MetaModel(object):
             ]
         self.debug(f"oxygen_states: {repr(self.oxygen_states)[1:-1]}.")
 
-        reset_charlson_counter()
-        self._df_old = df
-        self._df_old = self._df_old.assign(
-            **{
-                self.patient_id: self._df_old.loc[:, self.patient_id].astype(
-                    "string" if hexadecimal_patient_id else "Int64"
-                ),
-                rename_helper("DataRef"): self._df_old.loc[
-                    :, rename_helper("DataRef")
-                ].apply(
-                    lambda timestamp: pd.to_datetime(timestamp.date())
-                ),  # truncate HH:MM:SS
-            }
-        )
-        if hexadecimal_patient_id:
-            self.debug(
-                f"Assuming key column '{self.patient_id}'"
-                " contains strings representing hexadecimal values"
+        if skip_preprocessing:
+            self.info("Skipping preprocessing")
+            self._old_df = None
+            self._df = df
+        else:
+            self.info(
+                "Starting preprocessing ("
+                "\n\taggregate multiple values with the worst one, "
+                "\n\tclip columns to min/max limits, "
+                "\n\tdrop unobserved columns, "
+                "\n\tre-compute Charlson-Index, "
+                "\n\tetc.\n)"
             )
-        self._df_old.sort_values(rename_helper("DataRef")).groupby(
-            self.patient_id, as_index=False
-        ).apply(
-            preprocess_single_patient_df,
-            patient_key_col=self.patient_id,
-            observed_variables=observed_variables,
-            hexadecimal_patient_id=hexadecimal_patient_id,
-            logger=self,
-        )
-
-        max_col_length = max_charlson_col_length()
-        for charlson_col, count in most_common_charlson():
-            self.debug(
-                f"{count:6d} patients had necessary data to choose "
-                f"{charlson_col.rjust(max_col_length)}"
-                " to compute Charlson-Index"
-            )
-
-        global _NEW_DF_LOCK, _NEW_DF
-        _NEW_DF_LOCK.acquire()
-        self._df = _NEW_DF[
-            # cut away records about oxygen state not of interest
-            _NEW_DF[rename_helper("ActualState_val")].isin(self.oxygen_states)
-        ].copy()
-        _NEW_DF = None
-        _NEW_DF_LOCK.release()
-
-        show_final_hint = False
-        for col, data in minimum_maximum_column_limits().items():
-            if col not in self._df.columns:
-                continue
-            self.debug(
-                f"Statistical description of column '{col}':\n\t"
-                + repr(
-                    self._df.loc[:, col]
-                    .describe(percentiles=[0.03, 0.25, 0.50, 0.75, 0.97])
-                    .to_dict()
-                ).replace(" 'min'", "\n\t 'min'")
-            )
-            lower_outliers = self._df[  # make black auto-formatting prettier
-                self._df[col] < minimum_maximum_column_limits()[col]["min"]
-            ][col].count()
-            upper_outliers = self._df[  # make black auto-formatting prettier
-                self._df[col] > minimum_maximum_column_limits()[col]["max"]
-            ][col].count()
-            if lower_outliers > 0 or upper_outliers > 0:
-                self.warning(
-                    f"Column '{col}' has:"
-                    + str(
-                        f"\n\t{lower_outliers} values under the lower limit "
-                        f"({minimum_maximum_column_limits()[col]['min']})"
-                        if lower_outliers > 0
-                        else ""
-                    )
-                    + str(
-                        f"\n\t{upper_outliers} values above the upper limit "
-                        f"({minimum_maximum_column_limits()[col]['max']})"
-                        if upper_outliers > 0
-                        else ""
-                    )
-                    + "\n\tthese outliers will be clipped "
-                    "to the respective limits."
+            reset_charlson_counter()
+            self._df_old = df
+            if hexadecimal_patient_id:
+                self.debug(
+                    f"Assuming key column '{self.patient_id}'"
+                    " contains strings representing hexadecimal values"
                 )
-                show_final_hint = True
-        if show_final_hint:
-            self.warning(
-                "To change the above lower/upper limits please "
-                "consider the column percentiles in the debug log"
+            self._df_old = self._df_old.assign(
+                **{
+                    self.patient_id: self._df_old.loc[
+                        :, self.patient_id
+                    ].astype("string" if hexadecimal_patient_id else "Int64"),
+                    rename_helper("DataRef"): self._df_old.loc[
+                        :, rename_helper("DataRef")
+                    ].dt.normalize(),  # truncate HH:MM:SS
+                }
+            )
+            self._df_old.sort_values(rename_helper("DataRef")).groupby(
+                self.patient_id, as_index=False
+            ).apply(  # TODO parallelize this bottleneck
+                preprocess_single_patient_df,
+                patient_key_col=self.patient_id,
+                observed_variables=observed_variables,
+                hexadecimal_patient_id=hexadecimal_patient_id,
+                logger=self,
             )
 
-        # force outlier values to lower/upper bounds of each column
-        self._df.loc[
-            :,
-            [
-                c
-                for c in minimum_maximum_column_limits().keys()
-                if c in self._df.columns
-            ],
-        ] = self._df.loc[
-            :,
-            [
-                c
-                for c in minimum_maximum_column_limits().keys()
-                if c in self._df.columns
-            ],
-        ].clip(
-            lower={
-                col: data["min"]
-                for col, data in minimum_maximum_column_limits().items()
-                if col in self._df.columns
-            },
-            upper={
-                col: data["max"]
-                for col, data in minimum_maximum_column_limits().items()
-                if col in self._df.columns
-            },
-            axis="columns",
-        )
-        self.save_to_disk(save_to_dir)
+            max_col_length = max_charlson_col_length()
+            for charlson_col, count in most_common_charlson():
+                self.debug(
+                    f"{count:6d} patients had necessary data to choose "
+                    f"{charlson_col.rjust(max_col_length)}"
+                    " to compute Charlson-Index"
+                )
+
+            global _NEW_DF_LOCK, _NEW_DF
+            _NEW_DF_LOCK.acquire()
+            self._df = _NEW_DF[
+                # cut away records about oxygen state not of interest
+                _NEW_DF[rename_helper("ActualState_val")].isin(
+                    self.oxygen_states
+                )
+            ].copy()
+            _NEW_DF = None
+            _NEW_DF_LOCK.release()
+
+            show_final_hint = False
+            for col, data in minimum_maximum_column_limits().items():
+                if col not in self._df.columns:
+                    continue
+                self.debug(
+                    f"Statistical description of column '{col}':\n\t"
+                    + repr(
+                        self._df.loc[:, col]
+                        .describe(percentiles=[0.03, 0.25, 0.50, 0.75, 0.97])
+                        .to_dict()
+                    ).replace(" 'min'", "\n\t 'min'")
+                )
+                lower_outliers = self._df[
+                    self._df[col] < minimum_maximum_column_limits()[col]["min"]
+                ][col].count()
+                upper_outliers = self._df[
+                    self._df[col] > minimum_maximum_column_limits()[col]["max"]
+                ][col].count()
+                if lower_outliers > 0 or upper_outliers > 0:
+                    self.warning(
+                        f"Column '{col}' has:"
+                        + str(
+                            f"\n\t{lower_outliers} values < "
+                            f"{minimum_maximum_column_limits()[col]['min']}"
+                            if lower_outliers > 0
+                            else ""
+                        )
+                        + str(
+                            f"\n\t{upper_outliers} values > "
+                            f"{minimum_maximum_column_limits()[col]['max']}"
+                            if upper_outliers > 0
+                            else ""
+                        )
+                        + "\n\tthese outliers will be clipped "
+                        "to the respective limits."
+                    )
+                    show_final_hint = True
+            if show_final_hint:
+                self.warning(
+                    "To change the above lower/upper limits please "
+                    "consider the column percentiles in the debug log"
+                )
+
+            # force outlier values to lower/upper bounds of each column
+            self._df.loc[
+                :,
+                [
+                    c
+                    for c in minimum_maximum_column_limits().keys()
+                    if c in self._df.columns
+                ],
+            ] = self._df.loc[
+                :,
+                [
+                    c
+                    for c in minimum_maximum_column_limits().keys()
+                    if c in self._df.columns
+                ],
+            ].clip(
+                lower={
+                    col: data["min"]
+                    for col, data in minimum_maximum_column_limits().items()
+                    if col in self._df.columns
+                },
+                upper={
+                    col: data["max"]
+                    for col, data in minimum_maximum_column_limits().items()
+                    if col in self._df.columns
+                },
+                axis="columns",
+            )
+            self.info("Ended preprocessing")
+            self.save_to_disk()
 
     def _log(self, level, msg):
         msg = str(
@@ -753,7 +768,7 @@ class MetaModel(object):
         logging.log(level, msg)
 
     def _split_dataset(self):
-        """Split dataset into training set and validation set"""
+        """Split dataset into training set and validation (or test) set"""
         if self._ratio is None:
             if True:  # to be continued soon ...
                 self._ratio = getattr(
@@ -795,7 +810,8 @@ class MetaModel(object):
                 self._df[self.patient_id].isin([patient_id])
             ].copy()
             if bool(self.random_state.randint(2)):  # toss a coin
-                # try to add all the patient's records to the validation/test set
+                # try to add all the patient's records to the
+                # validation/test set
                 if (
                     target_df is None
                     or patient_df.shape[0] + target_df.shape[0] <= target_rows
