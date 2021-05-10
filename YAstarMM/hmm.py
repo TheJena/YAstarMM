@@ -87,31 +87,12 @@ def _hmm_trainer(hti, **kwargs):
         meta_model.print_matrix(occurrences_matrix=True)
         meta_model.print_matrix(transition_matrix=True)
 
-        hmm_kwargs = dict(
-            algorithm="baum-welch",
-            max_iterations=getattr(parsed_args(), "max_iter", 1e8),
-            n_components=len(meta_model.oxygen_states),
-            n_init=128,  # initialize kmeans n times before taking the best
-            name=f"HMM__seed_{seed:0>6d}",
-            state_names=[
-                State(state).name for state in meta_model.oxygen_states
-            ],
-            stop_threshold=getattr(parsed_args(), "stop_threshold", 1e-9),
-        )
-
-        worker_dir = "/".join(
-            (
-                getattr(parsed_args(), "save_dir"),
-                f"worker_{worker_id}",
-                f"{start_time}__seed_{seed:0>6d}",
-                "HiddenMarkovModel_class",
-            )
-        )
-        makedirs(worker_dir)
+        hmm_kwargs = meta_model.hidden_markov_model_kwargs
+        hmm_save_dir = meta_model.hidden_markov_model_dir
 
         hmm = HiddenMarkovModel.from_samples(
             X=meta_model.training_matrix,
-            callbacks=[CSVLogger(f"{worker_dir}/training_log.csv")],
+            callbacks=[CSVLogger(f"{hmm_save_dir}/training_log.csv")],
             distribution=NormalDistribution,
             n_jobs=1,
             random_state=meta_model.random_state,
@@ -122,7 +103,7 @@ def _hmm_trainer(hti, **kwargs):
 
 
         save_hidden_markov_model(
-            dir_name=worker_dir,
+            dir_name=hmm_save_dir,
             hmm=hmm,
             hmm_kwargs=hmm_kwargs,
             validation_matrix=meta_model.validation_matrix,
@@ -452,6 +433,31 @@ class MetaModel(object):
         return self._input_data_dict
 
     @property
+    def hidden_markov_model_kwargs(self):
+        return dict(
+            algorithm="baum-welch",
+            max_iterations=getattr(parsed_args(), "max_iter", 1e8),
+            n_components=len(self.oxygen_states),
+            n_init=128,  # initialize kmeans n times before taking the best
+            name=f"HMM__seed_{self._random_seed:0>6d}",
+            state_names=[State(state).name for state in self.oxygen_states],
+            stop_threshold=getattr(parsed_args(), "stop_threshold", 1e-9),
+        )
+
+    @property
+    def hidden_markov_model_dir(self):
+        if self.worker_dir is None:
+            return None
+        ret = join_path(
+            self.worker_dir,
+            f"seed_{self._random_seed:0>6d}",
+            "HiddenMarkovModel_class",
+        )
+        if not isdir(ret):
+            makedirs(ret)
+        return ret
+
+    @property
     def logger_prefix(self):
         assert self._random_seed >= 0 and self._random_seed <= 999999
         return f"[seed {str(self._random_seed).rjust(6, '0')}]"
@@ -549,6 +555,17 @@ class MetaModel(object):
                 ret[row] = ret[row] / float(row_sum)
             else:  # Avoid divisions by zero
                 ret[row] = np.zeros(ret[row].shape, dtype=np.float64)
+        return ret
+
+    @property
+    def worker_dir(self):
+        if self._save_to_dir is None:
+            return None
+        ret, suffix = self._save_to_dir, f"{MetaModel.__name__}_class"
+        if not ret.endswith(suffix):
+            ret = join_path(ret, f"seed_{self._random_seed:0>6d}", suffix)
+        if not isdir(ret):
+            makedirs(ret)
         return ret
 
     def __init__(
