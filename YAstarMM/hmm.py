@@ -101,15 +101,12 @@ def _hmm_trainer(hti, **kwargs):
             **hmm_kwargs,
         )
 
-
         save_hidden_markov_model(
             dir_name=hmm_save_dir,
             hmm=hmm,
             hmm_kwargs=hmm_kwargs,
             validation_matrix=meta_model.validation_matrix,
-            validation_labels=meta_model.validation_matrix_labels(
-                hmm.states
-            ),
+            validation_labels=meta_model.validation_matrix_labels(hmm.states),
             logger=meta_model,
         )
 
@@ -292,10 +289,6 @@ def preprocess_single_patient_df(
     return df.sort_values(rename_helper("DataRef"))
 
 
-
-
-
-
 def save_hidden_markov_model(
     dir_name,
     hmm,
@@ -352,6 +345,7 @@ def save_hidden_markov_model(
             + ".{json,"
             + f.name.split(".")[-1]
             + "}"
+        )
 
 
 class MetaModel(object):
@@ -600,6 +594,7 @@ class MetaModel(object):
             self._random_seed = int(random_seed)
         self._random_state = RandomState(seed=self._random_seed)
         self._ratio = ratio
+        self._save_to_dir = save_to_dir
         self._test_df = None
         self._training_df = None
         self._validation_df = None
@@ -613,7 +608,10 @@ class MetaModel(object):
             "Expected list or tuple as 'observed_variables', "
             f"got '{repr(observed_variables)}' instead"
         )
-        self.observed_variables = rename_helper(tuple(observed_variables))
+        self.observed_variables = sorted(
+            rename_helper(tuple(observed_variables), errors="quiet"),
+            key=str.lower,
+        )
         self.debug(
             f"observed_variables: {repr(self.observed_variables)[1:-1]}."
         )
@@ -1042,14 +1040,30 @@ class MetaModel(object):
             file=file_obj,
         )
 
-
-    def save_to(self, dir_name):
-        dir_name = join_path(dir_name, "MetaModel_class")
+    def save_to_disk(self, dir_name=None, pad=32):
+        if dir_name is None:
+            dir_name = self.worker_dir
+        if dir_name is None:
+            self.warning(
+                f"Could not save {type(self).__name__} (None destination)"
+            )
+            return
         if not isdir(dir_name):
             makedirs(dir_name)
+        self.info(
+            f"Saving {type(self).__name__.ljust(pad-1)} to "
+            f"{abspath(dir_name)}"
+        )
 
-        with open(f"{dir_name}/input_data.pickle", "wb") as f:
+        with open(join_path(dir_name, "input_data.pickle"), "wb") as f:
             pickle.dump(self.input_data, f)
+            self.info(
+                f"Saved {'input_data'.rjust(pad)} to "
+                f"{'.'.join(f.name.split('.')[:-1])}"
+                + ".{yaml,"
+                + f.name.split(".")[-1]
+                + "}"
+            )
 
         for object_name in (
             "input_data",
@@ -1057,64 +1071,113 @@ class MetaModel(object):
             "observed_variables",
             "oxygen_states",
         ):
-            with open(f"{dir_name}/{object_name}.yaml", "w") as f:
+            with open(join_path(dir_name, f"{object_name}.yaml"), "w") as f:
                 dump(
                     getattr(self, object_name),
                     f,
                     Dumper=SafeDumper if "data" not in object_name else Dumper,
                     default_flow_style=False,
                 )
-        with open(f"{dir_name}/oxygen_states.yaml", "a") as f:
+                if object_name != "input_data":  # logged with .pickle
+                    self.info(f"Saved {object_name.rjust(pad)} to {f.name}")
+        with open(join_path(dir_name, "oxygen_states.yaml"), "a") as f:
             for state in self.oxygen_states:
                 f.write(f"# State({state}).name == '{State(state).name}'\n")
 
-        with open(f"{dir_name}/clip_out_outliers_dictionary.yaml", "w") as f:
+        with open(
+            join_path(dir_name, "clip_out_outliers_dictionary.yaml"), "w"
+        ) as f:
             dump(
                 minimum_maximum_column_limits(),
                 f,
                 Dumper=SafeDumper,
                 default_flow_style=False,
             )
-
-        np.savetxt(
-            f"{dir_name}/start_prob.txt",
-            self.start_prob,
-            fmt="%10.9f",
-            header=repr([State(state).name for state in self.oxygen_states]),
-        )
-        np.save(
-            f"{dir_name}/start_prob.npy",
-            self.start_prob,
-            allow_pickle=False,
-        )
-
-        np.save(
-            f"{dir_name}/occurrences_matrix.npy",
-            self.occurrences_matrix,
-            allow_pickle=False,
-        )
-        with open(f"{dir_name}/occurrences_matrix.txt", "w") as f:
-            self.print_matrix(
-                occurrences_matrix=True,
-                file_obj=f,
+            self.info(
+                f"Saved {'min/max column limits dictionary'.rjust(pad)} "
+                f"to {f.name}"
             )
 
-        np.save(
-            f"{dir_name}/transition_matrix.npy",
-            self.transition_matrix,
-            allow_pickle=False,
-        )
-        with open(f"{dir_name}/transition_matrix.txt", "w") as f:
-            self.print_matrix(
-                transition_matrix=True,
-                file_obj=f,
-                float_decimals=6,
+        if False:  # to be continued soon ...
+            self.warning(
+                "The following properties are only saved for "
+                f"{''} objects:\n\t"
+                + str(
+                    "\n\t".join(
+                        (
+                            "start_prob.npy",
+                            "start_prob.txt",
+                            "occurrences_matrix.npy",
+                            "occurrences_matrix.txt",
+                            "transition_matrix.npy",
+                            "transition_matrix.txt",
+                        )
+                    )
+                )
             )
-
-        for matrix_name in ("validation_matrix", "training_matrix"):
+        else:
             np.savetxt(
-                f"{dir_name}/{matrix_name}.txt",
-                getattr(self, f"{matrix_name}"),
+                join_path(dir_name, "start_prob.txt"),
+                self.start_prob,
+                fmt="%10.9f",
+                header=repr(
+                    [State(state).name for state in self.oxygen_states]
+                ),
+            )
+            np.save(
+                join_path(dir_name, "start_prob.npy"),
+                self.start_prob,
+                allow_pickle=False,
+            )
+            self.info(
+                f"Saved {'start_prob'.rjust(pad)} to "
+                f"{str(join_path(dir_name,'start_prob'))}" + ".{txt,npy}"
+            )
+
+            np.save(
+                join_path(dir_name, "occurrences_matrix.npy"),
+                self.occurrences_matrix,
+                allow_pickle=False,
+            )
+            with open(join_path(dir_name, "occurrences_matrix.txt"), "w") as f:
+                self.print_matrix(
+                    occurrences_matrix=True,
+                    file_obj=f,
+                )
+            self.info(
+                f"Saved {'occurrences_matrix'.rjust(pad)} to "
+                + f"{str(join_path(dir_name, 'occurrences_matrix'))}"
+                + ".{txt,npy}"
+            )
+
+            np.save(
+                join_path(dir_name, "transition_matrix.npy"),
+                self.transition_matrix,
+                allow_pickle=False,
+            )
+            with open(join_path(dir_name, "transition_matrix.txt"), "w") as f:
+                self.print_matrix(
+                    transition_matrix=True,
+                    file_obj=f,
+                    float_decimals=6,
+                )
+            self.info(
+                f"Saved {'transition_matrix'.rjust(pad)} to "
+                + f"{str(join_path(dir_name, 'transition_matrix'))}"
+                + ".{txt,npy}"
+            )
+
+        for matrix_name in (
+            "training_matrix",
+            "validation_matrix",
+            "test_matrix",
+        ):
+            if not hasattr(self, matrix_name):
+                self.debug(f"No {type(self).__name__}.{matrix_name} was found")
+                continue
+            np.savetxt(
+                join_path(dir_name, f"{matrix_name}.txt"),
+                getattr(self, matrix_name),
                 fmt="%16.9e",
                 header=str(
                     list(
@@ -1125,13 +1188,27 @@ class MetaModel(object):
                 ),
             )
             np.save(
-                f"{dir_name}/{matrix_name}.npy",
+                join_path(dir_name, f"{matrix_name}.npy"),
                 getattr(self, f"{matrix_name}"),
                 allow_pickle=False,
             )
+            self.info(
+                f"Saved {matrix_name.rjust(pad)} to "
+                + f"{str(join_path(dir_name, matrix_name))}"
+                + ".{txt,npy}"
+            )
 
-        for df_name in ("_df", "_validation_df", "_training_df"):
-            getattr(self, df_name).to_csv(f"{dir_name}/{df_name}.csv")
+        for df_name in ("_df", "_training_df", "_validation_df", "_test_df"):
+            if getattr(self, df_name, None) is None:
+                self.debug(f"No {type(self).__name__}.{df_name} was found")
+                continue
+            getattr(self, df_name).to_csv(
+                join_path(dir_name, f"{df_name}.csv")
+            )
+            self.info(
+                f"Saved {df_name.rjust(pad)} to "
+                + str(join_path(dir_name, f"{df_name}.csv"))
+            )
 
     def test_matrix_labels(self, unordered_model_states):
         index_of = self._state_name_to_index_mapping(unordered_model_states)

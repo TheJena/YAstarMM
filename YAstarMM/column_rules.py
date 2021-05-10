@@ -64,7 +64,7 @@ from .utility import hex_date_to_timestamp, timestamp_to_hex_date
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from functools import lru_cache
-from logging import debug, warning
+from logging import debug, DEBUG, log, warning, WARNING
 from random import random
 from re import compile, IGNORECASE
 from string import digits, punctuation
@@ -1561,8 +1561,11 @@ def rename_helper(columns, errors="warn"):
     assert columns is not None and (
         isinstance(columns, str)
         or all(isinstance(col, str) for col in columns)
-    ), str("Argument must be a string or a sequence of strings")
-    assert errors in ("raise", "warn")
+    ), str(
+        "Argument must be a string or a sequence of strings; "
+        f"got {repr(columns)}"
+    )
+    assert errors in ("quiet", "raise", "warn")
 
     if isinstance(columns, str):
         return _rename_helper(columns, errors=errors)
@@ -1574,7 +1577,7 @@ def rename_helper(columns, errors="warn"):
 @lru_cache(maxsize=None)
 def _rename_helper(old_col_name, errors="warn"):
     assert isinstance(old_col_name, str)
-    assert errors in ("raise", "warn")
+    assert errors in ("quiet", "raise", "warn")
 
     if old_col_name.startswith("Has "):
         old_col_name = old_col_name.replace("Has ", "")
@@ -1615,9 +1618,12 @@ def _rename_helper(old_col_name, errors="warn"):
     if errors == "raise":
         raise Exception(f"No renaming was found for '{old_col_name}'")
     else:
-        warning(
-            "Any hardcoded or keep rule matched against "
-            f"'{old_col_name}'; keeping it"
+        log(
+            level=dict(quiet=DEBUG, warn=WARNING).get(errors),
+            msg=str(
+                "Any hardcoded or keep rule matched against "
+                f"'{old_col_name}'; keeping it"
+            ),
         )
         return old_col_name
 
