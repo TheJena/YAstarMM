@@ -43,6 +43,7 @@
 from .column_rules import charlson_enum_rule, rename_helper
 from .constants import BOOLEANIZATION_MAP, ICD9_CODES, MIN_PYTHON_VERSION
 from collections import Counter, defaultdict
+from multiprocessing import Lock
 from sys import version_info
 import logging
 import numpy as np
@@ -50,6 +51,7 @@ import pandas as pd
 
 
 _CHARLSON_COUNTER = Counter()
+_COUNTER_LOCK = Lock()
 
 
 class ColumnNotFoundError(Exception):
@@ -699,7 +701,7 @@ def compute_charlson_index(
     """
     global _CHARLSON_COUNTER
 
-    cci, valid_columns = 0, 0
+    cci, patient_counter, valid_columns = 0, Counter(), 0
     for function_returning_points in sorted(
         (
             "_age_points",
@@ -726,11 +728,16 @@ def compute_charlson_index(
                 patient_df, logger=logger, log_prefix=log_prefix
             )
         except ColumnNotFoundError:  # necessary columns were all empty :(
-            _CHARLSON_COUNTER.update({function_returning_points: 0})
+            patient_counter.update({function_returning_points: 0})
         else:
             assert cci >= 0 and cci <= 37, "Charlson-Index not in [0, 37]"
             valid_columns += 1
-            _CHARLSON_COUNTER.update({function_returning_points: 1})
+            patient_counter.update({function_returning_points: 1})
+
+    global _CHARLSON_COUNTER, _COUNTER_LOCK
+    _COUNTER_LOCK.acquire()
+    _CHARLSON_COUNTER.update(patient_counter)
+    _COUNTER_LOCK.release()
 
     if valid_columns >= valid_column_threshold:
         # At least valid_column_threshold functions (out of 17)
@@ -754,17 +761,28 @@ def estimated_ten_year_survival(charlson_index):
 
 
 def max_charlson_col_length():
-    return max((0, *(len(c) for c in _CHARLSON_COUNTER.keys())))
+    global _CHARLSON_COUNTER, _COUNTER_LOCK
+    _COUNTER_LOCK.acquire()
+    ret = max((0, *(len(c) for c in _CHARLSON_COUNTER.keys())))
+    _COUNTER_LOCK.release()
+    return ret
 
 
 def most_common_charlson():
-    for col, count in _CHARLSON_COUNTER.most_common():
+    global _CHARLSON_COUNTER, _COUNTER_LOCK
+    _COUNTER_LOCK.acquire()
+    most_common_columns = _CHARLSON_COUNTER.most_common()
+    _COUNTER_LOCK.release()
+
+    for col, count in most_common_columns:
         yield col, count
 
 
 def reset_charlson_counter():
-    global _CHARLSON_COUNTER
+    global _CHARLSON_COUNTER, _COUNTER_LOCK
+    _COUNTER_LOCK.acquire()
     _CHARLSON_COUNTER = Counter()
+    _COUNTER_LOCK.release()
 
 
 if __name__ == "__main__":

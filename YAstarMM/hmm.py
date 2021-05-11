@@ -61,6 +61,7 @@ import pickle
 import queue
 import signal
 
+_LOGGING_LOCK = Lock()
 _NEW_DF = None
 _NEW_DF_LOCK = Lock()
 _SIGNAL_QUEUE = Queue()
@@ -71,42 +72,56 @@ def _hmm_trainer(hti, **kwargs):
     worker_id, num_workers = hti.worker_id, hti.num_workers
     assert worker_id >= 0, repr(worker_id)
     assert num_workers > worker_id, repr(num_workers, worker_id)
+    logging.info(f"Worker {worker_id} successfully started")
 
     seed = worker_id
     if getattr(parsed_args(), "random_seed", None) is not None:
         seed = getattr(parsed_args(), "random_seed")
         logging.warning(f"Using manually set seed {seed}")
 
+    log_msg_queue = list()
     for i in range(300):  # more or less a day
-        light_mm = LightMetaModel(hti.df, random_seed=seed, **kwargs)
+        try:
+            light_mm = LightMetaModel(
+                hti.df, random_seed=seed, log_msg_queue=log_msg_queue, **kwargs
+            )
 
-        light_mm.print_start_probability()
-        light_mm.print_matrix(occurrences_matrix=True)
-        light_mm.print_matrix(transition_matrix=True)
+            light_mm.print_start_probability()
+            light_mm.print_matrix(occurrences_matrix=True)
+            light_mm.print_matrix(transition_matrix=True)
 
-        hmm_kwargs = light_mm.hidden_markov_model_kwargs
-        hmm_save_dir = light_mm.hidden_markov_model_dir
-        light_mm.save_to_disk()
+            hmm_kwargs = light_mm.hidden_markov_model_kwargs
+            hmm_save_dir = light_mm.hidden_markov_model_dir
+            light_mm.save_to_disk()
 
-        hmm = HiddenMarkovModel.from_samples(
-            X=light_mm.training_matrix,
-            callbacks=[CSVLogger(join_path(hmm_save_dir, "training_log.csv"))],
-            distribution=NormalDistribution,
-            n_jobs=1,  # already using multiprocessing
-            random_state=light_mm.random_state,
-            verbose=getattr(parsed_args(), "log_level", LOGGING_LEVEL)
-            <= logging.INFO,
-            **hmm_kwargs,
-        )
+            hmm = HiddenMarkovModel.from_samples(
+                X=light_mm.training_matrix,
+                callbacks=[
+                    CSVLogger(join_path(hmm_save_dir, "training_log.csv"))
+                ],
+                distribution=NormalDistribution,
+                n_jobs=1,  # already using multiprocessing
+                random_state=light_mm.random_state,
+                verbose=getattr(parsed_args(), "log_level", LOGGING_LEVEL)
+                <= logging.INFO,
+                **hmm_kwargs,
+            )
 
-        save_hidden_markov_model(
-            dir_name=hmm_save_dir,
-            hmm=hmm,
-            hmm_kwargs=hmm_kwargs,
-            validation_matrix=light_mm.validation_matrix,
-            validation_labels=light_mm.validation_matrix_labels(hmm.states),
-            logger=light_mm,
-        )
+            save_hidden_markov_model(
+                dir_name=hmm_save_dir,
+                hmm=hmm,
+                hmm_kwargs=hmm_kwargs,
+                validation_matrix=light_mm.validation_matrix,
+                validation_labels=light_mm.validation_matrix_labels(
+                    hmm.states
+                ),
+                logger=light_mm,
+            )
+        except Exception as e:
+            light_mm.flush_logging_queue()  # blocking
+            raise e
+        finally:
+            log_msg_queue = light_mm.flush_logging_queue(timeout=1.5)
 
         if getattr(parsed_args(), "random_seed", None) is None:
             try:
@@ -121,6 +136,8 @@ def _hmm_trainer(hti, **kwargs):
                 "after the first model training"
             )
             break
+
+    light_mm.flush_logging_queue()  # blocking
     logging.info(f"Worker {worker_id} is ready to rest in peace")
 
 
@@ -328,6 +345,8 @@ def run():
     light_mm_kwargs = heavy_mm.light_meta_model_kwargs
     heavy_mm.save_to_disk()
 
+    heavy_mm.flush_logging_queue()  # blocking
+
     num_workers = min(
         getattr(parsed_args(), "max_workers"),
         1
@@ -368,6 +387,16 @@ def save_hidden_markov_model(
     logger=logging,
     pad=32,
 ):
+    hmm_result_dict = dict(
+        log_probability=hmm.log_probability(validation_matrix),
+        predict=hmm.predict(validation_matrix, algorithm="map"),
+        score=float(hmm.score(validation_matrix, validation_labels)),
+    )
+    logger.info()
+    for k, v in hmm_result_dict.items():
+        logger.info(f"{k}: {repr(v)}")
+    logger.info()
+
     logger.info(
         f"Saving {type(hmm).__name__.ljust(pad-1)} to {abspath(dir_name)}"
     )
@@ -378,12 +407,7 @@ def save_hidden_markov_model(
         dump(hmm_kwargs, f, Dumper=SafeDumper, default_flow_style=False)
         logger.info(f"Saved {'hmm_kwargs'.rjust(pad)} to {f.name}")
 
-    for k, v in dict(
-        log_probability=hmm.log_probability(validation_matrix),
-        predict=hmm.predict(validation_matrix, algorithm="map"),
-        score=float(hmm.score(validation_matrix, validation_labels)),
-    ).items():
-        logger.info(f"{k}: {repr(v)}")
+    for k, v in hmm_result_dict.items():
         with open(join_path(dir_name, f"{k}.yaml"), "w") as f:
             dump(v, f, Dumper=SafeDumper, default_flow_style=False)
             logger.info(f"Saved {k.rjust(pad)} to {f.name}")
@@ -419,6 +443,10 @@ def save_hidden_markov_model(
 
 
 class MetaModel(object):
+    @property
+    def has_logging_lock(self):
+        return self._has_logging_lock
+
     @property
     def input_data(self):
         """Return { patient: { timestamp: State, ... }, ..., }"""
@@ -653,6 +681,7 @@ class MetaModel(object):
         self,
         df,
         patient_key_col,
+        postponed_logging_queue=list(),
         observed_variables=None,
         oxygen_states=None,
         random_seed=None,
@@ -661,8 +690,10 @@ class MetaModel(object):
         skip_preprocessing=False,
         hexadecimal_patient_id=False,
     ):
+        self._has_logging_lock = False
         self._input_data_dict = None
         self._patient_key_col = patient_key_col
+        self._postponed_logging_queue = postponed_logging_queue
         if random_seed is None:
             self._random_seed = RandomState(seed=None).randint(0, 999999)
         else:
@@ -698,7 +729,13 @@ class MetaModel(object):
                 getattr(State, state_name).value
                 for state_name in oxygen_states
             ]
-        self.debug(f"oxygen_states: {repr(self.oxygen_states)[1:-1]}.")
+        self.debug(
+            f"oxygen_states: {repr(self.oxygen_states)[1:-1]}\t(i.e.: "
+            + str(
+                ", ".join(str(State(num).name) for num in self.oxygen_states)
+            )
+            + ")."
+        )
 
         if skip_preprocessing:
             self.info("Skipping preprocessing")
@@ -840,9 +877,16 @@ class MetaModel(object):
             f"{' ' if not msg.startswith('[') else ''}"
             f"{msg}"
         )
-        logging.log(level, msg)
+        if not self.has_logging_lock and self._postponed_logging_queue:
+            # If there are pending messages try to get the logging
+            # lock and flush them; but without wasting too much time
+            self.flush_logging_queue(timeout=0.1, release_logging_lock=False)
+        if self.has_logging_lock:
+            logging.log(level, msg)
+        else:
+            self._postponed_logging_queue.append(tuple((level, msg)))
 
-    def _split_dataset(self):
+    def _split_dataset(self, pad=22):
         """Split dataset into training set and validation (or test) set"""
         if self._ratio is None:
             if isinstance(self, LightMetaModel):
@@ -865,9 +909,9 @@ class MetaModel(object):
         )
         self.debug(f"Splitting with ratio {self._ratio:.6f}")
         self.debug(
-            "full dataset shape: "
-            f"{self._df.shape[0]} rows, "
-            f"{self._df.shape[1]} columns"
+            "full dataset shape: ".rjust(pad)
+            + f"{self._df.shape[0]:7d} rows, "
+            f"{self._df.shape[1]:3d} columns"
         )
         target_df = None
         target_rows = max(1, round(self._df.shape[0] * self._ratio))
@@ -941,15 +985,21 @@ class MetaModel(object):
         )
 
         self.debug(
-            "training set shape: "
-            f"{self._training_df.shape[0]} rows, "
-            f"{self._training_df.shape[1]} columns"
+            "training set shape: ".rjust(pad)
+            + f"{self._training_df.shape[0]:7d} rows, "
+            f"{self._training_df.shape[1]:3d} columns"
         )
         self.debug(
-            f"{'validation' if isinstance(self, LightMetaModel) else 'test'} "
-            "set shape: "
-            f"{target_df.shape[0]} rows, "
-            f"{target_df.shape[1]} columns"
+            str(
+                str(
+                    "validation"
+                    if isinstance(self, LightMetaModel)
+                    else "test"
+                )
+                + " set shape: "
+            ).rjust(pad)
+            + f"{target_df.shape[0]:7d} rows, "
+            f"{target_df.shape[1]:3d} columns"
         )
 
         if isinstance(self, LightMetaModel):
@@ -1001,6 +1051,24 @@ class MetaModel(object):
             f"~> {new_validation_ratio})"
         )
         return new_validation_ratio
+
+    def flush_logging_queue(self, timeout=None, release_logging_lock=True):
+        global _LOGGING_LOCK
+        if not self.has_logging_lock:
+            if _LOGGING_LOCK.acquire(block=timeout is None, timeout=timeout):
+                logging.debug("")
+                logging.info(f"{self.logger_prefix} Took logging lock")
+                self._has_logging_lock = True
+        if self.has_logging_lock:
+            while self._postponed_logging_queue:
+                level, msg = self._postponed_logging_queue.pop(0)
+                logging.log(level, msg)
+            if release_logging_lock:
+                logging.info(f"{self.logger_prefix} Released logging lock")
+                logging.debug("")
+                self._has_logging_lock = False
+                _LOGGING_LOCK.release()
+        return self._postponed_logging_queue
 
     def info(self, msg=""):
         """Log info message."""
@@ -1387,10 +1455,11 @@ class LightMetaModel(MetaModel):
             makedirs(ret)
         return ret
 
-    def __init__(self, df, patient_key_col, **kwargs):
+    def __init__(self, df, patient_key_col, log_msg_queue=list(), **kwargs):
         super().__init__(
             df=df,
             patient_key_col=patient_key_col,
+            postponed_logging_queue=log_msg_queue,
             skip_preprocessing=True,
             **kwargs,
         )
