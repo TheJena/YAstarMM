@@ -43,7 +43,6 @@ from .parallel import _join_all
 from .preprocessing import clear_and_refill_state_transition_columns
 from .utility import initialize_logging
 from collections import Counter
-from datetime import datetime
 from multiprocessing import cpu_count, Lock, Process, Queue
 from numpy.random import RandomState
 from os import makedirs
@@ -79,23 +78,22 @@ def _hmm_trainer(hti, **kwargs):
         logging.warning(f"Using manually set seed {seed}")
 
     for i in range(300):  # more or less a day
-        start_time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        meta_model = MetaModel(hti.df, random_seed=seed, skip_preprocessing=True, **kwargs)
+        light_mm = LightMetaModel(hti.df, random_seed=seed, **kwargs)
 
-        print("\n")
-        meta_model.print_start_probability()
-        meta_model.print_matrix(occurrences_matrix=True)
-        meta_model.print_matrix(transition_matrix=True)
+        light_mm.print_start_probability()
+        light_mm.print_matrix(occurrences_matrix=True)
+        light_mm.print_matrix(transition_matrix=True)
 
-        hmm_kwargs = meta_model.hidden_markov_model_kwargs
-        hmm_save_dir = meta_model.hidden_markov_model_dir
+        hmm_kwargs = light_mm.hidden_markov_model_kwargs
+        hmm_save_dir = light_mm.hidden_markov_model_dir
+        light_mm.save_to_disk()
 
         hmm = HiddenMarkovModel.from_samples(
-            X=meta_model.training_matrix,
-            callbacks=[CSVLogger(f"{hmm_save_dir}/training_log.csv")],
+            X=light_mm.training_matrix,
+            callbacks=[CSVLogger(join_path(hmm_save_dir, "training_log.csv"))],
             distribution=NormalDistribution,
-            n_jobs=1,
-            random_state=meta_model.random_state,
+            n_jobs=1,  # already using multiprocessing
+            random_state=light_mm.random_state,
             verbose=getattr(parsed_args(), "log_level", LOGGING_LEVEL)
             <= logging.INFO,
             **hmm_kwargs,
@@ -105,9 +103,9 @@ def _hmm_trainer(hti, **kwargs):
             dir_name=hmm_save_dir,
             hmm=hmm,
             hmm_kwargs=hmm_kwargs,
-            validation_matrix=meta_model.validation_matrix,
-            validation_labels=meta_model.validation_matrix_labels(hmm.states),
-            logger=meta_model,
+            validation_matrix=light_mm.validation_matrix,
+            validation_labels=light_mm.validation_matrix_labels(hmm.states),
+            logger=light_mm,
         )
 
         if getattr(parsed_args(), "random_seed", None) is None:
@@ -289,6 +287,78 @@ def preprocess_single_patient_df(
     return df.sort_values(rename_helper("DataRef"))
 
 
+def run():
+    assert getattr(parsed_args(), "max_workers") > 0
+    assert getattr(parsed_args(), "save_dir") is not None
+
+    initialize_logging(getattr(parsed_args(), "log_level", LOGGING_LEVEL))
+
+    patient_key_col = rename_helper(
+        getattr(parsed_args(), "patient_key_col"), errors="warn"
+    )
+    df = clear_and_refill_state_transition_columns(
+        parsed_args().input.name
+        if parsed_args().input.name.endswith(".xlsx")
+        else parsed_args().input,
+        patient_key_col=patient_key_col,
+        log_level=logging.CRITICAL,
+        show_statistics=getattr(
+            parsed_args(), "show_preprocessing_statistics", False
+        ),
+        use_dumbydog=getattr(parsed_args(), "use_dumbydog", False),
+        use_insomnia=getattr(parsed_args(), "use_insomnia", False),
+    )
+
+    # finish dataframe preprocessing and split training/test set
+    heavy_mm = MetaModel(
+        df,
+        patient_key_col=patient_key_col,
+        observed_variables=getattr(parsed_args(), "observed_variables"),
+        oxygen_states=getattr(
+            parsed_args(), "oxygen_states", [state.name for state in State]
+        ),
+        save_to_dir=getattr(parsed_args(), "save_dir"),
+        hexadecimal_patient_id=str(
+            pd.api.types.infer_dtype(df.loc[:, patient_key_col])
+        )
+        == "string",
+    )
+
+    light_mm_df = heavy_mm.light_meta_model_df
+    light_mm_kwargs = heavy_mm.light_meta_model_kwargs
+    heavy_mm.save_to_disk()
+
+    num_workers = min(
+        getattr(parsed_args(), "max_workers"),
+        1
+        if getattr(parsed_args(), "random_seed", None) is not None
+        else cpu_count(),
+    )
+
+    global _SIGNAL_QUEUE, _WORKERS_POOL
+    for sig_num in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig_num, _sig_handler)
+    for i in range(num_workers):
+        w = Process(
+            target=_hmm_trainer,
+            name=str(i),
+            args=(
+                HmmTrainerInput(
+                    signal_queue=_SIGNAL_QUEUE,
+                    df=light_mm_df,
+                    worker_id=i,
+                    num_workers=num_workers,
+                ),
+            ),
+            kwargs=light_mm_kwargs,
+        )
+        _WORKERS_POOL.append(w)
+        w.start()
+    while not _SIGNAL_QUEUE.empty():
+        _SIGNAL_QUEUE.get()
+    _join_all(_WORKERS_POOL, "Workers in charge of HMMs training")
+
+
 def save_hidden_markov_model(
     dir_name,
     hmm,
@@ -427,29 +497,25 @@ class MetaModel(object):
         return self._input_data_dict
 
     @property
-    def hidden_markov_model_kwargs(self):
-        return dict(
-            algorithm="baum-welch",
-            max_iterations=getattr(parsed_args(), "max_iter", 1e8),
-            n_components=len(self.oxygen_states),
-            n_init=128,  # initialize kmeans n times before taking the best
-            name=f"HMM__seed_{self._random_seed:0>6d}",
-            state_names=[State(state).name for state in self.oxygen_states],
-            stop_threshold=getattr(parsed_args(), "stop_threshold", 1e-9),
-        )
+    def light_meta_model_df(self):
+        if self._training_df is None:
+            self._split_dataset()
+        return self._training_df.copy(deep=True)
 
     @property
-    def hidden_markov_model_dir(self):
-        if self.worker_dir is None:
-            return None
-        ret = join_path(
-            self.worker_dir,
-            f"seed_{self._random_seed:0>6d}",
-            "HiddenMarkovModel_class",
+    def light_meta_model_kwargs(self):
+        return dict(
+            hexadecimal_patient_id=None,
+            observed_variables=self.observed_variables,
+            oxygen_states=[
+                State(state_num).name for state_num in self.oxygen_states
+            ],
+            patient_key_col=self.patient_id,
+            # random_seed will be taken from parsed_args()
+            ratio=self.fixed_validation_set_ratio(),
+            save_to_dir=self.worker_dir,
+            # skip_preprocessing will be set by LightMetaModel.__init__()
         )
-        if not isdir(ret):
-            makedirs(ret)
-        return ret
 
     @property
     def logger_prefix(self):
@@ -517,6 +583,10 @@ class MetaModel(object):
 
     @property
     def test_matrix(self):
+        if isinstance(self, LightMetaModel):
+            raise AttributeError(
+                f"Property available only in {MetaModel.__name__}"
+            )
         if self._test_df is None:
             self._split_dataset()
         return dataframe_to_numpy_matrix(
@@ -553,6 +623,10 @@ class MetaModel(object):
 
     @property
     def validation_matrix(self):
+        if not isinstance(self, LightMetaModel):
+            raise AttributeError(
+                f"Property available only in {LightMetaModel.__name__}"
+            )
         if self._validation_df is None:
             self._split_dataset()
         return dataframe_to_numpy_matrix(
@@ -757,7 +831,8 @@ class MetaModel(object):
                 axis="columns",
             )
             self.info("Ended preprocessing")
-            self.save_to_disk()
+
+        self._split_dataset()
 
     def _log(self, level, msg):
         msg = str(
@@ -770,7 +845,7 @@ class MetaModel(object):
     def _split_dataset(self):
         """Split dataset into training set and validation (or test) set"""
         if self._ratio is None:
-            if True:  # to be continued soon ...
+            if isinstance(self, LightMetaModel):
                 self._ratio = getattr(
                     parsed_args(), "validation_set_ratio_hmm", 0.1
                 )
@@ -845,7 +920,7 @@ class MetaModel(object):
                     [target_df, patient_df.iloc[cut_row:, :]]
                 )
         assert target_df.shape[0] == target_rows, str(
-            f"{'validation' if True else 'test'} "  # to be continued soon ...
+            f"{'validation' if isinstance(self, LightMetaModel) else 'test'} "
             f"matrix has {target_df.shape[0]} "
             f"rows instead of {target_rows}"
         )
@@ -871,13 +946,13 @@ class MetaModel(object):
             f"{self._training_df.shape[1]} columns"
         )
         self.debug(
-            f"{'validation' if True else 'test'} "  # to be continued soon ...
+            f"{'validation' if isinstance(self, LightMetaModel) else 'test'} "
             "set shape: "
             f"{target_df.shape[0]} rows, "
             f"{target_df.shape[1]} columns"
         )
 
-        if True:  # to be continued soon ...
+        if isinstance(self, LightMetaModel):
             self._validation_df = target_df
         else:
             self._test_df = target_df
@@ -909,6 +984,23 @@ class MetaModel(object):
     def debug(self, msg=""):
         """Log debug message."""
         self._log(logging.DEBUG, msg)
+
+    def fixed_validation_set_ratio(self):
+        """test_records : test_ratio = validation_records : validation_ratio"""
+        test_records = self._test_df.shape[0]
+        validation_records = (
+            test_records
+            * getattr(parsed_args(), "validation_set_ratio_hmm")
+            / getattr(parsed_args(), "test_set_ratio_composer")
+        )
+        new_validation_ratio = validation_records / self._training_df.shape[0]
+        self.debug(
+            f"{validation_records} records will be put in validation set;"
+            " changing ratio accordingly ("
+            f"{getattr(parsed_args(), 'validation_set_ratio_hmm')}"
+            f"~> {new_validation_ratio})"
+        )
+        return new_validation_ratio
 
     def info(self, msg=""):
         """Log info message."""
@@ -1116,24 +1208,7 @@ class MetaModel(object):
                 f"to {f.name}"
             )
 
-        if False:  # to be continued soon ...
-            self.warning(
-                "The following properties are only saved for "
-                f"{''} objects:\n\t"
-                + str(
-                    "\n\t".join(
-                        (
-                            "start_prob.npy",
-                            "start_prob.txt",
-                            "occurrences_matrix.npy",
-                            "occurrences_matrix.txt",
-                            "transition_matrix.npy",
-                            "transition_matrix.txt",
-                        )
-                    )
-                )
-            )
-        else:
+        if isinstance(self, LightMetaModel):
             np.savetxt(
                 join_path(dir_name, "start_prob.txt"),
                 self.start_prob,
@@ -1228,6 +1303,24 @@ class MetaModel(object):
                 + str(join_path(dir_name, f"{df_name}.csv"))
             )
 
+        if not isinstance(self, LightMetaModel):
+            self.warning(
+                "The following properties are only saved for "
+                f"{LightMetaModel.__name__} objects:\n\t"
+                + str(
+                    "\n\t".join(
+                        (
+                            "start_prob.npy",
+                            "start_prob.txt",
+                            "occurrences_matrix.npy",
+                            "occurrences_matrix.txt",
+                            "transition_matrix.npy",
+                            "transition_matrix.txt",
+                        )
+                    )
+                )
+            )
+
     def test_matrix_labels(self, unordered_model_states):
         index_of = self._state_name_to_index_mapping(unordered_model_states)
         return np.array(
@@ -1255,72 +1348,52 @@ class MetaModel(object):
         self._log(logging.WARNING, msg)
 
 
-def run():
-    assert getattr(parsed_args(), "max_workers") > 0
-    assert getattr(parsed_args(), "save_dir") is not None
-    if not isdir(getattr(parsed_args(), "save_dir")):
-        makedirs(getattr(parsed_args(), "save_dir"))
-
-    initialize_logging(getattr(parsed_args(), "log_level", LOGGING_LEVEL))
-
-    patient_key_col = rename_helper(
-        getattr(parsed_args(), "patient_key_col"), errors="raise"
-    )
-    df = clear_and_refill_state_transition_columns(
-        parsed_args().input.name
-        if parsed_args().input.name.endswith(".xlsx")
-        else parsed_args().input,
-        patient_key_col=patient_key_col,
-        log_level=logging.CRITICAL,
-        show_statistics=getattr(
-            parsed_args(), "show_preprocessing_statistics", False
-        ),
-        use_dumbydog=getattr(parsed_args(), "use_dumbydog", False),
-        use_insomnia=getattr(parsed_args(), "use_insomnia", False),
-    )
-
-    meta_model_kwargs = dict(
-        patient_key_col=patient_key_col,
-        oxygen_states=getattr(
-            parsed_args(), "oxygen_states", [state.name for state in State]
-        ),
-        observed_variables=getattr(parsed_args(), "observed_variables"),
-        save_to_dir=getattr(parsed_args(), "save_dir"),
-        hexadecimal_patient_id=str(
-            pd.api.types.infer_dtype(df.loc[:, patient_key_col])
+class LightMetaModel(MetaModel):
+    @property
+    def hidden_markov_model_dir(self):
+        if super().worker_dir is None:
+            return None
+        ret = join_path(
+            super().worker_dir,
+            f"seed_{self._random_seed:0>6d}",
+            "HiddenMarkovModel_class",
         )
-        == "string",
-    )
-    num_workers = min(
-        getattr(parsed_args(), "max_workers"),
-        1
-        if getattr(parsed_args(), "random_seed", None) is not None
-        else cpu_count(),
-    )
+        if not isdir(ret):
+            makedirs(ret)
+        return ret
 
-    global _SIGNAL_QUEUE, workers_list
-    for sig_num in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig_num, _sig_handler)
-
-    for i in range(num_workers):
-        w = Process(
-            target=_hmm_trainer,
-            name=str(i),
-            args=(
-                HmmTrainerInput(
-                    signal_queue=_SIGNAL_QUEUE,
-                    df=df,
-                    worker_id=i,
-                    num_workers=num_workers,
-                ),
-            ),
-            kwargs=meta_model_kwargs,
+    @property
+    def hidden_markov_model_kwargs(self):
+        return dict(
+            algorithm="baum-welch",
+            max_iterations=getattr(parsed_args(), "max_iter", 1e8),
+            n_components=len(self.oxygen_states),
+            n_init=128,  # initialize kmeans n times before taking the best
+            name=f"HMM__seed_{self._random_seed:0>6d}",
+            state_names=[State(state).name for state in self.oxygen_states],
+            stop_threshold=getattr(parsed_args(), "stop_threshold", 1e-9),
         )
-        _WORKERS_POOL.append(w)
-        w.start()
-    while not _SIGNAL_QUEUE.empty():
-        _SIGNAL_QUEUE.get()
-    _join_all(_WORKERS_POOL, "Workers in charge of HMMs training")
+
+    @property
+    def worker_dir(self):
+        if super().worker_dir is None:
+            return None
+        ret = join_path(
+            super().worker_dir,
+            f"seed_{self._random_seed:0>6d}",
+            f"{LightMetaModel.__name__}_class",
+        )
+        if not isdir(ret):
+            makedirs(ret)
+        return ret
+
+    def __init__(self, df, patient_key_col, **kwargs):
+        super().__init__(
+            df=df,
+            patient_key_col=patient_key_col,
+            skip_preprocessing=True,
+            **kwargs,
+        )
 
 
 if __name__ == "__main__":

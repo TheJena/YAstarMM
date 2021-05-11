@@ -48,6 +48,7 @@ from argparse import (
     Namespace,
     SUPPRESS,
 )
+from multiprocessing import cpu_count
 from pprint import pformat as pretty_format
 from sys import version_info
 from typing import Any, Dict, Iterator, Optional, TextIO, Tuple, Union
@@ -58,6 +59,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help="Excel input file containing the DataFrame to parse",
         metavar="xlsx",
         type=FileType("rb"),
+    ),
+    ("-j", "--num-workers",): dict(
+        default=cpu_count(),
+        dest="max_workers",
+        help="Split workload among N workers",
+        metavar="N",
+        type=int,
     ),
     ("--max-iter",): dict(
         default=1e8,
