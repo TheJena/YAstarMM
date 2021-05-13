@@ -66,6 +66,7 @@ _LOGGING_LOCK = Lock()
 _NEW_DF = None
 _NEW_DF_LOCK = Lock()
 _SIGNAL_QUEUE = Queue()
+_STATS_QUEUE = Queue()
 _WORKERS_POOL = list()
 
 
@@ -140,7 +141,10 @@ def _hmm_trainer(hti, **kwargs):
             )
             break
 
-    light_mm.flush_logging_queue()  # blocking
+
+    global _STATS_QUEUE
+    _STATS_QUEUE.put(None)  # no more stats from this worker
+
     logging.info(f"Worker {worker_id} is ready to rest in peace")
 
 
@@ -357,7 +361,7 @@ def run():
         else cpu_count(),
     )
 
-    global _SIGNAL_QUEUE, _WORKERS_POOL
+    global _SIGNAL_QUEUE, _STATS_QUEUE, _WORKERS_POOL
     for sig_num in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig_num, _sig_handler)
     for i in range(num_workers):
@@ -378,7 +382,23 @@ def run():
         w.start()
     while not _SIGNAL_QUEUE.empty():
         _SIGNAL_QUEUE.get()
+
+    all_stats = list()
+    for _ in range(num_workers):
+        while True:
+            stat = _STATS_QUEUE.get()
+            if stat is None:
+                break
+            else:
+                all_stats.append(stat)
     _join_all(_WORKERS_POOL, "Workers in charge of HMMs training")
+
+    logging.debug(f"All epoch execution times: {repr(all_stats)}")
+    logging.info(
+        "Average Epoch Time (s): "
+        f"{sum(all_stats) / len(all_stats):.3f} "
+        f"(over all {num_workers} workers)"
+    )
 
 
 def save_hidden_markov_model(
@@ -452,6 +472,7 @@ class StreamLogger(Callback):
         return self._log_method  # without actually calling it
 
     def __init__(self, log_method):
+        self._all_epochs = list()
         self._log_method = log_method
 
     def on_training_begin(self):
@@ -469,12 +490,20 @@ class StreamLogger(Callback):
                 )
             )
         )
+        self._all_epochs.append(logs["duration"])
+
+        global _STATS_QUEUE
+        _STATS_QUEUE.put(logs["duration"])
 
     def on_training_end(self, logs):
         self._t_end = time()
         total_improvement = logs["total_improvement"]
         self.log(f"Total Improvement: {total_improvement:15.9f}")
         self.log(f"Training took (s): {self._t_end-self._t_start:15.3f}")
+        self.log(
+            "Average Epoch Time (s): "
+            f"{sum(self._all_epochs)/len(self._all_epochs):10.3f}"
+        )
         self.log()
 
 
