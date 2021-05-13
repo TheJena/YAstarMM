@@ -51,8 +51,9 @@ from pomegranate import (
     HiddenMarkovModel,
     NormalDistribution,
 )
-from pomegranate.callbacks import CSVLogger
+from pomegranate.callbacks import Callback, CSVLogger
 from sys import version_info
+from time import time
 from yaml import dump, Dumper, SafeDumper
 import logging
 import numpy as np
@@ -94,16 +95,18 @@ def _hmm_trainer(hti, **kwargs):
             hmm_save_dir = light_mm.hidden_markov_model_dir
             light_mm.save_to_disk()
 
+            light_mm.info()
+            light_mm.info("Building HMM from samples")
             hmm = HiddenMarkovModel.from_samples(
                 X=light_mm.training_matrix,
                 callbacks=[
-                    CSVLogger(join_path(hmm_save_dir, "training_log.csv"))
+                    CSVLogger(join_path(hmm_save_dir, "training_log.csv")),
+                    StreamLogger(light_mm.info),
                 ],
                 distribution=NormalDistribution,
                 n_jobs=1,  # already using multiprocessing
                 random_state=light_mm.random_state,
-                verbose=getattr(parsed_args(), "log_level", LOGGING_LEVEL)
-                <= logging.INFO,
+                verbose=False,
                 **hmm_kwargs,
             )
 
@@ -440,6 +443,39 @@ def save_hidden_markov_model(
             + f.name.split(".")[-1]
             + "}"
         )
+
+
+class StreamLogger(Callback):
+    @property
+    def log(self):
+        assert callable(self._log_method)
+        return self._log_method  # without actually calling it
+
+    def __init__(self, log_method):
+        self._log_method = log_method
+
+    def on_training_begin(self):
+        self._t_start = time()
+        self.log()
+        self.log("Training started")
+
+    def on_epoch_end(self, logs):
+        self.log(
+            "    ".join(
+                (
+                    f"[{logs['epoch']:>3d}]",
+                    f"Improved: {logs['improvement']:16.9f}",
+                    f"in {logs['duration']:6.3f} s",
+                )
+            )
+        )
+
+    def on_training_end(self, logs):
+        self._t_end = time()
+        total_improvement = logs["total_improvement"]
+        self.log(f"Total Improvement: {total_improvement:15.9f}")
+        self.log(f"Training took (s): {self._t_end-self._t_start:15.3f}")
+        self.log()
 
 
 class MetaModel(object):
