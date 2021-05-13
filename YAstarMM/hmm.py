@@ -82,7 +82,7 @@ def _hmm_trainer(hti, **kwargs):
         logging.warning(f"Using manually set seed {seed}")
 
     log_msg_queue = list()
-    for i in range(300):  # more or less a day
+    for i in range(hti.num_iterations):
         try:
             light_mm = LightMetaModel(
                 hti.df, random_seed=seed, log_msg_queue=log_msg_queue, **kwargs
@@ -141,6 +141,8 @@ def _hmm_trainer(hti, **kwargs):
             )
             break
 
+    if hti.num_iterations > 0:
+        light_mm.flush_logging_queue()  # blocking
 
     global _STATS_QUEUE
     _STATS_QUEUE.put(None)  # no more stats from this worker
@@ -314,6 +316,7 @@ def preprocess_single_patient_df(
 def run():
     assert getattr(parsed_args(), "max_workers") > 0
     assert getattr(parsed_args(), "save_dir") is not None
+    assert getattr(parsed_args(), "seeds_to_explore") > 0
 
     initialize_logging(getattr(parsed_args(), "log_level", LOGGING_LEVEL))
 
@@ -354,6 +357,7 @@ def run():
 
     heavy_mm.flush_logging_queue()  # blocking
 
+    max_seeds = getattr(parsed_args(), "seeds_to_explore")
     num_workers = min(
         getattr(parsed_args(), "max_workers"),
         1
@@ -374,6 +378,11 @@ def run():
                     df=light_mm_df,
                     worker_id=i,
                     num_workers=num_workers,
+                    num_iterations=int(
+                        max_seeds % (num_workers - 1)
+                        if i == 0
+                        else max_seeds // (num_workers - 1)
+                    ),
                 ),
             ),
             kwargs=light_mm_kwargs,

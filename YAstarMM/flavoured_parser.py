@@ -73,6 +73,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="int",
         type=int,
     ),
+    ("-n", "--seeds-to-explore",): dict(
+        default=300,
+        dest="seeds_to_explore",
+        help="Train at most N HMMs with different seeds",
+        metavar="int",
+        type=int,
+    ),
     ("--observed-variables",): dict(
         action="append",
         choices=list(
