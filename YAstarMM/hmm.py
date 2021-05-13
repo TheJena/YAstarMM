@@ -20,7 +20,7 @@
 # You should have received a copy of the GNU General Public License
 # along with YAstarMM.  If not, see <https://www.gnu.org/licenses/>.
 """
-   Build model from input.
+   Build a model from the input data and train it.
 
    Usage:
             from  YAstarMM.hmm  import  MetaModel, run as run_hmm_training
@@ -89,8 +89,11 @@ def _hmm_trainer(hti, **kwargs):
             )
 
             light_mm.print_start_probability()
-            light_mm.print_matrix(occurrences_matrix=True)
-            light_mm.print_matrix(transition_matrix=True)
+            light_mm.show(occurrences_matrix=True)
+            light_mm.show(transition_matrix=True)
+            if False:
+                light_mm.show(training_matrix=True)
+                light_mm.show(validation_matrix=True)
 
             hmm_kwargs = light_mm.hidden_markov_model_kwargs
             hmm_save_dir = light_mm.hidden_markov_model_dir
@@ -340,16 +343,20 @@ def run():
     heavy_mm = MetaModel(
         df,
         patient_key_col=patient_key_col,
-        observed_variables=getattr(parsed_args(), "observed_variables"),
-        oxygen_states=getattr(
-            parsed_args(), "oxygen_states", [state.name for state in State]
-        ),
-        save_to_dir=getattr(parsed_args(), "save_dir"),
         hexadecimal_patient_id=str(
             pd.api.types.infer_dtype(df.loc[:, patient_key_col])
         )
         == "string",
+        observed_variables=getattr(parsed_args(), "observed_variables"),
+        oxygen_states=getattr(
+            parsed_args(), "oxygen_states", [state.name for state in State]
+        ),
+        random_seed=getattr(parsed_args(), "random_seed", None),
+        save_to_dir=getattr(parsed_args(), "save_dir"),
     )
+    if False:
+        heavy_mm.show(training_matrix=True)
+        heavy_mm.show(testing_matrix=True)
 
     light_mm_df = heavy_mm.light_meta_model_df
     light_mm_kwargs = heavy_mm.light_meta_model_kwargs
@@ -378,11 +385,8 @@ def run():
                     df=light_mm_df,
                     worker_id=i,
                     num_workers=num_workers,
-                    num_iterations=int(
-                        max_seeds % (num_workers - 1)
-                        if i == 0
-                        else max_seeds // (num_workers - 1)
-                    ),
+                    num_iterations=(max_seeds // num_workers)
+                    + int(i < max_seeds % num_workers),
                 ),
             ),
             kwargs=light_mm_kwargs,
@@ -419,6 +423,9 @@ def save_hidden_markov_model(
     logger=logging,
     pad=32,
 ):
+    logger.debug(f"node_count: f{repr(hmm.node_count())}")
+    logger.debug(f"state_count: f{repr(hmm.state_count())}")
+
     hmm_result_dict = dict(
         log_probability=hmm.log_probability(validation_matrix),
         predict=hmm.predict(validation_matrix, algorithm="map"),
@@ -454,6 +461,12 @@ def save_hidden_markov_model(
         logger.info(
             f"Saved {k.rjust(pad)} to {str(join_path(dir_name, k))}"
             + ".{txt,npy}"
+        )
+
+    if False:
+        logger.info(
+            "maximum_a_posteriori: "
+            + repr(hmm.maximum_a_posteriori(validation_matrix))
         )
 
     with open(
@@ -517,6 +530,8 @@ class StreamLogger(Callback):
 
 
 class MetaModel(object):
+    """Split input data in 'fake-training'/test set"""
+
     @property
     def has_logging_lock(self):
         return self._has_logging_lock
@@ -755,15 +770,16 @@ class MetaModel(object):
         self,
         df,
         patient_key_col,
-        postponed_logging_queue=list(),
+        hexadecimal_patient_id=False,
         observed_variables=None,
         oxygen_states=None,
+        postponed_logging_queue=list(),
         random_seed=None,
         ratio=None,
         save_to_dir=None,
         skip_preprocessing=False,
-        hexadecimal_patient_id=False,
     ):
+        """Prepare a MetaModel object ready to be used to train an HMM"""
         self._has_logging_lock = False
         self._input_data_dict = None
         self._patient_key_col = patient_key_col
@@ -1148,18 +1164,15 @@ class MetaModel(object):
         """Log info message."""
         self._log(logging.INFO, msg)
 
-    def print_matrix(
+    def show(
         self,
-        occurrences_matrix=False,
-        transition_matrix=False,
-        training_matrix=False,
         file_obj=None,
-        #
-        # style parameters
-        #
-        cell_pad=2,
-        float_decimals=3,
-        separators=True,
+        occurrences_matrix=False,
+        testing_matrix=False,
+        training_matrix=False,
+        transition_matrix=False,
+        validation_matrix=False,
+        style=dict(cell_pad=2, float_decimals=3, separators=True),
     ):
         assert (
             len(
@@ -1167,8 +1180,10 @@ class MetaModel(object):
                     b
                     for b in (
                         occurrences_matrix,
-                        transition_matrix,
+                        testing_matrix,
                         training_matrix,
+                        transition_matrix,
+                        validation_matrix,
                     )
                     if bool(b)
                 ]
@@ -1187,9 +1202,8 @@ class MetaModel(object):
         elif transition_matrix:
             matrix = self.transition_matrix
             title = "Transition"
-        elif training_matrix:
-            matrix = self.training_matrix
-            title = "Training"
+        elif training_matrix or validation_matrix or testing_matrix:
+            raise NotImplementedError()
         else:
             raise ValueError(
                 "Please set only one flag between "
@@ -1214,16 +1228,17 @@ class MetaModel(object):
                 np.float64,
             ),
         ):
-            cell_size = max(cell_size, float_decimals + 2)
+            cell_size = max(cell_size, style["float_decimals"] + 2)
 
         header = " " * (3 + 3) + "From / to".center(legend_size) + " " * 3
         header += "".join(
-            str(col).rjust(cell_size) + " " * cell_pad for col in col_names
+            str(col).rjust(cell_size) + " " * style["cell_pad"]
+            for col in col_names
         )
         if title:
             print_buffer += f"{title}\n"
         print_buffer += f"{header}\n"
-        if separators:
+        if style["separators"]:
             print_buffer += f"{'_' * len(header)}\n"
         for row in State.values():
             print_buffer += str(
@@ -1255,16 +1270,18 @@ class MetaModel(object):
                             f"got {cell_value:g} instead."
                         )
                     cell_str = "{:.16f}".format(  # right pad with many zeros
-                        round(cell_value, float_decimals)
+                        round(cell_value, style["float_decimals"])
                     )
                     cell_str = cell_str[:cell_size]  # cut unneded "padding" 0
                 else:
                     raise NotImplementedError(
                         f"Please add support to {type(cell_value)} cells"
                     )
-                print_buffer += f"{cell_str.rjust(cell_size)}{' ' * cell_pad}"
+                print_buffer += (
+                    f"{cell_str.rjust(cell_size)}{' ' * style['cell_pad']}"
+                )
             print_buffer += "\n"
-        if separators:
+        if style["separators"]:
             print_buffer += f"{'_' * len(header)}\n"
         print_buffer += "\n"
 
@@ -1375,7 +1392,7 @@ class MetaModel(object):
                 allow_pickle=False,
             )
             with open(join_path(dir_name, "occurrences_matrix.txt"), "w") as f:
-                self.print_matrix(
+                self.show(
                     occurrences_matrix=True,
                     file_obj=f,
                 )
@@ -1391,7 +1408,7 @@ class MetaModel(object):
                 allow_pickle=False,
             )
             with open(join_path(dir_name, "transition_matrix.txt"), "w") as f:
-                self.print_matrix(
+                self.show(
                     transition_matrix=True,
                     file_obj=f,
                     float_decimals=6,
@@ -1491,6 +1508,8 @@ class MetaModel(object):
 
 
 class LightMetaModel(MetaModel):
+    """Split MetaModel.fake_training into training/validation set."""
+
     @property
     def hidden_markov_model_dir(self):
         if super().worker_dir is None:
@@ -1530,6 +1549,8 @@ class LightMetaModel(MetaModel):
         return ret
 
     def __init__(self, df, patient_key_col, log_msg_queue=list(), **kwargs):
+        """LightMetaModel are 'light' because they skip preprocessing"""
+
         super().__init__(
             df=df,
             patient_key_col=patient_key_col,
