@@ -231,7 +231,7 @@ def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
     ):
         raise ValueError("only_columns argument should be an iterable")
 
-    only_columns = [col for col in only_columns if col in df.columns]
+    only_columns = sort_cols_as_in_df(only_columns, df)
 
     if normalize:
         return (
@@ -342,11 +342,11 @@ def preprocess_single_patient_df(
     # drop unobserved columns
     df = df.loc[
         :,
-        [patient_key_col]
-        + list(
-            set(rename_helper(("DataRef", "ActualState_val")))
-            .union(set(rename_helper(tuple(observed_variables))))
-            .difference({patient_key_col})
+        sort_cols_as_in_df(
+            set(
+                rename_helper((patient_key_col, "DataRef", "ActualState_val"))
+            ).union(set(rename_helper(tuple(observed_variables)))),
+            df,
         ),
     ].sort_values(rename_helper("DataRef"))
 
@@ -545,6 +545,23 @@ def save_hidden_markov_model(
 
     if compress:
         compress_directory(dir_name, logger=logger)
+
+
+def sort_cols_as_in_df(unsorted_cols, df):
+    """return 'unsorted_cols' in the same order they appear in df.columns"""
+    assert len(set(unsorted_cols)) == len(unsorted_cols), str(
+        "'unsorted_cols' must be a unique set of columns"
+    )
+    ret, unsorted_columns = list(), set(unsorted_cols)
+    for col in df.columns:
+        if col in unsorted_columns:
+            ret.append(col)
+            unsorted_columns.remove(col)
+    assert not len(unsorted_columns), str(
+        f"The following columns were not found in self._df:\t"
+        f"{', '.join(unsorted_columns)}."
+    )
+    return tuple(ret)
 
 
 class StreamLogger(Callback):
@@ -768,7 +785,7 @@ class MetaModel(object):
             self._split_dataset()
         return dataframe_to_numpy_matrix(
             self._test_df,
-            only_columns=list(
+            only_columns=self.enforced_columns_order(
                 set(rename_helper(("ActualState_val",))).union(
                     set((self.observed_variables))
                 )
@@ -781,7 +798,7 @@ class MetaModel(object):
             self._split_dataset()
         return dataframe_to_numpy_matrix(
             self._training_df,
-            only_columns=list(
+            only_columns=self.enforced_columns_order(
                 set(rename_helper(("ActualState_val",))).union(
                     set(self.observed_variables)
                 )
@@ -808,7 +825,7 @@ class MetaModel(object):
             self._split_dataset()
         return dataframe_to_numpy_matrix(
             self._validation_df,
-            only_columns=list(
+            only_columns=self.enforced_columns_order(
                 set(rename_helper(("ActualState_val",))).union(
                     set((self.observed_variables))
                 )
@@ -887,6 +904,9 @@ class MetaModel(object):
             + ")."
         )
 
+        # enforce same column order to make it easier comparing
+        # matrices during debugging
+        df = df.loc[:, tuple(sorted(df.columns, key=str.lower))]
         if skip_preprocessing:
             self.info("Skipping preprocessing")
             self._old_df = None
@@ -1184,6 +1204,10 @@ class MetaModel(object):
     def debug(self, msg=""):
         """Log debug message."""
         self._log(logging.DEBUG, msg)
+
+    def enforced_columns_order(self, cols):
+        """return 'cols' in the same order they appear in self._df.columns"""
+        return sort_cols_as_in_df(cols, self._df)
 
     def fixed_validation_set_ratio(self):
         """test_records : test_ratio = validation_records : validation_ratio"""
