@@ -45,8 +45,8 @@ from .utility import initialize_logging
 from collections import Counter
 from multiprocessing import cpu_count, Lock, Process, Queue
 from numpy.random import RandomState
-from os import makedirs
-from os.path import abspath, join as join_path, isdir
+from os import listdir, makedirs, remove, rmdir
+from os.path import abspath, basename, join as join_path, isdir, isfile
 from pomegranate import (
     HiddenMarkovModel,
     NormalDistribution,
@@ -55,6 +55,7 @@ from pomegranate.callbacks import Callback, CSVLogger
 from sys import version_info
 from time import time
 from yaml import dump, Dumper, SafeDumper
+from zipfile import ZipFile, ZIP_DEFLATED
 import logging
 import numpy as np
 import pandas as pd
@@ -62,6 +63,7 @@ import pickle
 import queue
 import signal
 
+_DISABLE_COMPRESSION = False
 _LOGGING_LOCK = Lock()
 _NEW_DF = None
 _NEW_DF_LOCK = Lock()
@@ -97,7 +99,7 @@ def _hmm_trainer(hti, **kwargs):
 
             hmm_kwargs = light_mm.hidden_markov_model_kwargs
             hmm_save_dir = light_mm.hidden_markov_model_dir
-            light_mm.save_to_disk()
+            light_mm.save_to_disk(compress=True)
 
             light_mm.info()
             light_mm.info("Building HMM from samples")
@@ -123,6 +125,7 @@ def _hmm_trainer(hti, **kwargs):
                     hmm.states
                 ),
                 logger=light_mm,
+                compress=True,
             )
         except Exception as e:
             light_mm.flush_logging_queue()  # blocking
@@ -168,6 +171,57 @@ def aggregate_constant_values(sequence):
         len(sequence) <= 1
     ), f"sequence {repr(sequence)} does not contain a constant value"
     return sequence.pop() if sequence else np.nan
+
+
+def compress_directory(path, logger=logging):
+    global _DISABLE_COMPRESSION
+    if _DISABLE_COMPRESSION:
+        logger.warning("Compression disabled by global flag")
+        return
+    if not isdir(path):
+        logger.warning(
+            f"Path '{path}' is not an existing directory; "
+            "compression aborted."
+        )
+        return
+
+    entries = [
+        join_path(path, entry)
+        for entry in sorted(listdir(path), key=str.lower)
+    ]
+    data = dict()
+    for entry in entries:
+        if not isfile(entry):
+            logger.warning(
+                f"Aborting compression because '{entry}' (in '{path}') "
+                f"is not a file as expected.\t({compress_directory.__name__}"
+                " does not recursively visit 'path' argument"
+            )
+            return
+        data[join_path(basename(path), basename(entry))] = open(
+            entry, "rb"
+        ).read()
+
+    zip_filename = f"{path}.zip"
+    try:
+        with ZipFile(
+            zip_filename, mode="x", compression=ZIP_DEFLATED, compresslevel=-1
+        ) as archive:
+            for arcname, raw_data in data.items():
+                archive.writestr(arcname, raw_data)
+    except FileExistsError as e:
+        logger.warning(str(e))
+        return
+
+    if isfile(zip_filename):
+        logger.debug(f"Successfully compressed {path} to into .zip archive")
+        for entry in entries:
+            remove(entry)
+            logger.debug(f"Removed '{entry}'")
+        rmdir(path)
+        logger.debug(f"Removed '{path}'")
+        return
+    logger.warning(f"Compression of '{path}' did not succeed")
 
 
 def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
@@ -421,6 +475,7 @@ def save_hidden_markov_model(
     validation_matrix,
     validation_labels,
     logger=logging,
+    compress=False,
     pad=32,
 ):
     logger.debug(f"node_count: f{repr(hmm.node_count())}")
@@ -444,12 +499,12 @@ def save_hidden_markov_model(
         join_path(dir_name, "hmm_constructor_parameters.yaml"), "w"
     ) as f:
         dump(hmm_kwargs, f, Dumper=SafeDumper, default_flow_style=False)
-        logger.info(f"Saved {'hmm_kwargs'.rjust(pad)} to {f.name}")
+        logger.info(f"Saved {'hmm_kwargs'.rjust(pad)} to {basename(f.name)}")
 
     for k, v in hmm_result_dict.items():
         with open(join_path(dir_name, f"{k}.yaml"), "w") as f:
             dump(v, f, Dumper=SafeDumper, default_flow_style=False)
-            logger.info(f"Saved {k.rjust(pad)} to {f.name}")
+            logger.info(f"Saved {k.rjust(pad)} to {basename(f.name)}")
 
     for k, v in dict(
         predict_proba=hmm.predict_proba(validation_matrix),
@@ -459,7 +514,7 @@ def save_hidden_markov_model(
         np.savetxt(join_path(dir_name, f"{k}.txt"), v, fmt="%16.9e")
         np.save(join_path(dir_name, f"{k}.npy"), v, allow_pickle=False)
         logger.info(
-            f"Saved {k.rjust(pad)} to {str(join_path(dir_name, k))}"
+            f"Saved {k.rjust(pad)} to {str(basename(join_path(dir_name, k)))}"
             + ".{txt,npy}"
         )
 
@@ -480,11 +535,14 @@ def save_hidden_markov_model(
         f.write(hmm.to_yaml())
         logger.info(
             f"Saved {str('trained ' + HiddenMarkovModel.__name__).rjust(pad)}"
-            f" to {'.'.join(f.name.split('.')[:-1])}"
+            f" to {'.'.join(basename(f.name).split('.')[:-1])}"
             + ".{json,"
             + f.name.split(".")[-1]
             + "}"
         )
+
+    if compress:
+        compress_directory(dir_name, logger=logger)
 
 
 class StreamLogger(Callback):
@@ -1309,7 +1367,7 @@ class MetaModel(object):
             for line in print_buffer.split("\n"):
                 self.info(line)
 
-    def save_to_disk(self, dir_name=None, pad=32):
+    def save_to_disk(self, dir_name=None, compress=False, pad=32):
         if dir_name is None:
             dir_name = self.worker_dir
         if dir_name is None:
@@ -1328,7 +1386,7 @@ class MetaModel(object):
             pickle.dump(self.input_data, f)
             self.info(
                 f"Saved {'input_data'.rjust(pad)} to "
-                f"{'.'.join(f.name.split('.')[:-1])}"
+                f"{'.'.join(basename(f.name).split('.')[:-1])}"
                 + ".{yaml,"
                 + f.name.split(".")[-1]
                 + "}"
@@ -1348,7 +1406,9 @@ class MetaModel(object):
                     default_flow_style=False,
                 )
                 if object_name != "input_data":  # logged with .pickle
-                    self.info(f"Saved {object_name.rjust(pad)} to {f.name}")
+                    self.info(
+                        f"Saved {object_name.rjust(pad)} to {basename(f.name)}"
+                    )
         with open(join_path(dir_name, "oxygen_states.yaml"), "a") as f:
             for state in self.oxygen_states:
                 f.write(f"# State({state}).name == '{State(state).name}'\n")
@@ -1364,7 +1424,7 @@ class MetaModel(object):
             )
             self.info(
                 f"Saved {'min/max column limits dictionary'.rjust(pad)} "
-                f"to {f.name}"
+                f"to {basename(f.name)}"
             )
 
         if isinstance(self, LightMetaModel):
@@ -1383,7 +1443,8 @@ class MetaModel(object):
             )
             self.info(
                 f"Saved {'start_prob'.rjust(pad)} to "
-                f"{str(join_path(dir_name,'start_prob'))}" + ".{txt,npy}"
+                f"{str(basename(join_path(dir_name,'start_prob')))}"
+                + ".{txt,npy}"
             )
 
             np.save(
@@ -1392,13 +1453,10 @@ class MetaModel(object):
                 allow_pickle=False,
             )
             with open(join_path(dir_name, "occurrences_matrix.txt"), "w") as f:
-                self.show(
-                    occurrences_matrix=True,
-                    file_obj=f,
-                )
+                self.show(file_obj=f, occurrences_matrix=True)
             self.info(
                 f"Saved {'occurrences_matrix'.rjust(pad)} to "
-                + f"{str(join_path(dir_name, 'occurrences_matrix'))}"
+                + f"{str(basename(join_path(dir_name, 'occurrences_matrix')))}"
                 + ".{txt,npy}"
             )
 
@@ -1408,14 +1466,10 @@ class MetaModel(object):
                 allow_pickle=False,
             )
             with open(join_path(dir_name, "transition_matrix.txt"), "w") as f:
-                self.show(
-                    transition_matrix=True,
-                    file_obj=f,
-                    float_decimals=6,
-                )
+                self.show(file_obj=f, transition_matrix=True, float_decimals=6)
             self.info(
                 f"Saved {'transition_matrix'.rjust(pad)} to "
-                + f"{str(join_path(dir_name, 'transition_matrix'))}"
+                + f"{str(basename(join_path(dir_name, 'transition_matrix')))}"
                 + ".{txt,npy}"
             )
 
@@ -1446,7 +1500,7 @@ class MetaModel(object):
             )
             self.info(
                 f"Saved {matrix_name.rjust(pad)} to "
-                + f"{str(join_path(dir_name, matrix_name))}"
+                + f"{str(basename(join_path(dir_name, matrix_name)))}"
                 + ".{txt,npy}"
             )
 
@@ -1459,7 +1513,7 @@ class MetaModel(object):
             )
             self.info(
                 f"Saved {df_name.rjust(pad)} to "
-                + str(join_path(dir_name, f"{df_name}.csv"))
+                + str(basename(join_path(dir_name, f"{df_name}.csv")))
             )
 
         if not isinstance(self, LightMetaModel):
@@ -1479,6 +1533,8 @@ class MetaModel(object):
                     )
                 )
             )
+        if compress:
+            compress_directory(dir_name, logger=self)
 
     def test_matrix_labels(self, unordered_model_states):
         index_of = self._state_name_to_index_mapping(unordered_model_states)
