@@ -43,7 +43,7 @@ from .parallel import _join_all
 from .preprocessing import clear_and_refill_state_transition_columns
 from .utility import initialize_logging
 from collections import Counter
-from multiprocessing import cpu_count, Lock, Process, Queue
+from multiprocessing import cpu_count, Lock, parent_process, Process, Queue
 from numpy.random import RandomState
 from os import listdir, makedirs, remove, rmdir
 from os.path import abspath, basename, join as join_path, isdir, isfile
@@ -66,6 +66,7 @@ import signal
 _LOGGING_LOCK = Lock()
 _NEW_DF = None
 _NEW_DF_LOCK = Lock()
+_SIGNAL_COUNTER = 0
 _SIGNAL_QUEUE = Queue()
 _STATS_QUEUE = Queue()
 _WORKERS_POOL = list()
@@ -156,12 +157,26 @@ def _hmm_trainer(hti, **kwargs):
 
 
 def _sig_handler(sig_num, stack_frame):
-    global _SIGNAL_QUEUE, _WORKERS_POOL
+    if parent_process() is not None:
+        return
+
+    # only main process arrives here
+    global _SIGNAL_COUNTER, _SIGNAL_QUEUE, _WORKERS_POOL
     for w in _WORKERS_POOL:
         logging.info(
             f"Received signal {sig_num}; sending SIGTERM to worker {w.name}"
         )
         _SIGNAL_QUEUE.put(None)
+
+    logging.info("Please wait until all workers ACK and finish gracefully")
+
+    _SIGNAL_COUNTER += 1
+    if _SIGNAL_COUNTER >= 3:
+        for w in _WORKERS_POOL:
+            logging.warning(f"Killing worker {w.name}")
+            w.kill()
+        logging.critical("EXIT FORCED")
+        raise SystemExit("\nEXIT FORCED\n")
 
 
 def aggregate_constant_values(sequence):
