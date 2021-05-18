@@ -63,7 +63,6 @@ import pickle
 import queue
 import signal
 
-_DISABLE_COMPRESSION = False
 _LOGGING_LOCK = Lock()
 _NEW_DF = None
 _NEW_DF_LOCK = Lock()
@@ -174,9 +173,8 @@ def aggregate_constant_values(sequence):
 
 
 def compress_directory(path, logger=logging):
-    global _DISABLE_COMPRESSION
-    if _DISABLE_COMPRESSION:
-        logger.warning("Compression disabled by global flag")
+    if getattr(parsed_args(), "debug_mode", False):
+        logger.info("Compression disabled by -d/--debug-mode CLI argument")
         return
     if not isdir(path):
         logger.warning(
@@ -1610,6 +1608,7 @@ class LightMetaModel(MetaModel):
         return dict(
             algorithm="baum-welch",
             max_iterations=getattr(parsed_args(), "max_iter", 1e8),
+            min_iterations=max(1, getattr(parsed_args(), "min_iter", 1)),
             n_components=len(self.oxygen_states),
             n_init=128,  # initialize kmeans n times before taking the best
             name=f"HMM__seed_{self._random_seed:0>6d}",

@@ -40,7 +40,7 @@
 """
 
 from .column_rules import rename_helper
-from .constants import MIN_PYTHON_VERSION
+from .constants import AVG_ITER_TIME, MIN_PYTHON_VERSION
 from argparse import (
     ArgumentDefaultsHelpFormatter,
     ArgumentParser,
@@ -55,6 +55,12 @@ from typing import Any, Dict, Iterator, Optional, TextIO, Tuple, Union
 from yaml import dump, load
 
 _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
+    ("-d", "--debug",): dict(
+        action="store_true",
+        default=False,
+        dest="debug_mode",
+        help=SUPPRESS,
+    ),
     ("-i", "--input",): dict(
         help="Excel input file containing the DataFrame to parse",
         metavar="xlsx",
@@ -67,9 +73,15 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="N",
         type=int,
     ),
-    ("--max-iter",): dict(
+    ("-l", "--min-iter",): dict(
+        default=max(1, round(30 / AVG_ITER_TIME)),  # 30 seconds
+        help=SUPPRESS,  # minimum number of iterations
+        type=int,
+    ),
+    ("-m", "--max-iter",): dict(
         default=1e8,
-        help="Maximum number of iterations",
+        help="Maximum number of iterations, "
+        f"on average an iteration takes {AVG_ITER_TIME:.3f} seconds.",
         metavar="int",
         type=int,
     ),

@@ -75,6 +75,8 @@ APPLE_GREEN = "#8DB600"
 # https://en.wikipedia.org/w/index.php?title=Bissextile_year&redirect=yes
 AVERAGE_DAYS_PER_YEAR = 365 + 1 / 4 - 1 / 100 + 1 / 400
 
+AVG_ITER_TIME = 6.283185  # seconds
+
 BOOLEANIZATION_MAP = {
     "": np.nan,
     "nan": np.nan,
