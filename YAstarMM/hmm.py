@@ -500,6 +500,14 @@ def save_hidden_markov_model(
         log_probability=hmm.log_probability(validation_matrix),
         predict=hmm.predict(validation_matrix, algorithm="map"),
         score=float(hmm.score(validation_matrix, validation_labels)),
+        state_mapping={
+            state.name.replace(" ", "_"): i
+            for i, state in enumerate(hmm.states)
+            if not any(
+                (state.name.endswith("-start"), state.name.endswith("-end"))
+            )
+        },
+        validation_labels=validation_labels.tolist(),
     )
     logger.info()
     for k, v in hmm_result_dict.items():
@@ -594,10 +602,10 @@ class StreamLogger(Callback):
 
     def on_epoch_end(self, logs):
         self.log(
-            "    ".join(
+            "  ".join(
                 (
-                    f"[{logs['epoch']:>3d}]",
-                    f"Improved: {logs['improvement']:16.9f}",
+                    f"[iter {logs['epoch']:>3d}]",
+                    f"Improved: {logs['improvement']:17.9f}",
                     f"in {logs['duration']:6.3f} s",
                 )
             )
@@ -610,11 +618,11 @@ class StreamLogger(Callback):
     def on_training_end(self, logs):
         self._t_end = time()
         total_improvement = logs["total_improvement"]
-        self.log(f"Total Improvement: {total_improvement:15.9f}")
-        self.log(f"Training took (s): {self._t_end-self._t_start:15.3f}")
+        self.log(f"Total Improvement: {total_improvement:19.9f}")
+        self.log(f"Training took (s): {self._t_end-self._t_start:19.3f}")
         self.log(
             "Average Epoch Time (s): "
-            f"{sum(self._all_epochs)/len(self._all_epochs):10.3f}"
+            f"{sum(self._all_epochs)/len(self._all_epochs):14.3f}"
         )
         self.log()
 
@@ -1010,7 +1018,7 @@ class MetaModel(object):
                         else ""
                     )
                     + str(
-                        " and "
+                        " and"
                         if lower_outliers > 0 and upper_outliers > 0
                         else ""
                     )
