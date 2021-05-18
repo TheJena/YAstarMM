@@ -1071,11 +1071,11 @@ class MetaModel(object):
                 self.debug(f"Test set ratio is: {self._ratio:.3f}")
         assert (
             isinstance(self._ratio, float)
-            and self._ratio > 0
-            and self._ratio < 1
+            and self._ratio >= 1 / self._df.shape[0]
+            and self._ratio <= 1 - (1 / self._df.shape[0])
         ), str(
-            "Ratio (CLI argument --ratio-{validation,test}-set) "
-            "is not in (0, 1)"
+            "Ratio (CLI argument --ratio-{validation,test}-set) is not "
+            f"in ({1 / self._df.shape[0]}, {1 - (1 / self._df.shape[0])})"
         )
         self.debug(f"Splitting with ratio {self._ratio:.6f}")
         self.debug(
@@ -1085,6 +1085,7 @@ class MetaModel(object):
         )
         target_df = None
         target_rows = max(1, round(self._df.shape[0] * self._ratio))
+        self._ratio = target_rows / self._df.shape[0]
 
         patients_left = [
             patient_id
