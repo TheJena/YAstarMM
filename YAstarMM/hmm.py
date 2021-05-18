@@ -90,7 +90,7 @@ def _hmm_trainer(hti, **kwargs):
                 hti.df, random_seed=seed, log_msg_queue=log_msg_queue, **kwargs
             )
 
-            light_mm.print_start_probability()
+            light_mm.show_start_probability()
             light_mm.show(occurrences_matrix=True)
             light_mm.show(transition_matrix=True)
             if False:
@@ -226,7 +226,9 @@ def compress_directory(path, logger=logging):
 
 def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
     """Many thanks to https://stackoverflow.com/a/41532180"""
-    if only_columns is None:
+    if only_columns is None or not isinstance(
+        only_columns, (list, set, tuple)
+    ):
         raise ValueError("only_columns argument should be an iterable")
 
     only_columns = [col for col in only_columns if col in df.columns]
@@ -307,7 +309,7 @@ def preprocess_single_patient_df(
         "This function should process one patient at a time"
     )
     patient_id = int(
-        set(df.loc[:, patient_key_col].to_list()).pop(),
+        set(df.loc[:, patient_key_col].astype("string").to_list()).pop(),
         base=16 if hexadecimal_patient_id else 10,
     )
     log_prefix = str(
@@ -478,8 +480,8 @@ def save_hidden_markov_model(
     compress=False,
     pad=32,
 ):
-    logger.debug(f"node_count: f{repr(hmm.node_count())}")
-    logger.debug(f"state_count: f{repr(hmm.state_count())}")
+    logger.debug(f"node_count: {repr(hmm.node_count())}")
+    logger.debug(f"state_count: {repr(hmm.state_count())}")
 
     hmm_result_dict = dict(
         log_probability=hmm.log_probability(validation_matrix),
@@ -664,7 +666,7 @@ class MetaModel(object):
                         )
                         self.info(
                             f"[PREPROCESSING]"
-                            f"[patient{int(patient)}] added missing state "
+                            f"[patient {patient}] added missing state "
                             f"({str(State(records[prev_date]))}) "
                             f"for {repr(date)}"
                         )
@@ -910,9 +912,9 @@ class MetaModel(object):
                     self.patient_id: self._df_old.loc[
                         :, self.patient_id
                     ].astype("string" if hexadecimal_patient_id else "Int64"),
-                    rename_helper("DataRef"): self._df_old.loc[
-                        :, rename_helper("DataRef")
-                    ].dt.normalize(),  # truncate HH:MM:SS
+                    rename_helper("DataRef"): pd.to_datetime(
+                        self._df_old.loc[:, rename_helper("DataRef")]
+                    ).dt.normalize(),  # truncate HH:MM:SS
                 }
             )
             self._df_old.sort_values(rename_helper("DataRef")).groupby(
@@ -1230,7 +1232,7 @@ class MetaModel(object):
         training_matrix=False,
         transition_matrix=False,
         validation_matrix=False,
-        style=dict(cell_pad=2, float_decimals=3, separators=True),
+        **kwargs,
     ):
         assert (
             len(
@@ -1251,6 +1253,12 @@ class MetaModel(object):
             "Please set only one flag between "
             "{occurrences,transition,training}_matrix"
         )
+        style = {
+            k: kwargs.get(k, v)
+            for k, v in dict(
+                cell_pad=2, float_decimals=3, separators=True
+            ).items()
+        }
         print_buffer = str()
 
         col_names = State.values()
@@ -1305,21 +1313,9 @@ class MetaModel(object):
             print_buffer += " | "
             for col in range(len(col_names)):
                 cell_value = matrix[row][col]
-                if isinstance(
-                    cell_value,
-                    (
-                        int,
-                        np.uint16,
-                    ),
-                ):
+                if isinstance(cell_value, (int, np.uint16)):
                     cell_str = str(cell_value)
-                elif isinstance(
-                    cell_value,
-                    (
-                        float,
-                        np.float64,
-                    ),
-                ):
+                elif isinstance(cell_value, (float, np.float64)):
                     if not np.isnan(cell_value):
                         assert cell_value <= 1 and cell_value >= 0, str(
                             "This function expects float values "
@@ -1349,8 +1345,8 @@ class MetaModel(object):
             for line in print_buffer.split("\n"):
                 self.info(line)
 
-    def print_start_probability(
-        self, float_decimals=3, cell_pad=2, file_obj=None
+    def show_start_probability(
+        self, file_obj=None, float_decimals=3, cell_pad=2
     ):
         print_buffer = "\n\nStart probability:  "
         print_buffer += str(" " * cell_pad).join(
@@ -1481,16 +1477,29 @@ class MetaModel(object):
             if not hasattr(self, matrix_name):
                 self.debug(f"No {type(self).__name__}.{matrix_name} was found")
                 continue
+            header = self.enforced_columns_order(
+                set(rename_helper(("ActualState_val",))).union(
+                    set(self.observed_variables)
+                )
+            )
+            col_size = max(16, max(len(repr(col)) + 1 for col in header))
             np.savetxt(
                 join_path(dir_name, f"{matrix_name}.txt"),
                 getattr(self, matrix_name),
-                fmt="%16.9e",
+                fmt=f"%{col_size}.9e",
                 header=str(
-                    list(
-                        set(rename_helper(("ActualState_val",))).union(
-                            set(self.observed_variables)
+                    "["
+                    + str(
+                        ", ".join(
+                            (
+                                repr(col).rjust(
+                                    col_size - int(3 if i == 0 else 1)
+                                )
+                                for i, col in enumerate(header)
+                            )
                         )
                     )
+                    + "]"
                 ),
             )
             np.save(
