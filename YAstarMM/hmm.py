@@ -1225,10 +1225,13 @@ class MetaModel(object):
     def fixed_validation_set_ratio(self):
         """test_records : test_ratio = validation_records : validation_ratio"""
         test_records = self._test_df.shape[0]
-        validation_records = (
-            test_records
-            * getattr(parsed_args(), "validation_set_ratio_hmm")
-            / getattr(parsed_args(), "test_set_ratio_composer")
+        validation_records = max(
+            1,
+            round(
+                test_records
+                * getattr(parsed_args(), "validation_set_ratio_hmm")
+                / getattr(parsed_args(), "test_set_ratio_composer")
+            ),
         )
         new_validation_ratio = validation_records / self._training_df.shape[0]
         self.debug(
