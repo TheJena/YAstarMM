@@ -850,6 +850,7 @@ class MetaModel(object):
         hexadecimal_patient_id=False,
         observed_variables=None,
         oxygen_states=None,
+        outliers="ignore",
         postponed_logging_queue=list(),
         random_seed=None,
         ratio=None,
@@ -857,8 +858,10 @@ class MetaModel(object):
         skip_preprocessing=False,
     ):
         """Prepare a MetaModel object ready to be used to train an HMM"""
+        assert outliers in ("clip", "ignore")
         self._has_logging_lock = False
         self._input_data_dict = None
+        self._outliers_treatment = outliers
         self._patient_key_col = patient_key_col
         self._postponed_logging_queue = postponed_logging_queue
         if random_seed is None:
@@ -978,65 +981,53 @@ class MetaModel(object):
                         .to_dict()
                     ).replace(" 'min'", "\n\t 'min'")
                 )
-                lower_outliers = self._df[
-                    self._df[col] < minimum_maximum_column_limits()[col]["min"]
-                ][col].count()
-                upper_outliers = self._df[
-                    self._df[col] > minimum_maximum_column_limits()[col]["max"]
-                ][col].count()
-                if lower_outliers > 0 or upper_outliers > 0:
-                    self.warning(
-                        f"Column '{col}' has:"
-                        + str(
-                            f"\n\t{lower_outliers} values < "
-                            f"{minimum_maximum_column_limits()[col]['min']}"
-                            if lower_outliers > 0
-                            else ""
-                        )
-                        + str(
-                            f"\n\t{upper_outliers} values > "
-                            f"{minimum_maximum_column_limits()[col]['max']}"
-                            if upper_outliers > 0
-                            else ""
-                        )
-                        + "\n\tthese outliers will be clipped "
-                        "to the respective limits."
+                lower_outliers = self._df.loc[
+                    self._df[col] < data["min"], col
+                ].count()
+                upper_outliers = self._df.loc[
+                    self._df[col] > data["max"], col
+                ].count()
+                if lower_outliers == 0 and upper_outliers == 0:
+                    continue
+                self.warning(
+                    f"Column '{col}' has: "
+                    + str(
+                        f"{lower_outliers} lower outliers (< {data['min']})"
+                        if lower_outliers > 0
+                        else ""
                     )
-                    show_final_hint = True
+                    + str(
+                        " and "
+                        if lower_outliers > 0 and upper_outliers > 0
+                        else ""
+                    )
+                    + str(
+                        f"{upper_outliers} upper outliers (> {data['max']})"
+                        if upper_outliers > 0
+                        else ""
+                    )
+                    + "; they will be "
+                    + str(
+                        "clipped to the respective limits."
+                        if outliers == "clip"
+                        else "considered as nan"
+                    )
+                )
+                show_final_hint = True
+                if outliers == "clip":
+                    self._df.loc[:, col] = self._df.loc[:, col].clip(
+                        lower=data["min"], upper=data["max"]
+                    )
+                elif outliers == "ignore":
+                    self._df.loc[self._df[col] < data["min"], col] = np.nan
+                    self._df.loc[self._df[col] > data["max"], col] = np.nan
+                else:
+                    assert outliers in ("clip", "ignore")
             if show_final_hint:
                 self.warning(
                     "To change the above lower/upper limits please "
                     "consider the column percentiles in the debug log"
                 )
-
-            # force outlier values to lower/upper bounds of each column
-            self._df.loc[
-                :,
-                [
-                    c
-                    for c in minimum_maximum_column_limits().keys()
-                    if c in self._df.columns
-                ],
-            ] = self._df.loc[
-                :,
-                [
-                    c
-                    for c in minimum_maximum_column_limits().keys()
-                    if c in self._df.columns
-                ],
-            ].clip(
-                lower={
-                    col: data["min"]
-                    for col, data in minimum_maximum_column_limits().items()
-                    if col in self._df.columns
-                },
-                upper={
-                    col: data["max"]
-                    for col, data in minimum_maximum_column_limits().items()
-                    if col in self._df.columns
-                },
-                axis="columns",
-            )
             self.info("Ended preprocessing")
 
         self._split_dataset()
@@ -1434,11 +1425,12 @@ class MetaModel(object):
             for state in self.oxygen_states:
                 f.write(f"# State({state}).name == '{State(state).name}'\n")
 
-        with open(
-            join_path(dir_name, "clip_out_outliers_dictionary.yaml"), "w"
-        ) as f:
+        with open(join_path(dir_name, "outliers_treatement.yaml"), "w") as f:
             dump(
-                minimum_maximum_column_limits(),
+                dict(
+                    _outliers_treatment=self._outliers_treatment,
+                    min_max_column_limits=minimum_maximum_column_limits(),
+                ),
                 f,
                 Dumper=SafeDumper,
                 default_flow_style=False,
