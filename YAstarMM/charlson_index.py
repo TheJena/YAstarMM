@@ -699,7 +699,6 @@ def compute_charlson_index(
     severe, so a doctor would never omit this piece of information
     given its importance in the choice of the patient therapy.
     """
-    global _CHARLSON_COUNTER
 
     cci, patient_counter, valid_columns = 0, Counter(), 0
     for function_returning_points in sorted(

@@ -60,6 +60,7 @@ from logging import (
 )
 from hashlib import blake2b
 from multiprocessing import Lock
+from numpy.random import RandomState
 from os import mkdir
 from os.path import abspath, expanduser, isdir, isfile, join as join_path
 from psutil import virtual_memory, swap_memory
@@ -277,6 +278,20 @@ def initialize_logging(level=INFO, debug_mode=False):
     debug("")
     debug("Logging initialized and temporary file created")
     debug("")
+
+
+def random_string(length):
+    return "".join(
+        chr(i)
+        for i in RandomState(seed=None).choice(
+            sorted(
+                set(range(ord("0"), ord("9") + 1))
+                .union(set(range(ord("A"), ord("Z") + 1)))
+                .union(set(range(ord("a"), ord("z") + 1)))
+            ),
+            size=length,
+        )
+    )
 
 
 def row_selector(default_bool=True, index=None, size=None):

@@ -41,7 +41,7 @@ from .flavoured_parser import parsed_args
 from .model import State
 from .parallel import _join_all
 from .preprocessing import clear_and_refill_state_transition_columns
-from .utility import initialize_logging
+from .utility import initialize_logging, random_string
 from collections import Counter
 from multiprocessing import cpu_count, Lock, parent_process, Process, Queue
 from numpy.random import RandomState
@@ -333,23 +333,31 @@ def preprocess_single_patient_df(
         + "]"
     )
 
-    if any(
-        (
-            rename_helper("CHARLSON_INDEX") in observed_variables,
-            "CHARLSON_INDEX" in observed_variables,
-        )
-    ):
-        # let's compute the charlson-index before dropping unobserved columns
-        logger.debug(f"{log_prefix}")
-        cci = compute_charlson_index(df, logger=logger, log_prefix=log_prefix)
-        logger.debug(
-            f"{log_prefix} Charlson-Index is "
-            + str(f"= {cci:2.0f}" if pd.notna(cci) else "not computable")
-            + "\n"
-        )
-        # assign updated Charlson-Index
-        df.loc[:, rename_helper("CHARLSON_INDEX")] = (
-            float(cci) if pd.notna(cci) else np.nan
+    if str(getattr(parsed_args(), "update_charlson_index", True)) == str(True):
+        if any(
+            (
+                rename_helper("CHARLSON_INDEX") in observed_variables,
+                "CHARLSON_INDEX" in observed_variables,
+            )
+        ):
+            # let's compute the charlson-index before dropping unobserved columns
+            logger.debug(f"{log_prefix}")
+            cci = compute_charlson_index(
+                df, logger=logger, log_prefix=log_prefix
+            )
+            logger.debug(
+                f"{log_prefix} Charlson-Index is "
+                + str(f"= {cci:2.0f}" if pd.notna(cci) else "not computable")
+                + "\n"
+            )
+            # assign updated Charlson-Index
+            df.loc[:, rename_helper("CHARLSON_INDEX")] = (
+                float(cci) if pd.notna(cci) else np.nan
+            )
+    else:
+        logger.info(
+            "Charlson-Index will be used as it is "
+            "(because of --update-charlson-index False CLI argument)"
         )
 
     # drop unobserved columns
@@ -392,13 +400,12 @@ def run():
 
     initialize_logging(getattr(parsed_args(), "log_level", LOGGING_LEVEL))
 
+    input_file = getattr(parsed_args(), "input")
     patient_key_col = rename_helper(
         getattr(parsed_args(), "patient_key_col"), errors="warn"
     )
     df = clear_and_refill_state_transition_columns(
-        parsed_args().input.name
-        if parsed_args().input.name.endswith(".xlsx")
-        else parsed_args().input,
+        input_file.name if input_file.name.endswith(".xlsx") else input_file,
         patient_key_col=patient_key_col,
         log_level=logging.CRITICAL,
         show_statistics=getattr(
@@ -885,6 +892,7 @@ class MetaModel(object):
         self._outliers_treatment = outliers
         self._patient_key_col = patient_key_col
         self._postponed_logging_queue = postponed_logging_queue
+        self._previous_msg = random_string(length=80)
         if random_seed is None:
             self._random_seed = RandomState(seed=None).randint(0, 999999)
         else:
@@ -1059,6 +1067,9 @@ class MetaModel(object):
             f"{' ' if not msg.startswith('[') else ''}"
             f"{msg}"
         )
+        if msg == self._previous_msg:
+            return
+        self._previous_msg = msg
         if not self.has_logging_lock and self._postponed_logging_queue:
             # If there are pending messages try to get the logging
             # lock and flush them; but without wasting too much time

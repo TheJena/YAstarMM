@@ -178,6 +178,11 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="float",
         type=float,
     ),
+    ("--update-charlson-index",): dict(
+        choices=(str(False), str(True)),
+        default=True,
+        help=SUPPRESS,
+    ),
 }
 """Command line interface arguments to parse."""
 
