@@ -1465,6 +1465,14 @@ class MetaModel(object):
             f"{abspath(dir_name)}"
         )
 
+        if not isinstance(self, LightMetaModel):
+            with open(join_path(dir_name, "flavour.yaml"), "w") as f:
+                parsed_args().dump(f)
+                self.info(
+                    f"Saved {'CLI arguments'.rjust(pad)} to "
+                    f"{basename(f.name)}\t\t\t(importable with -f/--flavour)"
+                )
+
         with open(join_path(dir_name, "input_data.pickle"), "wb") as f:
             pickle.dump(self.input_data, f)
             self.info(
