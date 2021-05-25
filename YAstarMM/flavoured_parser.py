@@ -120,6 +120,11 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="str",
         type=str,
     ),
+    ("--outlier-limits",): dict(
+        choices=("strict", "relaxed", "nonsense"),
+        default="strict",
+        help=SUPPRESS,
+    ),
     ("--oxygen-states",): dict(
         action="append",
         choices=[

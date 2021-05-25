@@ -1303,27 +1303,75 @@ def matches_static_rule(column_name):
 
 
 @lru_cache(maxsize=None)
-def minimum_maximum_column_limits():
-    """Built considering 0.03 and 0.97 percentile of the respective columns."""
+def minimum_maximum_column_limits(criteria):
+    """:criteria: == 'strict' limits were built with reference ranges from:
+        https://en.wikipedia.org/wiki/Reference_ranges_for_blood_tests and
+        https://en.wikipedia.org/wiki/Clinical_urine_tests#Target_parameters
+    whilst :criteria: == 'relaxed' limits were built
+        considering the 0.03 and 0.97 percentiles of the respective columns;
+    finally :criteria: == 'nonsense' limits were built
+        without any particular logic in mind
+    """
+    assert criteria in ("strict", "relaxed", "nonsense")
     return {
         rename_helper(k): v
-        for k, v in {  # reference ranges in comments
-            "AGE": dict(min=0, max=150),
+        for k, v in {  # units in comments
             "ActualState_val": dict(min=0, max=7),
-            "CARBON_DIOXIDE_PARTIAL_PRESSURE": dict(min=35, max=45),  # mmHg
+            "AGE": dict(min=0, max=128),
+            "CARBON_DIOXIDE_PARTIAL_PRESSURE": dict(
+                min=dict(strict=33, relaxed=25, nonsense=20).get(criteria),
+                max=dict(strict=51, relaxed=55, nonsense=80).get(criteria),
+            ),  # mmHg
             "CHARLSON_INDEX": dict(min=0, max=37),
-            "CREATININE": dict(min=0.7, max=1.3),  # mg/dL
+            "CREATININE": dict(
+                min=dict(strict=0.5, relaxed=0.48, nonsense=0).get(criteria),
+                max=dict(strict=1.6, relaxed=2.03, nonsense=15).get(criteria),
+            ),  # mg/dL
             "DYSPNEA": dict(min=0, max=1),  # just a boolean
-            "D_DIMER": dict(min=0, max=1700),  # g/mL
-            "GPT_ALT": dict(min=0, max=45),  # IU/L
-            "HOROWITZ_INDEX": dict(min=350, max=450),
-            "LDH": dict(min=50, max=150),  # U/L
+            "D_DIMER": dict(
+                min=dict(strict=50, relaxed=40, nonsense=50).get(criteria),
+                max=dict(strict=2000, relaxed=4000, nonsense=40000).get(
+                    criteria
+                ),
+            ),  # ng/mL
+            "GPT_ALT": dict(
+                min=dict(strict=5, relaxed=0, nonsense=5).get(criteria),
+                max=dict(strict=56, relaxed=255, nonsense=255).get(criteria),
+            ),  # IU/L
+            "HOROWITZ_INDEX": dict(
+                min=dict(strict=100, relaxed=50, nonsense=50).get(criteria),
+                max=dict(strict=450, relaxed=500, nonsense=450).get(criteria),
+            ),
+            "LDH": dict(
+                min=dict(strict=50, relaxed=50, nonsense=50).get(criteria),
+                max=dict(strict=150, relaxed=1200, nonsense=1550).get(
+                    criteria
+                ),
+            ),  # U/L
             "LYMPHOCYTE": dict(min=0, max=100),  # % on total white blood cells
-            "PH": dict(min=7.35, max=7.45),
-            "PHOSPHOCREATINE": dict(min=0, max=0.7),
-            "PROCALCITONIN": dict(min=0, max=0.5),  # ng/mL
-            "RESPIRATORY_RATE": dict(min=12, max=40),  # breaths per min
-            "UREA": dict(min=15, max=55),  # mg/dL
+            "PH": dict(
+                # in urine test it can actually range from 5 to 7
+                min=dict(strict=7.31, relaxed=7.3, nonsense=6).get(criteria),
+                max=dict(strict=7.45, relaxed=7.6, nonsense=8).get(criteria),
+            ),
+            "PHOSPHOCREATINE": dict(
+                min=dict(strict=0, relaxed=0, nonsense=0).get(criteria),
+                max=dict(strict=0.7, relaxed=30, nonsense=50).get(criteria),
+            ),  # mg/dL
+            "PROCALCITONIN": dict(
+                min=dict(strict=0, relaxed=0, nonsense=0).get(criteria),
+                max=dict(strict=0.5, relaxed=2.6201, nonsense=10).get(
+                    criteria
+                ),
+            ),  # ng/mL
+            "RESPIRATORY_RATE": dict(
+                min=dict(strict=12, relaxed=12, nonsense=10).get(criteria),
+                max=dict(strict=40, relaxed=40, nonsense=100).get(criteria),
+            ),  # breaths per min
+            "UREA": dict(
+                min=dict(strict=7, relaxed=7, nonsense=5).get(criteria),
+                max=dict(strict=21, relaxed=160, nonsense=155).get(criteria),
+            ),  # mg/dL
         }.items()
     }
 

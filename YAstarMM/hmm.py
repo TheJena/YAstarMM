@@ -247,24 +247,24 @@ def dataframe_to_numpy_matrix(df, only_columns=None, normalize=False):
     only_columns = sort_cols_as_in_df(only_columns, df)
 
     if normalize:
-        return (
-            df.loc[:, only_columns]
-            .sub(
-                [
-                    minimum_maximum_column_limits()[col]["min"]
-                    for col in only_columns
-                ],
-                axis="columns",
+        raise NotImplementedError(  # define {MINIMUM,MAXIMUM}_COLUMN_LIMIT
+            """
+            return (
+                df.loc[:, only_columns]
+                .sub(
+                    [MINIMUM_COLUMN_LIMIT for col in only_columns],
+                    axis="columns",
+                )
+                .div(
+                    [
+                        MAXIMUM_COLUMN_LIMIT - MINIMUM_COLUMN_LIMIT
+                        for col in only_columns
+                    ],
+                    axis="columns",
+                )
+                .to_numpy()
             )
-            .div(
-                [
-                    minimum_maximum_column_limits()[col]["max"]
-                    - minimum_maximum_column_limits()[col]["min"]
-                    for col in only_columns
-                ],
-                axis="columns",
-            )
-            .to_numpy()
+            """
         )
     return df.loc[:, only_columns].to_numpy()
 
@@ -340,7 +340,7 @@ def preprocess_single_patient_df(
                 "CHARLSON_INDEX" in observed_variables,
             )
         ):
-            # let's compute the charlson-index before dropping unobserved columns
+            # let's compute the charlson-index before dropping unobserved cols
             logger.debug(f"{log_prefix}")
             cci = compute_charlson_index(
                 df, logger=logger, log_prefix=log_prefix
@@ -500,8 +500,8 @@ def save_hidden_markov_model(
     compress=False,
     pad=32,
 ):
-    logger.debug(f"node_count: {repr(hmm.node_count())}")
-    logger.debug(f"state_count: {repr(hmm.state_count())}")
+    logger.debug(f"node_count:  {hmm.node_count():3d}")
+    logger.debug(f"state_count: {hmm.state_count():3d}")
 
     hmm_result_dict = dict(
         log_probability=hmm.log_probability(validation_matrix),
@@ -999,7 +999,9 @@ class MetaModel(object):
             _NEW_DF_LOCK.release()
 
             show_final_hint = False
-            for col, data in minimum_maximum_column_limits().items():
+            for col, data in minimum_maximum_column_limits(
+                getattr(parsed_args(), "outlier_limits")
+            ).items():
                 if col not in self._df.columns:
                     continue
                 self.debug(
@@ -1018,44 +1020,46 @@ class MetaModel(object):
                 ].count()
                 if lower_outliers == 0 and upper_outliers == 0:
                     continue
-                self.warning(
-                    f"Column '{col}' has: "
-                    + str(
-                        f"{lower_outliers} lower outliers (< {data['min']})"
-                        if lower_outliers > 0
-                        else ""
-                    )
-                    + str(
-                        " and"
-                        if lower_outliers > 0 and upper_outliers > 0
-                        else ""
-                    )
-                    + str(
-                        f"{upper_outliers} upper outliers (> {data['max']})"
-                        if upper_outliers > 0
-                        else ""
-                    )
-                    + "; they will be "
-                    + str(
-                        "clipped to the respective limits."
-                        if outliers == "clip"
-                        else "considered as nan"
-                    )
-                )
+
+                for outliers, kind, limit in (
+                    (lower_outliers, "lower", data["min"]),
+                    (upper_outliers, "upper", data["max"]),
+                ):
+                    if outliers > 0:
+                        self.warning(
+                            str(
+                                f"Column {repr(col).rjust(34)} has: "
+                                f"{outliers:5d} {kind} outliers ("
+                                f"{dict(lower='<', upper='>')[kind]} "
+                                f"{limit:9.3f})"
+                            )
+                        )
                 show_final_hint = True
-                if outliers == "clip":
+                if self._outliers_treatment == "clip":
                     self._df.loc[:, col] = self._df.loc[:, col].clip(
                         lower=data["min"], upper=data["max"]
                     )
-                elif outliers == "ignore":
+                elif self._outliers_treatment == "ignore":
                     self._df.loc[self._df[col] < data["min"], col] = np.nan
                     self._df.loc[self._df[col] > data["max"], col] = np.nan
                 else:
-                    assert outliers in ("clip", "ignore")
+                    assert self._outliers_treatment in ("clip", "ignore")
             if show_final_hint:
+                self.warning(
+                    "The above outliers will be "
+                    + str(
+                        "clipped to the respective limits."
+                        if self._outliers_treatment == "clip"
+                        else "considered as nan."
+                    )
+                )
                 self.warning(
                     "To change the above lower/upper limits please "
                     "consider the column percentiles in the debug log"
+                )
+            if self._outliers_treatment == "clip":
+                self.warning(
+                    "Clipping outlier values can be very dangerous! "
                 )
             self.info("Ended preprocessing")
 
@@ -1464,7 +1468,9 @@ class MetaModel(object):
             dump(
                 dict(
                     _outliers_treatment=self._outliers_treatment,
-                    min_max_column_limits=minimum_maximum_column_limits(),
+                    min_max_column_limits=minimum_maximum_column_limits(
+                        getattr(parsed_args(), "outlier_limits")
+                    ),
                 ),
                 f,
                 Dumper=SafeDumper,
