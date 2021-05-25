@@ -783,12 +783,18 @@ def fill_missing_days_in_hospital(
         patient_df = df.loc[
             patient_selector, [key_col, date_col, range_start, range_end]
         ]
-        assert len(set(patient_df[range_start].dropna())) == 1, repr(
-            patient_df[range_start].tolist()
-        )
-        assert len(set(patient_df[range_end].dropna())) == 1, repr(
-            patient_df[range_end].tolist()
-        )
+        if not len(set(patient_df[range_start].dropna())) == 1:
+            warning(
+                f"'{patient}' has only nan in '{range_start}' "
+                + repr(patient_df[range_start].tolist())
+            )
+            continue
+        if not len(set(patient_df[range_end].dropna())) == 1:
+            debug(
+                f"'{patient}' has only nan in '{range_end}' "
+                + repr(patient_df[range_end].tolist())
+            )
+            continue
 
         start_date = patient_df[range_start].min(skipna=True)
         end_date = patient_df[range_end].max(skipna=True)

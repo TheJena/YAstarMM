@@ -1911,7 +1911,7 @@ def translator_helper(old_col_name, usetex=False, bold=False):
                     r"\mathbf{" if bold else "",
                     "pCO",
                     r"}" if bold else "",
-                    r"}_{\mathrm{
+                    r"}_{\mathrm{",
                     r"\mathbf{" if bold else "",
                     "2",
                     r"}" if bold else "",

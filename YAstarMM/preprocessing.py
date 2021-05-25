@@ -863,8 +863,8 @@ def clear_and_refill_state_transition_columns(
         "Please set either use_insomnia=True or use_dumbydog=True"
     )
     assert patient_key_col in whole_df.columns, str(
-        "'patient_key_col' must be a column of the passed whole_df"
-    )
+        "'patient_key_col' must be a column of the passed whole_df\n"
+    ) + repr(sorted(whole_df.columns, key=str.lower))
 
     saved_log_level = logging.getLogger().getEffectiveLevel()
 

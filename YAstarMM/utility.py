@@ -269,8 +269,9 @@ def initialize_logging(level=INFO, debug_mode=False):
     stderr_handle.setFormatter(Formatter("{levelname}: {message}", style="{"))
     root_logger.addHandler(stderr_handle)
 
-    numexpr_logger = getLogger("numexpr")
-    numexpr_logger.setLevel(WARNING)
+    # make foreign modules quiet in logfile
+    for module_name in ("matplotlib", "numexpr", "PIL"):
+        getLogger(module_name).setLevel(WARNING)
 
     info("Temporary file with debugging log will be available here:")
     info(f"{' ' * 4}{logfile.name}")

@@ -272,6 +272,11 @@ HARDCODED_COLUMN_NAMES = dict(
 )
 """Lazy renaming mapping for columns not covered by regular expressions"""
 
+HmmTrainerInput = namedtuple(
+    "HmmTrainerInput",
+    ["signal_queue", "df", "worker_id", "num_workers", "num_iterations"],
+)
+
 ICD9_CODES = {
     "aids_hiv": (42,),
     "cerebrovascular_disease": (

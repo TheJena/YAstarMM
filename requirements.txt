@@ -2,9 +2,12 @@
 #
 PyYAML
 Bottleneck			# recommended by pandas
+Cython				# required by pomegranate
 ipython
+matplotlib
 numexpr			# recommended by pandas
 numpy
 openpyxl			# required by pandas.read_excel() for 'xlsx'
 pandas
+pomegranate
 # xlrd				# versions >= 2.0, support only 'xls' format
