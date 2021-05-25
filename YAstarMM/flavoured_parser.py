@@ -188,6 +188,11 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         default=True,
         help=SUPPRESS,
     ),
+    ("--use-latex",): dict(
+        action="store_true",
+        default=False,
+        help=SUPPRESS,
+    ),
 }
 """Command line interface arguments to parse."""
 
@@ -423,7 +428,7 @@ class FlavouredNamespace(object):
             elif field == "flavour":
                 # skip original 'flavour' file name
                 continue
-            elif field.startswith("debug"):
+            elif field.startswith("debug") and not field.endswith("mode"):
                 # skip debugging attributes with suppressed help message
                 continue
             else:

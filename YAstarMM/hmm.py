@@ -40,6 +40,7 @@ from .constants import LOGGING_LEVEL, HmmTrainerInput, MIN_PYTHON_VERSION
 from .flavoured_parser import parsed_args
 from .model import State
 from .parallel import _join_all
+from .plot import plot_histogram_distribution
 from .preprocessing import clear_and_refill_state_transition_columns
 from .utility import initialize_logging, random_string
 from collections import Counter
@@ -998,6 +999,8 @@ class MetaModel(object):
             _NEW_DF = None
             _NEW_DF_LOCK.release()
 
+            self.plot_observed_variables_distributions(has_outliers=True)
+
             show_final_hint = False
             for col, data in minimum_maximum_column_limits(
                 getattr(parsed_args(), "outlier_limits")
@@ -1060,9 +1063,12 @@ class MetaModel(object):
             if self._outliers_treatment == "clip":
                 self.warning(
                     "Clipping outlier values can be very dangerous! "
+                    "Please compare the plot of the observed variables "
+                    "distributions to be sure that no distortion has "
+                    "been introduced"
                 )
             self.info("Ended preprocessing")
-
+        self.plot_observed_variables_distributions(has_outliers=False)
         self._split_dataset()
 
     def _log(self, level, msg):
@@ -1278,6 +1284,32 @@ class MetaModel(object):
     def info(self, msg=""):
         """Log info message."""
         self._log(logging.INFO, msg)
+
+    def plot_observed_variables_distributions(self, has_outliers):
+        suptitle = None
+        if getattr(parsed_args(), "debug_mode", False):
+            specs = dict(charlson_index="original")
+            if str(True) == str(
+                getattr(parsed_args(), "update_charlson_index", str(False))
+            ):
+                specs["charlson_index"] = "updated"
+            if has_outliers:
+                specs["has_outliers"] = True
+            else:
+                # explain how outliers were treated/removed
+                specs["outliers_treatement"] = self._outliers_treatment
+                specs["outliers_limits"] = getattr(
+                    parsed_args(), "outlier_limits"
+                )
+            suptitle = f"{type(self).__name__}({repr(specs)[1:-1]})"
+            suptitle = suptitle.replace("_", " ")
+        plot_histogram_distribution(
+            self._df.loc[:, self.observed_variables],
+            has_outliers,
+            logger=self,
+            save_to_dir=self.worker_dir,
+            suptitle=suptitle,
+        )
 
     def show(
         self,

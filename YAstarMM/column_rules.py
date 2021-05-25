@@ -1896,6 +1896,64 @@ def switch_to_date_features(sheet_name):
     )  # return empty dict when sheet name not in dictionary
 
 
+@lru_cache(maxsize=None)
+def translator_helper(old_col_name, usetex=False, bold=False):
+    """Make column names pretty enough to be used as plot titles"""
+    if bold and not usetex:
+        warning("bold flag is useless without also usetex flag set")
+    col_name = _rename_helper(old_col_name, errors="quiet")
+    for new_col_name, match_list in {
+        "Age": ("age",),
+        {
+            True: "".join(
+                (
+                    r"$\mathrm{",
+                    r"\mathbf{" if bold else "",
+                    "pCO",
+                    r"}" if bold else "",
+                    r"}_{\mathrm{
+                    r"\mathbf{" if bold else "",
+                    "2",
+                    r"}" if bold else "",
+                    r"}}$",
+                )
+            ),
+            False: "pCO2",
+        }.get(usetex): ("carbon_dioxide_partial_pressure",),
+        "Charlson-Index": ("",),
+        "Creatinine": ("",),
+        "D-dimer": ("",),
+        "Dyspnea": ("",),
+        "Respiratory rate": ("",),
+        "Alanine transaminase": ("gpt_alt",),
+        "Horowitz-Index": ("horowitz_index",),
+        "Lactate dehydrogenase": ("ldh",),
+        "Lymphocytes": ("",),
+        "Phosphocreatine": ("pcr",),
+        "pH": ("ph",),
+        "Procalcitonin": ("",),
+        "Urea": ("urea",),
+    }.items():
+        if col_name.lower().replace(" ", "_").replace("-", "_") in match_list:
+            debug(
+                "Translator helper hit a match:\t"
+                f"{old_col_name} ~> {col_name} ~> {new_col_name}"
+            )
+            if usetex and bold:
+                return "".join(
+                    (
+                        r"\textbf{ " if usetex else "",
+                        new_col_name,
+                        r" }" if usetex else "",
+                    )
+                )
+
+            return new_col_name
+    raise KeyError(
+        f"No translation was found for '{old_col_name}' ('{col_name}')"
+    )
+
+
 def verticalize_features():
     for item in [
         VerticalizeFeatureItem("ANAKINRA", "ANAKINRA", [""]),
