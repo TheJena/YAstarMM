@@ -193,6 +193,11 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         default=False,
         help=SUPPRESS,
     ),
+    ("-v", "--verbose"): dict(
+        action="store_true",
+        default=False,
+        help=SUPPRESS,
+    ),
 }
 """Command line interface arguments to parse."""
 

@@ -130,10 +130,19 @@ def _hmm_trainer(hti, **kwargs):
                 compress=True,
             )
         except Exception as e:
-            light_mm.flush_logging_queue()  # blocking
-            raise e
+            if "light_mm" in locals():
+                light_mm._log(logging.CRITICAL, str(e))
+                light_mm.flush_logging_queue()  # blocking
+            else:
+                # something crashed before/during light_mm memory allocation
+                logging.critical(str(e))
+                raise e
         finally:
-            log_msg_queue = light_mm.flush_logging_queue(timeout=1.5)
+            if "light_mm" in locals():
+                log_msg_queue = light_mm.flush_logging_queue(timeout=1.5)
+            else:
+                # something crashed before/during light_mm memory allocation
+                raise NotImplementedError("coming soon ...")
 
         if getattr(parsed_args(), "random_seed", None) is None:
             try:
@@ -400,7 +409,10 @@ def run():
     assert getattr(parsed_args(), "save_dir") is not None
     assert getattr(parsed_args(), "seeds_to_explore") > 0
 
-    initialize_logging(getattr(parsed_args(), "log_level", LOGGING_LEVEL))
+    initialize_logging(
+        getattr(parsed_args(), "log_level", LOGGING_LEVEL),
+        debug_mode=getattr(parsed_args(), "verbose", False),
+    )
 
     input_file = getattr(parsed_args(), "input")
     patient_key_col = rename_helper(
@@ -486,8 +498,8 @@ def run():
 
     logging.debug(f"All epoch execution times: {repr(all_stats)}")
     logging.info(
-        "Average Epoch Time (s): "
-        f"{sum(all_stats) / len(all_stats):.3f} "
+        "Mean Epoch Time (s): "
+        f"{np.mean(all_stats):.3f} ± {np.std(all_stats):.3f} "
         f"(over all {num_workers} workers)"
     )
 
@@ -613,7 +625,7 @@ class StreamLogger(Callback):
         self.log(
             "  ".join(
                 (
-                    f"[iter {logs['epoch']:>3d}]",
+                    f"[iter {logs['epoch']:>4d}]",
                     f"Improved: {logs['improvement']:17.9f}",
                     f"in {logs['duration']:6.3f} s",
                 )
@@ -627,11 +639,11 @@ class StreamLogger(Callback):
     def on_training_end(self, logs):
         self._t_end = time()
         total_improvement = logs["total_improvement"]
-        self.log(f"Total Improvement: {total_improvement:19.9f}")
-        self.log(f"Training took (s): {self._t_end-self._t_start:19.3f}")
+        self.log(f"Total Improvement: {total_improvement:20.9f}")
+        self.log(f"Training took (s): {self._t_end-self._t_start:20.3f}")
         self.log(
             "Average Epoch Time (s): "
-            f"{sum(self._all_epochs)/len(self._all_epochs):14.3f}"
+            f"{sum(self._all_epochs)/len(self._all_epochs):15.3f}"
         )
         self.log()
 
@@ -933,7 +945,10 @@ class MetaModel(object):
         self.debug(
             f"oxygen_states: {repr(self.oxygen_states)[1:-1]}\t(i.e.: "
             + str(
-                ", ".join(str(State(num).name) for num in self.oxygen_states)
+                ", ".join(
+                    State(state_value).name
+                    for state_value in self.oxygen_states
+                )
             )
             + ")."
         )
@@ -1111,7 +1126,6 @@ class MetaModel(object):
             "Ratio (CLI argument --ratio-{validation,test}-set) is not "
             f"in ({1 / self._df.shape[0]}, {1 - (1 / self._df.shape[0])})"
         )
-        self.debug(f"Splitting with ratio {self._ratio:.6f}")
         self.debug(
             "full dataset shape: ".rjust(pad)
             + f"{self._df.shape[0]:7d} rows, "
@@ -1120,6 +1134,10 @@ class MetaModel(object):
         target_df = None
         target_rows = max(1, round(self._df.shape[0] * self._ratio))
         self._ratio = target_rows / self._df.shape[0]
+        self.debug(
+            f"Splitting with ratio {self._ratio:.6f} "
+            f"(target_rows: {target_rows})"
+        )
 
         patients_left = [
             patient_id
@@ -1141,9 +1159,16 @@ class MetaModel(object):
                     or patient_df.shape[0] + target_df.shape[0] <= target_rows
                 ):
                     if target_df is None:
+                        self.debug(f"target_df has {0:6d} rows")
                         target_df = patient_df
+                        self.debug(
+                            f"A) target_df has {target_df.shape[0]:6d} rows"
+                        )
                     else:
                         target_df = pd.concat([target_df, patient_df])
+                        self.debug(
+                            f"B) target_df has {target_df.shape[0]:6d} rows"
+                        )
                     continue  # successfully added all patients records
             # try to add the last ratio of patient's records to the
             # validation/test set
@@ -1157,17 +1182,29 @@ class MetaModel(object):
                 cut_row = patient_df.shape[0]
                 -(target_rows - target_df.shape[0]),
             if self._training_df is None:
+                self.debug(f"{' ' * 32}training_df has {0:6d} rows")
                 self._training_df = patient_df.iloc[:cut_row, :]
+                self.debug(
+                    f"{' ' * 32}training_df has "
+                    f"{self._training_df.shape[0]:6d} rows{' ' * 4}(E"
+                )
             else:
                 self._training_df = pd.concat(
                     [self._training_df, patient_df.iloc[:cut_row, :]]
                 )
+                self.debug(
+                    f"{' ' * 32}training_df has "
+                    f"{self._training_df.shape[0]:6d} rows{' ' * 4}(F"
+                )
             if target_df is None:
+                self.debug(f"target_df has {0:6d} rows")
                 target_df = patient_df.iloc[cut_row:, :]
+                self.debug(f"C) target_df has {target_df.shape[0]:6d} rows")
             else:
                 target_df = pd.concat(
                     [target_df, patient_df.iloc[cut_row:, :]]
                 )
+                self.debug(f"D) target_df has {target_df.shape[0]:6d} rows")
         assert target_df.shape[0] == target_rows, str(
             f"{'validation' if isinstance(self, LightMetaModel) else 'test'} "
             f"matrix has {target_df.shape[0]} "
@@ -1230,7 +1267,7 @@ class MetaModel(object):
             state = getattr(State, state_name)
             self.info(
                 "In the current model, state "
-                + repr(str(state)).ljust(2 + max(len(s.name) for s in State))
+                + repr(str(state)).ljust(2 + max(len(str(s)) for s in State))
                 + f" has index {ret[state.name]} "
                 f"while its default enum value is {state.value}"
             )
