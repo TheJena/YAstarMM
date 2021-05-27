@@ -672,14 +672,14 @@ class MetaModel(object):
                     f"'{rename_helper('DataRef')}' instead of a pd.Timestamp"
                 )
 
-                date = pd.to_datetime(date.date())  # truncate HH:MM:SS
+                date = date.normalize()  # truncate to midnight
                 state_val = row[rename_helper("ActualState_val")]
                 assert isinstance(state_val, (int, float)), str(
                     f"Patient '{repr(patient)}' has {repr(state_val)} "
                     f"in columnn '{rename_helper('ActualState_val')}'"
                     " instead of a float or integer."
                 )
-                actual_state = State(state_val)
+                actual_state = State(int(state_val))
                 if patient not in self._input_data_dict:
                     self._input_data_dict[patient] = dict()
                 self._input_data_dict[patient][date] = max(
@@ -693,53 +693,18 @@ class MetaModel(object):
                     actual_state,
                 )
 
-            # ensure each day in between first and last patient timestamp
-            # exist and has a state
-            log_empty_line = False
-            for patient in sorted(self._input_data_dict.keys()):
-                if log_empty_line:
-                    self.info(
-                        "[PREPROCESSING]"
-                    )  # separate added timestamps of different users
-                    log_empty_line = False
-
-                records = self._input_data_dict[patient]
-                for date in sorted(
-                    pd.date_range(
-                        start=min(records.keys()),
-                        end=max(records.keys()),
-                        freq="D",
-                        normalize=True,
-                    )
-                    .to_series()
-                    .tolist()
-                ):
-                    if date not in records.keys():
-                        log_empty_line = True
-                        prev_date = max(d for d in records.keys() if d < date)
-                        assert (
-                            date - prev_date
-                        ).total_seconds() == 24 * 60 ** 2, str(
-                            f"Timedelta '{repr(date - prev_date)}' should "
-                            "be a day"  # make black auto-formatting prettier
-                        )
-                        self.info(
-                            f"[PREPROCESSING]"
-                            f"[patient {patient}] added missing state "
-                            f"({str(State(records[prev_date]))}) "
-                            f"for {repr(date)}"
-                        )
-                        records[date] = records[prev_date]
         return self._input_data_dict
 
     @property
     def light_meta_model_df(self):
+        assert not isinstance(self, LightMetaModel)
         if self._training_df is None:
             self._split_dataset()
         return self._training_df.copy(deep=True)
 
     @property
     def light_meta_model_kwargs(self):
+        assert not isinstance(self, LightMetaModel)
         return dict(
             hexadecimal_patient_id=None,
             observed_variables=self.observed_variables,
@@ -959,7 +924,27 @@ class MetaModel(object):
         if skip_preprocessing:
             self.info("Skipping preprocessing")
             self._old_df = None
-            self._df = df
+            self._df = df.loc[
+                #
+                # cut away records about oxygen states not of interest (if any)
+                df[rename_helper("ActualState_val")].isin(self.oxygen_states),
+                #
+                # drop unobserved columns (if any)
+                sort_cols_as_in_df(
+                    set(
+                        rename_helper(
+                            (patient_key_col, "DataRef", "ActualState_val")
+                        )
+                    ).union(
+                        set(
+                            rename_helper(
+                                tuple(observed_variables), errors="quiet"
+                            )
+                        )
+                    ),
+                    df,
+                ),
+            ].sort_values(rename_helper("DataRef"))
         else:
             self.info(
                 "Starting preprocessing ("
@@ -1155,8 +1140,10 @@ class MetaModel(object):
                 # try to add all the patient's records to the
                 # validation/test set
                 if (
-                    target_df is None
-                    or patient_df.shape[0] + target_df.shape[0] <= target_rows
+                    target_df is None and patient_df.shape[0] <= target_rows
+                ) or (
+                    target_df is not None
+                    and target_df.shape[0] + patient_df.shape[0] <= target_rows
                 ):
                     if target_df is None:
                         self.debug(f"target_df has {0:6d} rows")
@@ -1172,7 +1159,13 @@ class MetaModel(object):
                     continue  # successfully added all patients records
             # try to add the last ratio of patient's records to the
             # validation/test set
-            cut_row = round(patient_df.shape[0] * (1 - self._ratio))
+            cut_row = max(
+                1,
+                min(
+                    patient_df.shape[0],
+                    round(patient_df.shape[0] * (1 - self._ratio)),
+                ),
+            )
             if target_df is not None and (
                 patient_df.shape[0]
                 - cut_row  # validation/test records
@@ -1182,25 +1175,25 @@ class MetaModel(object):
                 cut_row = patient_df.shape[0]
                 -(target_rows - target_df.shape[0]),
             if self._training_df is None:
-                self.debug(f"{' ' * 32}training_df has {0:6d} rows")
+                self.debug(f"{' '*32}training_df has {0:6d} rows")
                 self._training_df = patient_df.iloc[:cut_row, :]
                 self.debug(
-                    f"{' ' * 32}training_df has "
-                    f"{self._training_df.shape[0]:6d} rows{' ' * 4}(E"
+                    f"{' '*32}training_df has "
+                    f"{self._training_df.shape[0]:6d} rows{' '*4}(E"
                 )
             else:
                 self._training_df = pd.concat(
                     [self._training_df, patient_df.iloc[:cut_row, :]]
                 )
                 self.debug(
-                    f"{' ' * 32}training_df has "
-                    f"{self._training_df.shape[0]:6d} rows{' ' * 4}(F"
+                    f"{' '*32}training_df has "
+                    f"{self._training_df.shape[0]:6d} rows{' '*4}(F"
                 )
             if target_df is None:
                 self.debug(f"target_df has {0:6d} rows")
                 target_df = patient_df.iloc[cut_row:, :]
                 self.debug(f"C) target_df has {target_df.shape[0]:6d} rows")
-            else:
+            elif patient_df.iloc[cut_row:, :].shape[0] > 0:
                 target_df = pd.concat(
                     [target_df, patient_df.iloc[cut_row:, :]]
                 )
@@ -1255,8 +1248,8 @@ class MetaModel(object):
             for i, state in enumerate(unordered_model_states)
         }
 
-        for state_enum in self.oxygen_states:
-            state_name = str(State(state_enum)).replace(" ", "_")
+        for state_value in self.oxygen_states:
+            state_name = State(state_value).name
             assert state_name in ret, str(
                 f"Could not found any state named '{state_name}'."
                 "\nWhen building the Hidden Markov Model, please "
@@ -1268,7 +1261,7 @@ class MetaModel(object):
             self.info(
                 "In the current model, state "
                 + repr(str(state)).ljust(2 + max(len(str(s)) for s in State))
-                + f" has index {ret[state.name]} "
+                + f" has index {ret[state_name]} "
                 f"while its default enum value is {state.value}"
             )
         return ret
