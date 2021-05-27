@@ -53,6 +53,7 @@ from pomegranate import (
     NormalDistribution,
 )
 from pomegranate.callbacks import Callback, CSVLogger
+from random import randint
 from sys import version_info
 from time import time
 from yaml import dump, Dumper, SafeDumper
@@ -895,7 +896,7 @@ class MetaModel(object):
         self._postponed_logging_queue = postponed_logging_queue
         self._previous_msg = random_string(length=80)
         if random_seed is None:
-            self._random_seed = RandomState(seed=None).randint(0, 999999)
+            self._random_seed = randint(0, 999999)
         else:
             self._random_seed = int(random_seed)
         self._random_state = RandomState(seed=self._random_seed)
