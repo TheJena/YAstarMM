@@ -51,6 +51,7 @@ from argparse import (
 from multiprocessing import cpu_count
 from pprint import pformat as pretty_format
 from sys import version_info
+from textwrap import wrap
 from typing import Any, Dict, Iterator, Optional, TextIO, Tuple, Union
 from yaml import dump, load
 
@@ -555,10 +556,36 @@ def parsed_args(
             dump_filename=_namespace.dump_flavoured_parser,
         )
         if getattr(_flavour_namespace, "help", False) in (None, "full"):
-            raise SystemExit(cli_parser.format_help())
+            raise SystemExit(pretty_tabulate(cli_parser.format_help()))
         if _PARSED_ARGS.debug_parser:
             raise SystemExit(_PARSED_ARGS._debug())
     return _PARSED_ARGS
+
+
+def pretty_tabulate(help_message, indent="  ", sep="  "):
+    max_line_length = max(len(line) for line in help_message.split("\n"))
+    usage, description, body = help_message.split("\n\n", maxsplit=2)
+    body = "\n".join(body.split("\n")[1:])
+    table = {
+        f"-{key.strip()}": " ".join(value.split())
+        for key, value in dict(
+            arg.split("  ", maxsplit=1)
+            for arg in f"\n{body}".split("\n  -")
+            if arg
+        ).items()
+    }
+    left_col_size = max(len(k) for k in table.keys())
+    right_col_size = max_line_length - len(indent) - len(sep) - left_col_size
+    ret = "\n".join((usage, "", description, ""))
+    for k, v in sorted(
+        table.items(),
+        key=lambda t: t[0].replace("-h", r"\0").lstrip("-").lower(),
+    ):
+        ret += f"\n{indent}{k.ljust(left_col_size)}{sep}"
+        ret += f"\n{indent}{' '*left_col_size}{sep}".join(
+            wrap(v, right_col_size)
+        )
+    return ret
 
 
 if __name__ == "__main__":
