@@ -59,7 +59,20 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         action="store_true",
         default=False,
         dest="debug_mode",
+        full_help="Add debug info to plots, disable results compression",
         help=SUPPRESS,
+    ),
+    ("--debug-parser",): dict(
+        action="store_true",
+        full_help="Print internal state of the CLI argument parser",
+        help=SUPPRESS,
+    ),
+    ("--dump-flavoured-parser",): dict(
+        default=None,
+        metavar="file",
+        full_help="Dump FlavouredNamespace to a file",
+        help=SUPPRESS,
+        type=FileType("w"),
     ),
     ("--ignore-expert-knowledge",): dict(
         action="store_true",
@@ -76,20 +89,21 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("-j", "--num-workers",): dict(
         default=cpu_count(),
         dest="max_workers",
-        help="Split workload among N workers",
-        metavar="N",
+        help="Split workload among several workers",
         type=int,
     ),
     ("-l", "--min-iter",): dict(
         default=max(1, round(30 / AVG_ITER_TIME)),  # 30 seconds
-        help=SUPPRESS,  # minimum number of iterations
+        full_help="Minimum number of iterations to run Baum-Welch training"
+        f" for, on average an iteration takes {AVG_ITER_TIME:.3f} seconds.",
+        help=SUPPRESS,
         type=int,
     ),
     ("-m", "--max-iter",): dict(
-        default=1e8,
-        help="Maximum number of iterations, "
-        f"on average an iteration takes {AVG_ITER_TIME:.3f} seconds.",
-        metavar="int",
+        default=min(2000, round(AVG_ITER_TIME * 5 * 60)),  # 5 minutes
+        full_help="Maximum number of iterations to run Baum-Welch training"
+        f" for, on average an iteration takes {AVG_ITER_TIME:.3f} seconds.",
+        help=SUPPRESS,
         type=int,
     ),
     ("-n", "--explore-n-seeds",): dict(
@@ -97,6 +111,7 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         dest="seeds_to_explore",
         help="Train at most N HMMs with different seeds",
         metavar="N",
+        mutex_group="hmm_seeds_definition",
         type=int,
     ),
     ("--observed-variables",): dict(
@@ -129,6 +144,10 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("--outlier-limits",): dict(
         choices=("strict", "relaxed", "nonsense"),
         default="strict",
+        full_help="Preset of outlier limits; "
+        "strict = what theoretically should be used, "
+        "relaxed = what 0.03 and 0.97 percentiles suggest, "
+        "nonsense = what a random monkey suggested",
         help=SUPPRESS,
     ),
     ("--oxygen-states",): dict(
@@ -149,8 +168,8 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ),
     ("--patient-key-col",): dict(
         dest="patient_key_col",
-        help="Column containing patients' identifiers",
-        metavar="str",
+        full_help="Column containing patients' identifiers",
+        help=SUPPRESS,
         type=str,
     ),
     ("-r", "--random-seed",): dict(
@@ -181,6 +200,7 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help="Initialize random generator used to "
         "split the training/validation set for the HMMs "
         "(and exit after exausting the list)",
+        mutex_group="hmm_seeds_definition",
         nargs="+",
         type=int,
     ),
@@ -193,29 +213,34 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("--threshold", "--stop-threshold",): dict(
         default=1e-9,
         dest="stop_threshold",
-        help="Stop fitting when this threshold improvement ratio is reached",
+        full_help="Stop fitting when this threshold improvement ratio is reached",
+        help=SUPPRESS,
         metavar="float",
         type=float,
     ),
     ("--turn-off-little-hmm-auto-detection",): dict(
         action="store_true",
         default=False,
-        help="Do not auto spawn ad-hoc-little-HMM workloads "
+        full_help="Do not auto spawn ad-hoc-little-HMM workloads "
         "among the available workers in a load balanced way",
+        help=SUPPRESS,
     ),
     ("--update-charlson-index",): dict(
         choices=(str(False), str(True)),
         default=True,
+        full_help="Compute and fix Charlson-Index scores",
         help=SUPPRESS,
     ),
     ("--use-latex",): dict(
         action="store_true",
         default=False,
+        full_help="Render text in plots with LaTeX",
         help=SUPPRESS,
     ),
     ("-v", "--verbose"): dict(
         action="store_true",
         default=False,
+        full_help="Increase logging verbosity",
         help=SUPPRESS,
     ),
 }
@@ -233,7 +258,9 @@ _DESCRIPTION: str = """
     ones read from the 'flavour' file."""
 
 
-def _get_cli_parser(flavour_dict: Dict[str, Any]) -> ArgumentParser:
+def _get_cli_parser(
+    flavour_dict: Dict[str, Any], help_value: Union[bool, None, str] = False
+) -> ArgumentParser:
     """Return parser of all arguments except the one about the 'flavour'."""
     global _CLI_ARGUMENTS, _DESCRIPTION
 
@@ -247,27 +274,19 @@ def _get_cli_parser(flavour_dict: Dict[str, Any]) -> ArgumentParser:
     hardcoded_default_values.update(flavour_dict)
 
     cli_parser = ArgumentParser(
-        add_help=True,
+        add_help=False,
         allow_abbrev=True,
         description=_DESCRIPTION,
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
 
-    # Please add here debugging arguments with suppressed help message
-
-    # Optional file to dump FlavouredNamespace for debugging purpose
     cli_parser.add_argument(
-        "--debug-dump-flavoured-parser",
-        default=None,
-        help=SUPPRESS,
-        type=FileType("w"),
-    )
-
-    # Flag which triggers the print of a useful debugging message
-    cli_parser.add_argument(
-        "--debug-parser",
-        action="store_true",
-        help=SUPPRESS,
+        "-h",
+        "--help",
+        default=SUPPRESS,
+        help="Show this help message and exit",
+        nargs="?",
+        metavar="full",
     )
 
     # WARNING: what follows is not the real -f / --flavour argument !!!
@@ -287,6 +306,8 @@ def _get_cli_parser(flavour_dict: Dict[str, Any]) -> ArgumentParser:
         "_get_flavour_parser" in globals()
     ), "Please update the comment in the line before this one :D"
 
+    abolish_required = help_value in (None, "full")
+    mutex_groups = dict()
     for args, kwargs in _CLI_ARGUMENTS.items():
         longest_name = args[-1].lstrip("-").replace("-", "_")
         if longest_name == "input":
@@ -294,7 +315,25 @@ def _get_cli_parser(flavour_dict: Dict[str, Any]) -> ArgumentParser:
         kwargs["default"] = hardcoded_default_values.pop(
             longest_name, kwargs.get("default", None)
         )
-        cli_parser.add_argument(*args, **kwargs)
+        if help_value == "full" and kwargs.get("help", SUPPRESS) == SUPPRESS:
+            kwargs["help"] = kwargs.pop("full_help", SUPPRESS)
+        else:
+            kwargs.pop("full_help", None)  # drop this unused kwarg
+        if "metavar" not in kwargs and "type" in kwargs:
+            kwargs["metavar"] = kwargs["type"].__name__
+        if abolish_required:
+            kwargs["required"] = False
+        if "mutex_group" not in kwargs:
+            cli_parser.add_argument(*args, **kwargs)
+        else:
+            mutex_group = kwargs.pop("mutex_group")
+            if mutex_group not in mutex_groups:
+                mutex_groups[
+                    mutex_group
+                ] = cli_parser.add_mutually_exclusive_group(
+                    required=not abolish_required
+                )
+            mutex_groups[mutex_group].add_argument(*args, **kwargs)
     return cli_parser
 
 
@@ -303,6 +342,14 @@ def _get_flavour_parser(
 ) -> ArgumentParser:  # make black auto-formatting prettier
     """Return parser of only the 'flavour' argument."""
     flavour_parser = ArgumentParser(add_help=False, allow_abbrev=False)
+    flavour_parser.add_argument(
+        "-h",
+        "--help",
+        choices=("full",),
+        default=False,
+        help=SUPPRESS,
+        nargs="?",
+    )
     flavour_parser.add_argument(
         # This is the real 'flavour' argument to edit !!!
         "-f",
@@ -488,21 +535,29 @@ def parsed_args(
         _flavour_namespace, _args_left = _get_flavour_parser(
             default_flavour_file
         ).parse_known_args()
+        if getattr(_flavour_namespace, "help", False) in (None, "full"):
+            _args_left.extend(["-h", getattr(_flavour_namespace, "help")])
 
         # Parse 'flavour' file (if absent or empty, a dictionary is returned)
         _flavour_dict = _get_flavour_dict(_flavour_namespace.flavour_file)
 
         # 2nd parser is the real one and parses the remaining cli arguments
-        _namespace = _get_cli_parser(_flavour_dict).parse_args(_args_left)
+        cli_parser = _get_cli_parser(
+            _flavour_dict,
+            help_value=getattr(_flavour_namespace, "help", False),
+        )
+        _namespace = cli_parser.parse_args(_args_left)
 
         # Populate the global variable which other modules will import
         _PARSED_ARGS = FlavouredNamespace(
             flavour=_flavour_dict,
             namespace=_namespace,
-            dump_filename=_namespace.debug_dump_flavoured_parser,
+            dump_filename=_namespace.dump_flavoured_parser,
         )
-    if _PARSED_ARGS.debug_parser:
-        raise SystemExit(_PARSED_ARGS._debug())
+        if getattr(_flavour_namespace, "help", False) in (None, "full"):
+            raise SystemExit(cli_parser.format_help())
+        if _PARSED_ARGS.debug_parser:
+            raise SystemExit(_PARSED_ARGS._debug())
     return _PARSED_ARGS
 
 
