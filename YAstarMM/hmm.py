@@ -322,6 +322,60 @@ def function_returning_worst_value_for(column, patient_key_col):
     )
 
 
+def observables_of_interest(state_sequence):
+    assert isinstance(state_sequence, (list, tuple)) and all(
+        isinstance(state_value, int) for state_value in state_sequence
+    ), str("state_sequence must be a sequence of integer")
+    ret = set()
+    state_sequence = set(state_sequence).intersection(
+        {
+            getattr(State, name.replace(" ", "_"))
+            for name in State.non_final_states_names()
+        }
+    )
+    for state_a in state_sequence:
+        for state_b in state_sequence:
+            if state_a >= state_b:
+                continue
+            # half of the len(state_sequence)**2 combinations arrive here
+            for state_pool, observables in {
+                (State.No_O2.value, State.O2.value): (
+                    "CREATININE",
+                    "DYSPNEA",
+                    "D_DIMER",
+                    "GPT_ALT",
+                    "HOROWITZ_INDEX",
+                    "LYMPHOCYTE",
+                    "PHOSPHOCREATINE",
+                    "PROCALCITONIN",
+                    "RESPIRATORY_RATE",
+                ),
+                (State.O2.value, State.HFNO.value, State.NIV.value): (
+                    "CARBON_DIOXIDE_PARTIAL_PRESSURE",
+                    "DYSPNEA",
+                    "HOROWITZ_INDEX",
+                    "LDH",
+                    "PH",
+                    "RESPIRATORY_RATE",
+                ),
+                (State.NIV.value, State.Intubated.value): (
+                    "AGE",
+                    "CARBON_DIOXIDE_PARTIAL_PRESSURE",
+                    "CHARLSON_INDEX",
+                    "DYSPNEA",
+                    "HOROWITZ_INDEX",
+                    "LDH",
+                    "LYMPHOCYTE",
+                    "PH",
+                    "UREA",
+                ),
+            }.items():
+                if state_a in state_pool and state_b in state_pool:
+                    ret.update(set(rename_helper(observables)))
+                    break
+    return tuple(sorted(ret, key=str.lower))
+
+
 def preprocess_single_patient_df(
     df,
     patient_key_col,
@@ -917,6 +971,26 @@ class MetaModel(object):
             )
             + ")."
         )
+        if not getattr(parsed_args(), "ignore_expert_knowledge", False):
+            new_obs_var = set(self.observed_variables).intersection(
+                observables_of_interest(self.oxygen_states)
+            )
+            if set(self.observed_variables) != set(new_obs_var):
+                self.warning(
+                    "Updated observed variables for states:\n\t("
+                    + ", ".join(
+                        State(state_value).name
+                        for state_value in self.oxygen_states
+                    )
+                    + ")\nwith knowledge from the expert:\n\t"
+                    + repr(tuple(sorted(new_obs_var, key=str.lower)))
+                )
+                self.observed_variables = new_obs_var
+            else:
+                self.debug(
+                    "observed_variables were already "
+                    "the same suggested by domain experts"
+                )
 
         # enforce same column order to make it easier comparing
         # matrices during debugging
@@ -1705,14 +1779,30 @@ class LightMetaModel(MetaModel):
     """Split MetaModel.fake_training into training/validation set."""
 
     @property
-    def hidden_markov_model_dir(self):
+    def _worker_dir(self):
         if super().worker_dir is None:
             return None
         ret = join_path(
             super().worker_dir,
+            "__".join(
+                State(state_value).name
+                for state_value in sorted(
+                    self.oxygen_states,
+                    # fake discharge value in sorting critera to place it 1st
+                    key=lambda v: v if v != State.Discharged.value else -1,
+                )
+            ),
             f"seed_{self._random_seed:0>6d}",
-            "HiddenMarkovModel_class",
         )
+        if not isdir(ret):
+            makedirs(ret)
+        return ret
+
+    @property
+    def hidden_markov_model_dir(self):
+        if super().worker_dir is None:
+            return None
+        ret = join_path(self._worker_dir, "HiddenMarkovModel_class")
         if not isdir(ret):
             makedirs(ret)
         return ret
@@ -1734,18 +1824,13 @@ class LightMetaModel(MetaModel):
     def worker_dir(self):
         if super().worker_dir is None:
             return None
-        ret = join_path(
-            super().worker_dir,
-            f"seed_{self._random_seed:0>6d}",
-            f"{LightMetaModel.__name__}_class",
-        )
+        ret = join_path(self._worker_dir, f"{LightMetaModel.__name__}_class")
         if not isdir(ret):
             makedirs(ret)
         return ret
 
     def __init__(self, df, patient_key_col, log_msg_queue=list(), **kwargs):
         """LightMetaModel are 'light' because they skip preprocessing"""
-
         super().__init__(
             df=df,
             patient_key_col=patient_key_col,

@@ -61,6 +61,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         dest="debug_mode",
         help=SUPPRESS,
     ),
+    ("--ignore-expert-knowledge",): dict(
+        action="store_true",
+        default=False,
+        full_help="Do not update observed variables "
+        "following suggestions from experts on the domain",
+        help=SUPPRESS,
+    ),
     ("-i", "--input",): dict(
         help="Excel input file containing the DataFrame to parse",
         metavar="xlsx",
@@ -93,7 +100,6 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         type=int,
     ),
     ("--observed-variables",): dict(
-        action="append",
         choices=list(
             rename_helper(
                 (
@@ -117,7 +123,7 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         ),
         default=list(),
         help="Take into account only given observed variables",
-        metavar="str",
+        nargs="+",
         type=str,
     ),
     ("--outlier-limits",): dict(
@@ -126,7 +132,6 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help=SUPPRESS,
     ),
     ("--oxygen-states",): dict(
-        action="append",
         choices=[
             "No_O2",
             "O2",
@@ -139,7 +144,7 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         ],
         default=list(),
         help="Take into account only given oxygen states",
-        metavar="str",
+        nargs="+",
         type=str,
     ),
     ("--patient-key-col",): dict(
