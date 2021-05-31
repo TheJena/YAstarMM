@@ -92,11 +92,11 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="int",
         type=int,
     ),
-    ("-n", "--seeds-to-explore",): dict(
-        default=300,
+    ("-n", "--explore-n-seeds",): dict(
+        default=None,
         dest="seeds_to_explore",
         help="Train at most N HMMs with different seeds",
-        metavar="int",
+        metavar="N",
         type=int,
     ),
     ("--observed-variables",): dict(
@@ -153,6 +153,14 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="str",
         type=str,
     ),
+    ("-r", "--random-seed",): dict(
+        default=None,
+        dest="meta_model_random_seed",
+        help="Initialize random generator used to "
+        "split the test set for the composer",
+        metavar="int",
+        type=int,
+    ),
     ("--ratio-test-set",): dict(
         default=0.1,
         dest="test_set_ratio_composer",
@@ -167,19 +175,20 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="float",
         type=float,
     ),
+    ("-s", "--hmm-seeds",): dict(
+        default=None,
+        dest="light_meta_model_random_seeds",
+        help="Initialize random generator used to "
+        "split the training/validation set for the HMMs "
+        "(and exit after exausting the list)",
+        nargs="+",
+        type=int,
+    ),
     ("--save-dir",): dict(
         default=None,
         help="Where results will be stored",
         metavar="path",
         type=str,
-    ),
-    ("--seed", "--random-seed",): dict(
-        default=None,
-        dest="random_seed",
-        help="Initialize np.RandomState"
-        " (and exit after training a model with it)",
-        metavar="int",
-        type=int,
     ),
     ("--threshold", "--stop-threshold",): dict(
         default=1e-9,
@@ -187,6 +196,12 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help="Stop fitting when this threshold improvement ratio is reached",
         metavar="float",
         type=float,
+    ),
+    ("--turn-off-little-hmm-auto-detection",): dict(
+        action="store_true",
+        default=False,
+        help="Do not auto spawn ad-hoc-little-HMM workloads "
+        "among the available workers in a load balanced way",
     ),
     ("--update-charlson-index",): dict(
         choices=(str(False), str(True)),

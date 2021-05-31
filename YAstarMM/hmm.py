@@ -80,16 +80,28 @@ def _hmm_trainer(hti, **kwargs):
     assert num_workers > worker_id, repr(num_workers, worker_id)
     logging.info(f"Worker {worker_id} successfully started")
 
-    seed = worker_id
-    if getattr(parsed_args(), "random_seed", None) is not None:
-        seed = getattr(parsed_args(), "random_seed")
-        logging.warning(f"Using manually set seed {seed}")
+    seed_whitelist = {
+        worker_id + (i * num_workers) for i in range(hti.num_iterations)
+    }
+    hmm_seeds = getattr(parsed_args(), "light_meta_model_random_seeds", None)
+    if hmm_seeds is not None and isinstance(hmm_seeds, (list, tuple, set)):
+        seed_whitelist.intersection_update(set(hmm_seeds))
+        logging.warning(f"Using manually set seed list {repr(seed_whitelist)}")
 
     log_msg_queue = list()
-    for i in range(hti.num_iterations):
+    for seed in seed_whitelist:
         try:
             light_mm = LightMetaModel(
-                hti.df, random_seed=seed, log_msg_queue=log_msg_queue, **kwargs
+                hti.df,
+                log_msg_queue=log_msg_queue,
+                oxygen_states=[
+                    State(state_value).name
+                    for state_value in hti.workload_mapping[
+                        (seed) % len(hti.workload_mapping)
+                    ]  # round robin load balancing
+                ],
+                random_seed=seed,
+                **kwargs,
             )
 
             light_mm.show_start_probability()
@@ -144,21 +156,14 @@ def _hmm_trainer(hti, **kwargs):
                 # something crashed before/during light_mm memory allocation
                 raise NotImplementedError("coming soon ...")
 
-        if getattr(parsed_args(), "random_seed", None) is None:
-            try:
-                if hti.signal_queue.get(timeout=0.5) is None:
-                    logging.info(f"Worker {worker_id} acked to SIGTERM")
-                    break
-            except queue.Empty:
-                seed += num_workers
-        else:
-            logging.warning(
-                "Setting manually the seed forces exit "
-                "after the first model training"
-            )
-            break
+        try:
+            if hti.signal_queue.get(timeout=0.5) is None:
+                logging.info(f"Worker {worker_id} acked to SIGTERM")
+                break
+        except queue.Empty:
+            pass
 
-    if hti.num_iterations > 0:
+    if seed_whitelist:
         light_mm.flush_logging_queue()  # blocking
 
     global _STATS_QUEUE
@@ -198,8 +203,18 @@ def aggregate_constant_values(sequence):
     return sequence.pop() if sequence else np.nan
 
 
-def compress_directory(path, logger=logging):
-    if getattr(parsed_args(), "debug_mode", False):
+def compress_directory(path, logger=logging, max_seeds=100):
+    """100 explored seeds produce about a GiB of uncompressed results"""
+    if all(
+        (
+            getattr(parsed_args(), "debug_mode", False),
+            getattr(parsed_args(), "seeds_to_explore", None) is None
+            or getattr(parsed_args(), "seeds_to_explore") <= max_seeds,
+            getattr(parsed_args(), "light_meta_model_random_seeds") is None
+            or len(getattr(parsed_args(), "light_meta_model_random_seeds"))
+            <= max_seeds,
+        )
+    ):
         logger.info("Compression disabled by -d/--debug-mode CLI argument")
         return
     if not isdir(path):
@@ -461,7 +476,14 @@ def preprocess_single_patient_df(
 def run():
     assert getattr(parsed_args(), "max_workers") > 0
     assert getattr(parsed_args(), "save_dir") is not None
-    assert getattr(parsed_args(), "seeds_to_explore") > 0
+    assert any(
+        (
+            getattr(parsed_args(), "light_meta_model_random_seeds", None)
+            is not None,
+            getattr(parsed_args(), "seeds_to_explore", None) is not None
+            and getattr(parsed_args(), "seeds_to_explore", None) > 0,
+        )
+    )
 
     initialize_logging(
         getattr(parsed_args(), "log_level", LOGGING_LEVEL),
@@ -495,26 +517,29 @@ def run():
         oxygen_states=getattr(
             parsed_args(), "oxygen_states", [state.name for state in State]
         ),
-        random_seed=getattr(parsed_args(), "random_seed", None),
+        random_seed=getattr(parsed_args(), "meta_model_random_seed", None),
         save_to_dir=getattr(parsed_args(), "save_dir"),
     )
     if False:
         heavy_mm.show(training_matrix=True)
         heavy_mm.show(testing_matrix=True)
 
+    if getattr(parsed_args(), "seeds_to_explore", None) is not None:
+        max_seeds = getattr(parsed_args(), "seeds_to_explore")
+    else:
+        max_seeds = 1 + max(
+            getattr(parsed_args(), "light_meta_model_random_seeds")
+        )
+    num_workers = min(getattr(parsed_args(), "max_workers"), cpu_count())
+
     light_mm_df = heavy_mm.light_meta_model_df
     light_mm_kwargs = heavy_mm.light_meta_model_kwargs
+    light_mm_wl_map = heavy_mm.light_meta_model_workload_mapping(
+        max_seeds, num_workers
+    )
     heavy_mm.save_to_disk()
 
     heavy_mm.flush_logging_queue()  # blocking
-
-    max_seeds = getattr(parsed_args(), "seeds_to_explore")
-    num_workers = min(
-        getattr(parsed_args(), "max_workers"),
-        1
-        if getattr(parsed_args(), "random_seed", None) is not None
-        else cpu_count(),
-    )
 
     global _SIGNAL_QUEUE, _STATS_QUEUE, _WORKERS_POOL
     for sig_num in (signal.SIGINT, signal.SIGTERM):
@@ -525,12 +550,13 @@ def run():
             name=str(i),
             args=(
                 HmmTrainerInput(
-                    signal_queue=_SIGNAL_QUEUE,
                     df=light_mm_df,
-                    worker_id=i,
-                    num_workers=num_workers,
                     num_iterations=(max_seeds // num_workers)
                     + int(i < max_seeds % num_workers),
+                    num_workers=num_workers,
+                    signal_queue=_SIGNAL_QUEUE,
+                    worker_id=i,
+                    workload_mapping=light_mm_wl_map,
                 ),
             ),
             kwargs=light_mm_kwargs,
@@ -762,9 +788,6 @@ class MetaModel(object):
         return dict(
             hexadecimal_patient_id=None,
             observed_variables=self.observed_variables,
-            oxygen_states=[
-                State(state_num).name for state_num in self.oxygen_states
-            ],
             patient_key_col=self.patient_id,
             # random_seed will be taken from parsed_args()
             ratio=self.fixed_validation_set_ratio(),
@@ -1389,6 +1412,45 @@ class MetaModel(object):
     def info(self, msg=""):
         """Log info message."""
         self._log(logging.INFO, msg)
+
+    def light_meta_model_workload_mapping(self, max_seeds, num_workers):
+        assert not isinstance(self, LightMetaModel)
+        workload_mapping = {  # ad-hoc-little-HMMs
+            # zeroth mapping will be added afterwards
+            1: {State.Discharged.value, State.No_O2.value, State.O2.value},
+            2: {State.Deceased.value, State.Intubated.value, State.NIV.value},
+            3: {State.No_O2.value, State.O2.value, State.HFNO.value},
+            4: {State.Intubated.value, State.NIV.value, State.HFNO.value},
+            5: {State.O2.value, State.HFNO.value, State.NIV.value},
+            6: {State.No_O2.value, State.O2.value},
+            7: {State.NIV.value, State.Intubated.value},
+        }
+        if getattr(
+            parsed_args(), "turn_off_little_hmm_auto_detection", False
+        ) or max_seeds < 1 + len(workload_mapping):
+            workload_mapping = {  # dummy mapping to train all-in-one-HMMs
+                1: set(self.oxygen_states)  # i.e. over all self.oxygen_states
+            }  # zeroth mapping will be added afterwards
+        else:
+            self.warning(
+                "\nTo avoid training ad-hoc-little-HMMs pass"
+                "--turn-off-little-hmm-auto-detection CLI argument\n"
+            )
+        for state_value in set(self.oxygen_states):
+            if state_value == State.Transferred.value:
+                continue
+            assert any(
+                state_value in workload
+                for workload in workload_mapping.values()
+            ), str(
+                f"State '{State(state_value)}' "
+                "is not covered by any workload mapping"
+            )
+        workload_mapping[0] = set(self.oxygen_states)  # all-in-one-HMM
+        assert all(
+            i in workload_mapping for i in range(len(workload_mapping))
+        ), f"Mapping not complete ({repr(workload_mapping)})"
+        return workload_mapping
 
     def plot_observed_variables_distributions(self, has_outliers):
         suptitle = None

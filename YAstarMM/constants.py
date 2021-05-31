@@ -274,7 +274,14 @@ HARDCODED_COLUMN_NAMES = dict(
 
 HmmTrainerInput = namedtuple(
     "HmmTrainerInput",
-    ["signal_queue", "df", "worker_id", "num_workers", "num_iterations"],
+    [
+        "df",
+        "num_iterations",
+        "num_workers",
+        "signal_queue",
+        "worker_id",
+        "workload_mapping",
+    ],
 )
 
 ICD9_CODES = {
