@@ -111,6 +111,9 @@ COLUMNS_TO_MAXIMIZE = [
 COLUMNS_TO_MINIMIZE = [
 ]
 
+COLUMNS_WITH_FLOAT_MIXED_WITH_NOTES = [
+]
+
 
 #
 # Some reminders about regexp:

@@ -67,6 +67,7 @@ from .constants import (
     COLUMNS_TO_JOIN,
     COLUMNS_TO_MAXIMIZE,
     COLUMNS_TO_MINIMIZE,
+    COLUMNS_WITH_FLOAT_MIXED_WITH_NOTES,
     ENUM_GRAVITY_LIST,
     ENUM_TO_MAXIMIZE,
     MIN_PYTHON_VERSION,
@@ -173,7 +174,9 @@ def _convert_single_cell_float(value, column=None):
             .replace("", " 0 ")
             .replace("", " 0 ")
         )
-        ret = ret.strip(f"{ascii_letters} /%+=(<@>)")
+        ret = ret.replace("./", "/").replace(". ", " ")
+        if column != "icd9_code":
+            ret = ret.strip(f"{ascii_letters} /%+=(<@>)")
         ret = " ".join(ret.split()).replace(",", ".").replace("|", "-")
         if matches_integer_rule(column) and ret.isnumeric():
             ret = int(round(float(ret)))  # treat integer numbers
@@ -211,6 +214,24 @@ def _merge_multiple_columns(sheet_name, df, col):
             row = set(row.dropna())
         else:
             row = set(row.dropna().astype("datetime64[ns]").dt.normalize())
+        if row and col in COLUMNS_WITH_FLOAT_MIXED_WITH_NOTES:
+            new_row, notes = list(), set()
+            for cell in row:
+                try:
+                    float(cell)
+                except Exception:
+                    notes.add(cell)
+                else:
+                    new_row.append(float(cell))
+            if new_row:
+                debug(f"row of '{col}' before dropping notes: {repr(row)}")
+                row = new_row
+                debug(f"row of '{col}' after dropping notes: {repr(row)}")
+                debug(f"Dropped notes of '{col}': {repr(notes)}")
+            else:
+                debug(f"row of '{col}' before keeping only notes: {repr(row)}")
+                row = notes
+                debug(f"row of '{col}' after keeping only notes: {repr(row)}")
         if not row:
             data.append(np.nan)
         elif len(row) == 1:
@@ -850,7 +871,7 @@ def fill_missing_days_in_hospital(
                     debug(
                         f"patient {repr(patient)} has too large IQR;"
                         " falling back to original hospitalization "
-                        "period: [{start_date.date()} ÷ {end_date.date()}])"
+                        f"period: [{start_date.date()} ÷ {end_date.date()}])"
                     )
                     one_week = timedelta(days=7)
                     whiskers_range = pd.date_range(

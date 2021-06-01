@@ -1758,7 +1758,9 @@ def summarize_features():
     return {
         f"{new_categorical_col}_severity": [
             SummarizeFeatureItem(
-                old_columns=rename_helper(tuple(sfi.old_columns)),
+                old_columns=rename_helper(
+                    tuple(sfi.old_columns), errors="warn"
+                ),
                 old_values_checker=[
                     f if f not in [True, False] else lambda val: val is f
                     for f in sfi.old_values_checker
