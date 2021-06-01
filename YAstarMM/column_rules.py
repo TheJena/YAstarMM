@@ -1651,13 +1651,17 @@ def _rename_helper(old_col_name, errors="warn"):
     #
     for group, list_of_mappings in keep_rules.items():
         for mapping in list_of_mappings:
+            for new_col_name in mapping.keys():
+                if new_col_name != "" and old_col_name.lower() == new_col_name:
+                    debug(
+                        "New name found:\t"
+                        f"({old_col_name} ~> {new_col_name})"
+                    )
+                    return new_col_name
+    for group, list_of_mappings in keep_rules.items():
+        for mapping in list_of_mappings:
             for new_col_name, rule in mapping.items():
-                if new_col_name == "":
-                    continue
-                if (
-                    old_col_name.lower() == new_col_name
-                    or rule.match(old_col_name) is not None
-                ):
+                if new_col_name != "" and rule.match(old_col_name) is not None:
                     debug(
                         "New name found:\t"
                         f"({old_col_name} ~> {new_col_name})"
