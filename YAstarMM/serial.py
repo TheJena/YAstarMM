@@ -476,23 +476,23 @@ def cast_columns_to_floating_point(df_dict, **kwargs):
     debug(
         "Please check how cells were casted to floating point numbers "
         "with this bash command:\n\t"
-        "ls -v1 /tmp/*debugging* "
-        "| tail -n1 "
-        "| xargs grep -i 'converted.*'" + '"\'"' + "' of.*to' "
-        "| grep -iv 'categorical' "
-        "| sort -V "
-        "| uniq "
-        "| less -S"
+        r"ls -v1 /tmp/*debug* "
+        r"| tail -n1 "
+        r"| xargs grep -i 'converted.*'" + '"\'"' + "' of.*to' "
+        r"| grep -iv 'categorical' "
+        r"| sort -V "
+        r"| uniq "
+        r"| less -S"
     )
     debug(
         "Please check which cells failed floating point casting "
         "with this bash command:\n\t"
-        "ls -v1 /tmp/*debugging* "
-        "| tail -n1 "
-        "| xargs grep -i 'could.*not.*convert.*float'"
-        "| sort -V "
-        "| uniq "
-        "| less -S"
+        r"ls -v1 /tmp/*debug* "
+        r"| tail -n1 "
+        r"| xargs grep -i 'could.*not.*convert.*float'"
+        r"| sort -V "
+        r"| uniq "
+        r"| less -S"
     )
     return df_dict
 
@@ -1036,9 +1036,13 @@ def fill_missing_days_in_hospital(
             ignore_index=True,
         )
         debug("\n\n")
-    pad = len(str(stats.most_common(1)[0][1]))
-    for msg, count in stats.most_common():
-        info(f"{str(count).rjust(pad)} {msg}")
+    try:
+        pad = len(str(stats.most_common(1)[0][1]))
+    except IndexError:
+        pass
+    else:
+        for msg, count in stats.most_common():
+            info(f"{str(count).rjust(pad)} {msg}")
     return df
 
 
