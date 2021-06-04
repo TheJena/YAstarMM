@@ -216,9 +216,11 @@ def extraction_date(filename):
     raise ValueError(
         "Extraction input files must have a name like:"
         "\n\t- Estrazione_20001231_whatever.xlsx"
-        "\n\t- Estrazione_20001231_whatever.xlsx"
+        "\n\t- Extraction_20001231_whatever.xlsx"
         "\n\t- Estrazione_2000_12_31_whatever.xlsx"
         "\n\t- Extraction_2000_12_31_whatever.xlsx"
+        "\n\t- *cleaned_extraction_20001231_whatever.xlsx"
+        "\n\t- *cleaned_extraction_2000_12_31_whatever.xlsx"
         f"\n\n(Please fix {filename} accordingly)"
     )
 
@@ -245,10 +247,14 @@ def hex_date_to_timestamp(
     )
 
 
-def initialize_logging(level=INFO, debug_mode=False):
+def initialize_logging(suffix_filename, level=INFO, debug_mode=False):
     logfile = NamedTemporaryFile(
-        prefix=datetime.now().strftime("%Y_%m_%d__%H_%M_%S__"),
-        suffix="__00_data_loading_and_manipulation__debugging_log.txt",
+        prefix=datetime.now().strftime("%Y_%m_%d__%H_%M_%S____"),
+        suffix="____"
+        + str(
+            suffix_filename.strip("_")
+            + str(".txt" if "." not in suffix_filename else "")
+        ),
         delete=False,
     )
     basicConfig(
