@@ -1220,7 +1220,13 @@ def matches_boolean_rule(column_name, column_values):
     )
     return all(
         (
-            not matches_date_time_rule(column_name),
+            not matches_date_time_rule(column_name)
+            or (
+                # already verticalized columns which were timestamps
+                # and became booleans
+                matches_date_time_rule(column_name)
+                and len(unique_values.difference({0.0, 1.0})) == 0
+            ),
             len(unique_values) <= len(BOOLEANIZATION_MAP),
             len(
                 unique_values.difference(
