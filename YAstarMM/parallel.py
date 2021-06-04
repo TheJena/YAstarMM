@@ -519,7 +519,10 @@ def _group_worker_body(tail, input_queue, output_queue, error_queue):
         finally:
             debug(f"Group worker finished filling Nan of {repr(group_name)}")
 
-    output_queue.put(pd.concat(worker_results, join="outer", sort=True))
+    if worker_results:
+        output_queue.put(pd.concat(worker_results, join="outer", sort=True))
+    else:
+        warning("Nothing to concat, no worker results")
     error_queue.put(None)
     output_queue.put(None)
     debug("Group worker acked twice to termination signal")
