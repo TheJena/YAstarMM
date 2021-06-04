@@ -180,15 +180,16 @@ def _convert_single_cell_timestamp(cell, column_name, sheet_name):
                 return cell_value
         try:
             fmt = None
-            if DAYFIRST_REGEXP.match(cell) is not None:
-                if cell[2] == cell[5] and cell[2] in ("/", "-"):
-                    sep = cell[2]
+            if DAYFIRST_REGEXP.match(str(cell)) is not None:
+                if str(cell)[2] == str(cell)[5] and str(cell)[2] in ("/", "-"):
+                    sep = str(cell)[2]
                     fmt = f"%d{sep}%m{sep}%Y"
-                    if ":" in cell:
+                    if ":" in str(cell):
                         fmt += " %H:%M:%S"
+
             timestamp = pd.to_datetime(
                 cell_value,
-                dayfirst=DAYFIRST_REGEXP.match(cell) is not None,
+                dayfirst=DAYFIRST_REGEXP.match(str(cell)) is not None,
                 format=fmt,
             )
         except Exception as e:
@@ -199,8 +200,8 @@ def _convert_single_cell_timestamp(cell, column_name, sheet_name):
             return cell  # original value
         else:
             if (
-                DAYFIRST_REGEXP.match(cell) is not None
-                and str(DAYFIRST_REGEXP.match(cell).group("day"))
+                DAYFIRST_REGEXP.match(str(cell)) is not None
+                and str(DAYFIRST_REGEXP.match(str(cell)).group("day"))
                 != f"{timestamp.day:0>2d}"
             ):
                 debug(
@@ -210,10 +211,12 @@ def _convert_single_cell_timestamp(cell, column_name, sheet_name):
                     "and the actual 'day' parsed by pandas.to_datetime()"
                 )
                 return cell  # original value
-    debug(
-        f"Converted {repr(cell).ljust(71)} into {repr(timestamp).ljust(36)} "
-        f"(column: {column_name}; sheet: {sheet_name})"
-    )
+    if repr(cell) != repr(timestamp):
+        debug(
+            f"Converted {repr(cell).ljust(71)} into "
+            f"{repr(timestamp).ljust(36)} "
+            f"(column: {column_name}; sheet: {sheet_name})"
+        )
     return timestamp
 
 
@@ -866,9 +869,13 @@ def cast_date_time_columns_to_timestamps(df_dict, **kwargs):
         if column_name in NORMALIZED_TIMESTAMP_COLUMNS:
             new_df_columns[sheet_name][column_name] = new_series.astype(
                 "datetime64[ns]"
-            ).dt.normalize()
+            ).dt.normalize()  # normalize to midnight
         else:
-            new_df_columns[sheet_name][column_name] = new_series
+            new_df_columns[sheet_name][column_name] = new_series.astype(
+                "datetime64[ns]"
+            ).dt.round(
+                "S"  # round to second precision
+            )
         debug(
             f"Added new Timestamp series '{column_name}' to "
             f"the other ones for '{sheet_name}'"
