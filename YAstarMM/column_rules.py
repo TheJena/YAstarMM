@@ -861,6 +861,8 @@ keep_rules = OrderedDict(
                     hemoglobine_notes=r"",
                     ph=r"",
                     ph_notes=r"",
+		     urine_ph=r"",
+		     urine_ph_notes=r"",
                     procalcitonin_exam_date=r"",
                 ),
             ],
