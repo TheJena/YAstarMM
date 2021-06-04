@@ -927,25 +927,44 @@ keep_rules = OrderedDict(
 
 
 def charlson_enum_rule(column_values):
+    charlson_age = {
+        0: "(< 50)",
+        1: "(50-59)",
+        2: "(60-69)",
+        3: "(70-79)",
+        4: "(>= 80)",
+    }
     charlson_map, unique_values = dict(), set(column_values)
-    for val in unique_values:
-        if all(
-            (
-                "0" in str(val),
-                "=" in str(val) or ("<" in str(val) and "50" in str(val)),
-                BOOLEANIZATION_MAP.get(
-                    str(val)
-                    .replace("50", "@@")
-                    .strip("0.= ()")
-                    .lower()
-                    .replace("< @@", "no")
-                    .replace("<@@", "no"),
-                    True,
+    if any(
+        "".join(age_suffix.split()) in "".join(str(val).split())
+        for val in unique_values
+        for age_suffix in charlson_age.values()
+    ):
+        # at least an age_suffix is contained in unique_values
+        charlson_map = {k: set([f"{k} {v}"]) for k, v in charlson_age.items()}
+        for val in unique_values:
+            for i, age_suffix in charlson_age.items():
+                if "".join(age_suffix.split()) in "".join(str(val).split()):
+                    charlson_map[i] = charlson_map[i].union({val})
+    else:
+        for val in unique_values:
+            if all(
+                (
+                    "0" in str(val),
+                    "=" in str(val) or ("<" in str(val) and "50" in str(val)),
+                    BOOLEANIZATION_MAP.get(
+                        str(val)
+                        .replace("50", "@@")
+                        .strip("0.= ()")
+                        .lower()
+                        .replace("< @@", "no")
+                        .replace("<@@", "no"),
+                        True,
+                    )
+                    not in {np.nan, True},
                 )
-                not in {np.nan, True},
-            )
-        ):  # we found a cell like '0 = No' or '0 (< 50)'
-            charlson_map[0] = set([val])
+            ):  # we found a cell like '0 = No' or '0 (< 50)'
+                charlson_map[0] = set([val])
     if not charlson_map:
         raise ValueError("Bad guess, retry")
     for val in unique_values:
