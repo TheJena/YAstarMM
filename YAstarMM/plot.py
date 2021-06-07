@@ -100,6 +100,9 @@ def plot_histogram_distribution(
         ],
         key=lambda tup: (
             tup[0] * tup[1],  # rows * cols
+            abs(  # penalize ratios too much different from figsize
+                tup[1] / tup[0] - figsize[0] / figsize[1]
+            ),
             tup[figsize.index(max(figsize))],
             tup[figsize.index(min(figsize))],
         ),
@@ -108,7 +111,16 @@ def plot_histogram_distribution(
     all_axes = create_new_axes(figsize, nrows, ncols, dpi=dpi)
     num_axes = len(df.columns)
     for col, ax, color in zip(
-        df.columns,
+        sorted(
+            df.columns,
+            key=lambda col: translator_helper(col, _USETEX, bold=_USETEX)
+            .lower()
+            .replace(r"$", "")
+            .replace(r"\mathbf", "")
+            .replace(r"\mathrm", "")
+            .replace(r"\textbf", "")
+            .strip(r"{ }"),
+        ),
         list(itertools.chain.from_iterable(all_axes.tolist()))[:num_axes],
         plt.cm.gnuplot(
             RandomState(seed=0).permutation(np.linspace(0.05, 0.95, num_axes))
@@ -116,7 +128,10 @@ def plot_histogram_distribution(
     ):
         logger.debug(f"Plotting histogram distribution of '{col}'")
         ax.set_title(
-            translator_helper(col, _USETEX, bold=_USETEX), y=1.0, pad=-14
+            translator_helper(col, _USETEX, bold=_USETEX),
+            fontsize=10.5,
+            pad=-14,
+            y=1.0,
         )
         n, bins, _ = ax.hist(df.loc[:, col].dropna(), color=color, rwidth=0.8)
         for i, (height, x_start, x_end) in enumerate(
@@ -194,6 +209,10 @@ def plot_histogram_distribution(
         pad = abs(x_end - x_start) / 10.0
         ax.set_xlim(x_start - pad, x_end + pad)
         ax.set_ylim(-0.02 * ax.get_ylim()[1], ax.get_ylim()[1] * 1.10)
+    for ax in list(itertools.chain.from_iterable(all_axes.tolist()))[
+        num_axes:
+    ]:
+        ax.set_axis_off()  # do not draw anything
 
     fig = plt.gcf()
     fig.set_tight_layout(dict(rect=(0, 0, 1, 1 if suptitle is None else 0.98)))

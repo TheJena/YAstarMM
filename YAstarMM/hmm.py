@@ -322,6 +322,7 @@ def function_returning_worst_value_for(column, patient_key_col):
         (
             "CARBON_DIOXIDE_PARTIAL_PRESSURE",
             "PH",
+            "URINE_PH",
         )
     ):  # both a higher or a lower value mean a worst patient health
         return np.mean
@@ -329,6 +330,7 @@ def function_returning_worst_value_for(column, patient_key_col):
         patient_key_col,
         rename_helper("AGE"),
         rename_helper("CHARLSON_INDEX"),
+        rename_helper("UPDATED_CHARLSON_INDEX", errors="quiet"),
     ):  # all values should be the same, check it
         return aggregate_constant_values
     raise NotImplementedError(
@@ -372,6 +374,7 @@ def observables_of_interest(state_sequence):
                     "LDH",
                     "PH",
                     "RESPIRATORY_RATE",
+                    "URINE_PH",
                 ),
                 (State.NIV.value, State.Intubated.value): (
                     "AGE",
@@ -382,11 +385,13 @@ def observables_of_interest(state_sequence):
                     "LDH",
                     "LYMPHOCYTE",
                     "PH",
+                    "UPDATED_CHARLSON_INDEX",
                     "UREA",
+                    "URINE_PH",
                 ),
             }.items():
                 if state_a in state_pool and state_b in state_pool:
-                    ret.update(set(rename_helper(observables)))
+                    ret.update(set(rename_helper(observables, errors="quiet")))
                     break
     return tuple(sorted(ret, key=str.lower))
 
@@ -413,27 +418,21 @@ def preprocess_single_patient_df(
         + "]"
     )
 
-    if str(getattr(parsed_args(), "update_charlson_index", True)) == str(True):
-        if any(
-            (
-                rename_helper("CHARLSON_INDEX") in observed_variables,
-                "CHARLSON_INDEX" in observed_variables,
-            )
-        ):
-            # let's compute the charlson-index before dropping unobserved cols
-            logger.debug(f"{log_prefix}")
-            cci = compute_charlson_index(
-                df, logger=logger, log_prefix=log_prefix
-            )
-            logger.debug(
-                f"{log_prefix} Charlson-Index is "
-                + str(f"= {cci:2.0f}" if pd.notna(cci) else "not computable")
-                + "\n"
-            )
-            # assign updated Charlson-Index
-            df.loc[:, rename_helper("CHARLSON_INDEX")] = (
-                float(cci) if pd.notna(cci) else np.nan
-            )
+    if (
+        rename_helper("UPDATED_CHARLSON_INDEX", errors="quiet")
+        in observed_variables
+    ):
+        # let's compute updated charlson-index before dropping unobserved cols
+        logger.debug(f"{log_prefix}")
+        cci = compute_charlson_index(df, logger=logger, log_prefix=log_prefix)
+        logger.debug(
+            f"{log_prefix} Updated Charlson-Index is "
+            + str(f"= {cci:2.0f}" if pd.notna(cci) else "not computable")
+            + "\n"
+        )
+        df.loc[:, rename_helper("UPDATED_CHARLSON_INDEX", errors="quiet")] = (
+            float(cci) if pd.notna(cci) else np.nan
+        )
     else:
         logger.info(
             "Charlson-Index will be used as it is "
@@ -446,7 +445,9 @@ def preprocess_single_patient_df(
         sort_cols_as_in_df(
             set(
                 rename_helper((patient_key_col, "DataRef", "ActualState_val"))
-            ).union(set(rename_helper(tuple(observed_variables)))),
+            ).union(
+                set(rename_helper(tuple(observed_variables), errors="quiet"))
+            ),
             df,
         ),
     ].sort_values(rename_helper("DataRef"))
@@ -513,7 +514,13 @@ def run():
             pd.api.types.infer_dtype(df.loc[:, patient_key_col])
         )
         == "string",
-        observed_variables=getattr(parsed_args(), "observed_variables"),
+        observed_variables=list(getattr(parsed_args(), "observed_variables"))
+        + list(
+            ["UPDATED_CHARLSON_INDEX"]
+            if str(getattr(parsed_args(), "update_charlson_index", True))
+            == str(True)
+            else []
+        ),
         oxygen_states=getattr(
             parsed_args(), "oxygen_states", [state.name for state in State]
         ),
@@ -1014,6 +1021,19 @@ class MetaModel(object):
                     "observed_variables were already "
                     "the same suggested by domain experts"
                 )
+        if (
+            rename_helper("UPDATED_CHARLSON_INDEX", errors="quiet")
+            in self.observed_variables
+            and rename_helper("UPDATED_CHARLSON_INDEX", errors="quiet")
+            not in df.columns
+        ):
+            df = df.assign(
+                **{
+                    rename_helper(
+                        "UPDATED_CHARLSON_INDEX", errors="quiet"
+                    ): pd.Series([np.nan for _ in range(df.shape[0])])
+                }
+            )
 
         # enforce same column order to make it easier comparing
         # matrices during debugging

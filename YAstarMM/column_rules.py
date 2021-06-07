@@ -1341,7 +1341,7 @@ def minimum_maximum_column_limits(criteria):
     """
     assert criteria in ("strict", "relaxed", "nonsense")
     return {
-        rename_helper(k): v
+        rename_helper(k, errors="quiet"): v
         for k, v in {  # units in comments
             "ActualState_val": dict(min=0, max=7),
             "AGE": dict(min=0, max=128),
@@ -1350,6 +1350,7 @@ def minimum_maximum_column_limits(criteria):
                 max=dict(strict=51, relaxed=55, nonsense=80).get(criteria),
             ),  # mmHg
             "CHARLSON_INDEX": dict(min=0, max=37),
+            "UPDATED_CHARLSON_INDEX": dict(min=0, max=37),
             "CREATININE": dict(
                 min=dict(strict=0.5, relaxed=0.48, nonsense=0).get(criteria),
                 max=dict(strict=1.6, relaxed=2.03, nonsense=15).get(criteria),
@@ -1377,9 +1378,12 @@ def minimum_maximum_column_limits(criteria):
             ),  # U/L
             "LYMPHOCYTE": dict(min=0, max=100),  # % on total white blood cells
             "PH": dict(
-                # in urine test it can actually range from 5 to 7
                 min=dict(strict=7.31, relaxed=7.3, nonsense=6).get(criteria),
                 max=dict(strict=7.45, relaxed=7.6, nonsense=8).get(criteria),
+            ),
+            "URINE_PH": dict(
+                min=dict(strict=5, relaxed=5, nonsense=6).get(criteria),
+                max=dict(strict=7, relaxed=7, nonsense=8).get(criteria),
             ),
             "PHOSPHOCREATINE": dict(
                 min=dict(strict=0, relaxed=0, nonsense=0).get(criteria),
@@ -1954,6 +1958,7 @@ def translator_helper(old_col_name, usetex=False, bold=False):
             False: "pCO2",
         }.get(usetex): ("carbon_dioxide_partial_pressure",),
         "Charlson-Index": ("",),
+        "Charlson-Index (updated)": ("updated_charlson_index",),
         "Creatinine": ("",),
         "D-dimer": ("",),
         "Dyspnea": ("",),
@@ -1962,8 +1967,9 @@ def translator_helper(old_col_name, usetex=False, bold=False):
         "Horowitz-Index": ("horowitz_index",),
         "Lactate dehydrogenase": ("ldh",),
         "Lymphocytes": ("",),
+        "pH (blood)": ("ph",),
+        "pH (urine)": ("urine_ph",),
         "Phosphocreatine": ("pcr",),
-        "pH": ("ph",),
         "Procalcitonin": ("",),
         "Urea": ("urea",),
     }.items():
@@ -1980,7 +1986,6 @@ def translator_helper(old_col_name, usetex=False, bold=False):
                         r" }" if usetex else "",
                     )
                 )
-
             return new_col_name
     raise KeyError(
         f"No translation was found for '{old_col_name}' ('{col_name}')"
