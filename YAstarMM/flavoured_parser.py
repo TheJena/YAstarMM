@@ -192,14 +192,12 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         default=0.1,
         dest="test_set_ratio_composer",
         help="Size of the test set for the composer",
-        metavar="float",
         type=float,
     ),
     ("--ratio-validation-set",): dict(
         default=0.1,
         dest="validation_set_ratio_hmm",
         help="Size of the validation set for the HMM",
-        metavar="float",
         type=float,
     ),
     ("-s", "--hmm-seeds",): dict(
@@ -226,10 +224,10 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         metavar="float",
         type=float,
     ),
-    ("--turn-off-little-hmm-auto-detection",): dict(
+    ("--train-little-hmm",): dict(
         action="store_true",
         default=False,
-        full_help="Do not auto spawn ad-hoc-little-HMM workloads "
+        full_help="Auto spawn ad-hoc-little-HMM workloads "
         "among the available workers in a load balanced way",
         help=SUPPRESS,
     ),

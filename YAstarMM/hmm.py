@@ -1453,42 +1453,36 @@ class MetaModel(object):
 
     def light_meta_model_workload_mapping(self, max_seeds, num_workers):
         assert not isinstance(self, LightMetaModel)
-        workload_mapping = {  # ad-hoc-little-HMMs
-            # zeroth mapping will be added afterwards
-            1: {State.Discharged.value, State.No_O2.value, State.O2.value},
-            2: {State.Deceased.value, State.Intubated.value, State.NIV.value},
-            3: {State.No_O2.value, State.O2.value, State.HFNO.value},
-            4: {State.Intubated.value, State.NIV.value, State.HFNO.value},
-            5: {State.O2.value, State.HFNO.value, State.NIV.value},
-            6: {State.No_O2.value, State.O2.value},
-            7: {State.NIV.value, State.Intubated.value},
-        }
-        if getattr(
-            parsed_args(), "turn_off_little_hmm_auto_detection", False
-        ) or max_seeds < 1 + len(workload_mapping):
-            workload_mapping = {  # dummy mapping to train all-in-one-HMMs
-                1: set(self.oxygen_states)  # i.e. over all self.oxygen_states
-            }  # zeroth mapping will be added afterwards
+        workload_mappings = (  # ad-hoc-little-HMMs
+            {State.Discharged.value, State.No_O2.value, State.O2.value},
+            {State.Deceased.value, State.Intubated.value, State.NIV.value},
+            {State.No_O2.value, State.O2.value, State.HFNO.value},
+            {State.Intubated.value, State.NIV.value, State.HFNO.value},
+            {State.O2.value, State.HFNO.value, State.NIV.value},
+            {State.No_O2.value, State.O2.value},
+            {State.NIV.value, State.Intubated.value},
+        )
+        if getattr(parsed_args(), "train_little_hmm", False):
+            self.info(f"All HMMs will be trained over all the oxygen states")
+            workload_mappings = (  # all-in-one-HMMs
+                set(self.oxygen_states),
+                set(self.oxygen_states),
+            )
         else:
-            self.warning(
-                "\nTo avoid training ad-hoc-little-HMMs pass"
-                "--turn-off-little-hmm-auto-detection CLI argument\n"
+            self.info(
+                "Each HMM will be trained over a subset of the oxygen states"
             )
         for state_value in set(self.oxygen_states):
             if state_value == State.Transferred.value:
                 continue
             assert any(
                 state_value in workload
-                for workload in workload_mapping.values()
+                for workload in workload_mappings.values()
             ), str(
                 f"State '{State(state_value)}' "
                 "is not covered by any workload mapping"
             )
-        workload_mapping[0] = set(self.oxygen_states)  # all-in-one-HMM
-        assert all(
-            i in workload_mapping for i in range(len(workload_mapping))
-        ), f"Mapping not complete ({repr(workload_mapping)})"
-        return workload_mapping
+        return {i: wl for i, wl in enumerate(workload_mappings)}
 
     def plot_observed_variables_distributions(self, has_outliers):
         suptitle = None
