@@ -48,12 +48,13 @@ from argparse import (
     Namespace,
     SUPPRESS,
 )
+from io import BufferedIOBase, TextIOBase
 from multiprocessing import cpu_count
 from pprint import pformat as pretty_format
 from sys import version_info
 from textwrap import wrap
 from typing import Any, Dict, Iterator, Optional, TextIO, Tuple, Union
-from yaml import dump, load
+from yaml import dump, load, SafeDumper  # fallback, slower interpreted Dumper
 
 _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("-d", "--debug",): dict(
@@ -319,7 +320,10 @@ def _get_cli_parser(
         if longest_name == "input":
             kwargs["required"] = "input" not in hardcoded_default_values
         kwargs["default"] = hardcoded_default_values.pop(
-            longest_name, kwargs.get("default", None)
+            kwargs["dest"]
+            if "dest" in kwargs and kwargs["dest"] in hardcoded_default_values
+            else longest_name,
+            kwargs.get("default", None),
         )
         if help_value == "full" and kwargs.get("help", SUPPRESS) == SUPPRESS:
             kwargs["help"] = kwargs.pop("full_help", SUPPRESS)
@@ -501,30 +505,20 @@ class FlavouredNamespace(object):
         data: Dict[str, Any] = dict()
         for field in sorted(iter(self)):
             value = getattr(self, field)
-            if field == "input" and hasattr(value, "name"):
-                data["input"] = str(value.name)  # store input filename
-            elif field == "flavour":
-                # skip original 'flavour' file name
+            if any(
+                (
+                    field.startswith("debug"),
+                    field in ("dump_flavoured_parser", "flavour"),
+                )
+            ):
                 continue
-            elif field.startswith("debug") and not field.endswith("mode"):
-                # skip debugging attributes with suppressed help message
-                continue
+            elif isinstance(value, (BufferedIOBase, TextIOBase)) and hasattr(
+                value, "name"
+            ):
+                data[field] = str(value.name)  # store input filename
             else:
                 data[field] = value
-
-        try:
-            # faster compiled (safe) Dumper
-            from yaml import CSafeDumper as SafeDumper
-        except AttributeError:
-            # fallback, slower interpreted (safe) Dumper
-            from yaml import SafeDumper  # type: ignore
-        finally:
-            dump(
-                data,
-                filename,
-                Dumper=SafeDumper,
-                default_flow_style=False,
-            )
+        dump(data, filename, Dumper=SafeDumper, default_flow_style=False)
 
 
 _PARSED_ARGS: Optional[FlavouredNamespace] = None
