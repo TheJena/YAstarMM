@@ -1991,7 +1991,8 @@ def translator_helper(old_col_name, mapping=dict(), usetex=False, bold=False):
                 )
             return new_col_name
     raise KeyError(
-        f"No translation was found for '{old_col_name}' ('{col_name}')"
+        f"No translation was found for '{old_col_name}' ('{col_name}');"
+        " you can provide a custom mapping to extend the hardcoded defaults"
     )
 
 

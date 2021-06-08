@@ -234,7 +234,7 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("--update-charlson-index",): dict(
         choices=(str(False), str(True)),
         default=True,
-        full_help="Compute and fix Charlson-Index scores",
+        full_help="Add updated Charlson-Index scores to observed variables",
         help=SUPPRESS,
     ),
     ("--use-latex",): dict(

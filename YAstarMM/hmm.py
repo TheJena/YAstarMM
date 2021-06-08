@@ -153,8 +153,12 @@ def _hmm_trainer(hti, **kwargs):
             if "light_mm" in locals():
                 log_msg_queue = light_mm.flush_logging_queue(timeout=1.5)
             else:
-                # something crashed before/during light_mm memory allocation
-                raise NotImplementedError("coming soon ...")
+                logging.warning(
+                    "something crashed before/during light_mm allocation"
+                )
+                while log_msg_queue:
+                    level, msg = log_msg_queue.pop(0)
+                    logging.log(level, msg)
 
         try:
             if hti.signal_queue.get(timeout=0.5) is None:
@@ -487,6 +491,7 @@ def run():
     )
 
     initialize_logging(
+        f"{__name__.replace('.', '_')}_{run.__name__}__debug.log",
         getattr(parsed_args(), "log_level", LOGGING_LEVEL),
         debug_mode=getattr(parsed_args(), "verbose", False),
     )
@@ -1453,31 +1458,30 @@ class MetaModel(object):
 
     def light_meta_model_workload_mapping(self, max_seeds, num_workers):
         assert not isinstance(self, LightMetaModel)
-        workload_mappings = (  # ad-hoc-little-HMMs
-            {State.Discharged.value, State.No_O2.value, State.O2.value},
-            {State.Deceased.value, State.Intubated.value, State.NIV.value},
-            {State.No_O2.value, State.O2.value, State.HFNO.value},
-            {State.Intubated.value, State.NIV.value, State.HFNO.value},
-            {State.O2.value, State.HFNO.value, State.NIV.value},
-            {State.No_O2.value, State.O2.value},
-            {State.NIV.value, State.Intubated.value},
-        )
         if getattr(parsed_args(), "train_little_hmm", False):
-            self.info(f"All HMMs will be trained over all the oxygen states")
+            self.info(
+                "Each HMM will be trained over a subset of the oxygen states"
+            )
+            workload_mappings = (  # ad-hoc-little-HMMs
+                {State.Discharged.value, State.No_O2.value, State.O2.value},
+                {State.Deceased.value, State.Intubated.value, State.NIV.value},
+                {State.No_O2.value, State.O2.value, State.HFNO.value},
+                {State.Intubated.value, State.NIV.value, State.HFNO.value},
+                {State.O2.value, State.HFNO.value, State.NIV.value},
+                {State.No_O2.value, State.O2.value},
+                {State.NIV.value, State.Intubated.value},
+            )
+        else:
+            self.info("All HMMs will be trained over all the oxygen states")
             workload_mappings = (  # all-in-one-HMMs
                 set(self.oxygen_states),
                 set(self.oxygen_states),
-            )
-        else:
-            self.info(
-                "Each HMM will be trained over a subset of the oxygen states"
             )
         for state_value in set(self.oxygen_states):
             if state_value == State.Transferred.value:
                 continue
             assert any(
-                state_value in workload
-                for workload in workload_mappings.values()
+                state_value in workload for workload in workload_mappings
             ), str(
                 f"State '{State(state_value)}' "
                 "is not covered by any workload mapping"
@@ -1487,11 +1491,7 @@ class MetaModel(object):
     def plot_observed_variables_distributions(self, has_outliers):
         suptitle = None
         if getattr(parsed_args(), "debug_mode", False):
-            specs = dict(charlson_index="original")
-            if str(True) == str(
-                getattr(parsed_args(), "update_charlson_index", str(False))
-            ):
-                specs["charlson_index"] = "updated"
+            specs = dict()
             if has_outliers:
                 specs["has_outliers"] = True
             else:

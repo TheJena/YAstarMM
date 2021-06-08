@@ -113,7 +113,9 @@ def plot_histogram_distribution(
     for col, ax in zip(
         sorted(
             df.columns,
-            key=lambda col: translator_helper(col, _USETEX, bold=_USETEX)
+            key=lambda col: translator_helper(
+                col, usetex=_USETEX, bold=_USETEX
+            )
             .lower()
             .replace(r"$", "")
             .replace(r"\mathbf", "")
@@ -125,7 +127,7 @@ def plot_histogram_distribution(
     ):
         logger.debug(f"Plotting histogram distribution of '{col}'")
         ax.set_title(
-            translator_helper(col, _USETEX, bold=_USETEX),
+            translator_helper(col, usetex=_USETEX, bold=_USETEX),
             fontsize=10.5,
             pad=-14,
             y=1.0,
@@ -141,7 +143,9 @@ def plot_histogram_distribution(
                         int(
                             blake2b(  # hash of the title
                                 str.encode(
-                                    translator_helper(col, False, False)
+                                    translator_helper(
+                                        col, usetex=False, bold=False
+                                    )
                                 )
                             ).hexdigest()[:max_hex_digits],
                             base=16,
