@@ -1934,45 +1934,48 @@ def switch_to_date_features(sheet_name):
 
 
 @lru_cache(maxsize=None)
-def translator_helper(old_col_name, usetex=False, bold=False):
+def translator_helper(old_col_name, mapping=dict(), usetex=False, bold=False):
     """Make column names pretty enough to be used as plot titles"""
     if bold and not usetex:
         warning("bold flag is useless without also usetex flag set")
     col_name = _rename_helper(old_col_name, errors="quiet")
-    for new_col_name, match_list in {
-        "Age": ("age",),
+    mapping.update(
         {
-            True: "".join(
-                (
-                    r"$\mathrm{",
-                    r"\mathbf{" if bold else "",
-                    "pCO",
-                    r"}" if bold else "",
-                    r"}_{\mathrm{",
-                    r"\mathbf{" if bold else "",
-                    "2",
-                    r"}" if bold else "",
-                    r"}}$",
-                )
-            ),
-            False: "pCO2",
-        }.get(usetex): ("carbon_dioxide_partial_pressure",),
-        "Charlson-Index": ("",),
-        "Charlson-Index (updated)": ("updated_charlson_index",),
-        "Creatinine": ("",),
-        "D-dimer": ("",),
-        "Dyspnea": ("",),
-        "Respiratory rate": ("",),
-        "Alanine transaminase": ("gpt_alt",),
-        "Horowitz-Index": ("horowitz_index",),
-        "Lactate dehydrogenase": ("ldh",),
-        "Lymphocytes": ("",),
-        "pH (blood)": ("ph",),
-        "pH (urine)": ("urine_ph",),
-        "Phosphocreatine": ("pcr",),
-        "Procalcitonin": ("",),
-        "Urea": ("urea",),
-    }.items():
+            "Age": ("age",),
+            {
+                True: "".join(
+                    (
+                        r"$\mathrm{",
+                        r"\mathbf{" if bold else "",
+                        "pCO",
+                        r"}" if bold else "",
+                        r"}_{\mathrm{",
+                        r"\mathbf{" if bold else "",
+                        "2",
+                        r"}" if bold else "",
+                        r"}}$",
+                    )
+                ),
+                False: "pCO2",
+            }.get(usetex): ("carbon_dioxide_partial_pressure",),
+            "Charlson-Index": ("",),
+            "Charlson-Index (updated)": ("updated_charlson_index",),
+            "Creatinine": ("",),
+            "D-dimer": ("",),
+            "Dyspnea": ("",),
+            "Respiratory rate": ("",),
+            "Alanine transaminase": ("gpt_alt",),
+            "Horowitz-Index": ("horowitz_index",),
+            "Lactate dehydrogenase": ("ldh",),
+            "Lymphocytes": ("",),
+            "pH (blood)": ("ph",),
+            "pH (urine)": ("urine_ph",),
+            "Phosphocreatine": ("pcr",),
+            "Procalcitonin": ("",),
+            "Urea": ("urea",),
+        }
+    )
+    for new_col_name, match_list in mapping.items():
         if col_name.lower().replace(" ", "_").replace("-", "_") in match_list:
             debug(
                 "Translator helper hit a match:\t"

@@ -40,8 +40,8 @@ from .constants import (
     MIN_PYTHON_VERSION,
 )
 from .flavoured_parser import parsed_args
+from hashlib import blake2b
 from matplotlib import colors, rc
-from numpy.random import RandomState
 from os.path import join as join_path
 from sys import version_info
 import itertools
@@ -110,7 +110,7 @@ def plot_histogram_distribution(
     logger.debug(f"Creating a figure with {nrows} rows x {ncols} subplots")
     all_axes = create_new_axes(figsize, nrows, ncols, dpi=dpi)
     num_axes = len(df.columns)
-    for col, ax, color in zip(
+    for col, ax in zip(
         sorted(
             df.columns,
             key=lambda col: translator_helper(col, _USETEX, bold=_USETEX)
@@ -122,9 +122,6 @@ def plot_histogram_distribution(
             .strip(r"{ }"),
         ),
         list(itertools.chain.from_iterable(all_axes.tolist()))[:num_axes],
-        plt.cm.gnuplot(
-            RandomState(seed=0).permutation(np.linspace(0.05, 0.95, num_axes))
-        ),
     ):
         logger.debug(f"Plotting histogram distribution of '{col}'")
         ax.set_title(
@@ -133,7 +130,28 @@ def plot_histogram_distribution(
             pad=-14,
             y=1.0,
         )
-        n, bins, _ = ax.hist(df.loc[:, col].dropna(), color=color, rwidth=0.8)
+        max_hex_digits = 6
+        n, bins, _ = ax.hist(
+            df.loc[:, col].dropna(),
+            color=plt.cm.gnuplot(
+                max(
+                    0.05,
+                    min(
+                        0.95,
+                        int(
+                            blake2b(  # hash of the title
+                                str.encode(
+                                    translator_helper(col, False, False)
+                                )
+                            ).hexdigest()[:max_hex_digits],
+                            base=16,
+                        )
+                        / float(16 ** max_hex_digits),
+                    ),
+                )
+            ),
+            rwidth=0.8,
+        )
         for i, (height, x_start, x_end) in enumerate(
             zip(n, bins[:-1], bins[1:])
         ):
@@ -217,17 +235,21 @@ def plot_histogram_distribution(
     fig = plt.gcf()
     fig.set_tight_layout(dict(rect=(0, 0, 1, 1 if suptitle is None else 0.98)))
     if suptitle is not None:
-        logger.debug(f"suptitle: {suptitle}")
+        logger.debug(f"suptitle: {repr(suptitle)}")
         fig.suptitle(
             "".join(
                 (
-                    r"\textbf{ " if _USETEX else "",
-                    " ".join(suptitle.split()),
-                    r" }" if _USETEX else "",
+                    r"\textbf{" if _USETEX else "",
+                    " ".join(
+                        suptitle.replace("_", " " if _USETEX else " ")
+                        .replace("\n", r"\,\\\," if _USETEX else "")
+                        .split(" ")
+                    ),
+                    r"}" if _USETEX else "",
                 )
             ),
             fontweight="bold" if not _USETEX else "normal",
-            fontsize=16 if not _USETEX else 18,
+            fontsize="xx-large",
         )
     if save_to_dir is not None:
         for extension in extensions:

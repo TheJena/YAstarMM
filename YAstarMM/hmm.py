@@ -1488,8 +1488,21 @@ class MetaModel(object):
                 specs["outliers_limits"] = getattr(
                     parsed_args(), "outlier_limits"
                 )
-            suptitle = f"{type(self).__name__}({repr(specs)[1:-1]})"
-            suptitle = suptitle.replace("_", " ")
+            specs["oxygen_states"] = [
+                str(State(i).name).replace("_", " ")
+                for i in sorted(
+                    self.oxygen_states,
+                    key=lambda state_value: -1
+                    if state_value == State.Discharged.value
+                    else state_value,
+                )
+                if not (
+                    self._ignore_transferred_state and i == State.Transferred
+                )
+            ]
+            suptitle = f"{type(self).__name__}({repr(specs)[1:-1]})".replace(
+                "[", "\n["
+            )
         plot_histogram_distribution(
             self._df.loc[:, self.observed_variables],
             has_outliers,
