@@ -514,6 +514,10 @@ def run():
             pd.api.types.infer_dtype(df.loc[:, patient_key_col])
         )
         == "string",
+        ignore_transferred_state=str(
+            getattr(parsed_args(), "ignore_transferred_state", True)
+        )
+        == str(True),
         observed_variables=list(getattr(parsed_args(), "observed_variables"))
         + list(
             ["UPDATED_CHARLSON_INDEX"]
@@ -939,6 +943,7 @@ class MetaModel(object):
         df,
         patient_key_col,
         hexadecimal_patient_id=False,
+        ignore_transferred_state=True,
         observed_variables=None,
         oxygen_states=None,
         outliers="ignore",
@@ -951,6 +956,7 @@ class MetaModel(object):
         """Prepare a MetaModel object ready to be used to train an HMM"""
         assert outliers in ("clip", "ignore")
         self._has_logging_lock = False
+        self._ignore_transferred_state = ignore_transferred_state
         self._input_data_dict = None
         self._outliers_treatment = outliers
         self._patient_key_col = patient_key_col
@@ -1209,6 +1215,22 @@ class MetaModel(object):
 
     def _split_dataset(self, pad=22):
         """Split dataset into training set and validation (or test) set"""
+        if self._ignore_transferred_state:
+            self.info("Transferred states will be ignored")
+            df = self._df.loc[
+                ~self._df[rename_helper("ActualState_val")].isin(
+                    {
+                        State.Transferred,
+                        State.Transferred.name,
+                        State.Transferred.value,
+                        str(State.Transferred),
+                    }
+                ),
+                :,
+            ]
+        else:
+            df = self._df  # whole df
+
         if self._ratio is None:
             if isinstance(self, LightMetaModel):
                 self._ratio = getattr(
@@ -1222,20 +1244,19 @@ class MetaModel(object):
                 self.debug(f"Test set ratio is: {self._ratio:.3f}")
         assert (
             isinstance(self._ratio, float)
-            and self._ratio >= 1 / self._df.shape[0]
-            and self._ratio <= 1 - (1 / self._df.shape[0])
+            and self._ratio >= 1 / df.shape[0]
+            and self._ratio <= 1 - (1 / df.shape[0])
         ), str(
             "Ratio (CLI argument --ratio-{validation,test}-set) is not "
-            f"in ({1 / self._df.shape[0]}, {1 - (1 / self._df.shape[0])})"
+            f"in ({1 / df.shape[0]}, {1 - (1 / df.shape[0])})"
         )
         self.debug(
-            "full dataset shape: ".rjust(pad)
-            + f"{self._df.shape[0]:7d} rows, "
-            f"{self._df.shape[1]:3d} columns"
+            "full dataset shape: ".rjust(pad) + f"{df.shape[0]:7d} rows, "
+            f"{df.shape[1]:3d} columns"
         )
         target_df = None
-        target_rows = max(1, round(self._df.shape[0] * self._ratio))
-        self._ratio = target_rows / self._df.shape[0]
+        target_rows = max(1, round(df.shape[0] * self._ratio))
+        self._ratio = target_rows / df.shape[0]
         self.debug(
             f"Splitting with ratio {self._ratio:.6f} "
             f"(target_rows: {target_rows})"
@@ -1244,15 +1265,13 @@ class MetaModel(object):
         patients_left = [
             patient_id
             for patient_id, _ in Counter(
-                self._df[self.patient_id].to_list()
+                df[self.patient_id].to_list()
             ).most_common()
         ]
         while target_df is None or target_df.shape[0] < target_rows:
             assert len(patients_left) >= 1, "No patient left"
             patient_id = patients_left.pop(0)
-            patient_df = self._df[
-                self._df[self.patient_id].isin([patient_id])
-            ].copy()
+            patient_df = df[df[self.patient_id].isin([patient_id])].copy()
             if bool(self.random_state.randint(2)):  # toss a coin
                 # try to add all the patient's records to the
                 # validation/test set
@@ -1324,16 +1343,15 @@ class MetaModel(object):
         self._training_df = pd.concat(
             [
                 self._training_df,
-                self._df[self._df[self.patient_id].isin(patients_left)].copy(),
+                df[df[self.patient_id].isin(patients_left)].copy(),
             ]
         )
         assert (
-            self._training_df.shape[0] + target_df.shape[0]
-            == self._df.shape[0]
+            self._training_df.shape[0] + target_df.shape[0] == df.shape[0]
         ), str(
             f"training matrix has {self._training_df.shape[0]} "
             "rows instead of "
-            f"{self._df.shape[0] - target_df.shape[0]}"
+            f"{df.shape[0] - target_df.shape[0]}"
         )
 
         self.debug(

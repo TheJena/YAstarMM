@@ -82,6 +82,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         "following suggestions from experts on the domain",
         help=SUPPRESS,
     ),
+    ("--ignore-transferred-state",): dict(
+        choices=(str(False), str(True)),
+        default=True,
+        full_help="Whether to consider or not the transferred state "
+        "in HMMs training",
+        help=SUPPRESS,
+    ),
     ("-i", "--input",): dict(
         help="Excel input file containing the DataFrame to parse",
         metavar="xlsx",
