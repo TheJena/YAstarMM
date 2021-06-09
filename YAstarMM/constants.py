@@ -282,6 +282,7 @@ HmmTrainerInput = namedtuple(
         "num_iterations",
         "num_workers",
         "signal_queue",
+        "skip_first_seeds",
         "worker_id",
         "workload_mapping",
     ],
@@ -1163,12 +1164,6 @@ ORDINARILY_HOME_DISCHARGED = ""
 RowFillerError = namedtuple("RowFillerError", ["row", "exception"])
 RowFillerOutput = namedtuple(
     "RowFillerOutput", ["row_index", "chosen_id", "stats"]
-)
-
-YamlSafeLoader = getattr(
-    yaml,
-    "CSafeLoader",  # faster compiled (safe) Loader
-    yaml.Loader,  # fallback, slower interpreted (safe) Loader
 )
 
 SheetMergerInput = namedtuple(

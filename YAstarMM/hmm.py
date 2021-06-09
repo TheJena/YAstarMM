@@ -81,7 +81,10 @@ def _hmm_trainer(hti, **kwargs):
     logging.info(f"Worker {worker_id} successfully started")
 
     seed_whitelist = {
-        worker_id + (i * num_workers) for i in range(hti.num_iterations)
+        worker_id + (i * num_workers)
+        for i in range(
+            hti.skip_first_seeds, hti.skip_first_seeds + hti.num_iterations
+        )
     }
     hmm_seeds = getattr(parsed_args(), "light_meta_model_random_seeds", None)
     if hmm_seeds is not None and isinstance(hmm_seeds, (list, tuple, set)):
@@ -489,6 +492,8 @@ def run():
             and getattr(parsed_args(), "seeds_to_explore", None) > 0,
         )
     )
+    skip_first_seeds = getattr(parsed_args(), "skip_first_z_seeds", 0)
+    assert skip_first_seeds >= 0
 
     initialize_logging(
         f"{__name__.replace('.', '_')}_{run.__name__}__debug.log",
@@ -550,10 +555,9 @@ def run():
 
     light_mm_df = heavy_mm.light_meta_model_df
     light_mm_kwargs = heavy_mm.light_meta_model_kwargs
-    light_mm_wl_map = heavy_mm.light_meta_model_workload_mapping(
-        max_seeds, num_workers
-    )
+    light_mm_wl_map = heavy_mm.light_meta_model_workload_mapping
     heavy_mm.save_to_disk()
+    heavy_mm.debug(f"The first {skip_first_seeds} seeds will be skipped")
 
     heavy_mm.flush_logging_queue()  # blocking
 
@@ -571,6 +575,8 @@ def run():
                     + int(i < max_seeds % num_workers),
                     num_workers=num_workers,
                     signal_queue=_SIGNAL_QUEUE,
+                    skip_first_seeds=(skip_first_seeds // num_workers)
+                    + int(i < skip_first_seeds % num_workers),
                     worker_id=i,
                     workload_mapping=light_mm_wl_map,
                 ),
@@ -810,6 +816,39 @@ class MetaModel(object):
             save_to_dir=self.worker_dir,
             # skip_preprocessing will be set by LightMetaModel.__init__()
         )
+
+    @property
+    def light_meta_model_workload_mapping(self):
+        assert not isinstance(self, LightMetaModel)
+        if getattr(parsed_args(), "train_little_hmm", False):
+            self.info(
+                "Each HMM will be trained over a subset of the oxygen states"
+            )
+            workload_mappings = (  # ad-hoc-little-HMMs
+                {State.Discharged.value, State.No_O2.value, State.O2.value},
+                {State.Deceased.value, State.Intubated.value, State.NIV.value},
+                {State.No_O2.value, State.O2.value, State.HFNO.value},
+                {State.Intubated.value, State.NIV.value, State.HFNO.value},
+                {State.O2.value, State.HFNO.value, State.NIV.value},
+                {State.No_O2.value, State.O2.value},
+                {State.NIV.value, State.Intubated.value},
+            )
+        else:
+            self.info("All HMMs will be trained over all the oxygen states")
+            workload_mappings = (  # all-in-one-HMMs
+                set(self.oxygen_states),
+                set(self.oxygen_states),
+            )
+        for state_value in set(self.oxygen_states):
+            if state_value == State.Transferred.value:
+                continue
+            assert any(
+                state_value in workload for workload in workload_mappings
+            ), str(
+                f"State '{State(state_value)}' "
+                "is not covered by any workload mapping"
+            )
+        return {i: wl for i, wl in enumerate(workload_mappings)}
 
     @property
     def logger_prefix(self):
@@ -1455,38 +1494,6 @@ class MetaModel(object):
     def info(self, msg=""):
         """Log info message."""
         self._log(logging.INFO, msg)
-
-    def light_meta_model_workload_mapping(self, max_seeds, num_workers):
-        assert not isinstance(self, LightMetaModel)
-        if getattr(parsed_args(), "train_little_hmm", False):
-            self.info(
-                "Each HMM will be trained over a subset of the oxygen states"
-            )
-            workload_mappings = (  # ad-hoc-little-HMMs
-                {State.Discharged.value, State.No_O2.value, State.O2.value},
-                {State.Deceased.value, State.Intubated.value, State.NIV.value},
-                {State.No_O2.value, State.O2.value, State.HFNO.value},
-                {State.Intubated.value, State.NIV.value, State.HFNO.value},
-                {State.O2.value, State.HFNO.value, State.NIV.value},
-                {State.No_O2.value, State.O2.value},
-                {State.NIV.value, State.Intubated.value},
-            )
-        else:
-            self.info("All HMMs will be trained over all the oxygen states")
-            workload_mappings = (  # all-in-one-HMMs
-                set(self.oxygen_states),
-                set(self.oxygen_states),
-            )
-        for state_value in set(self.oxygen_states):
-            if state_value == State.Transferred.value:
-                continue
-            assert any(
-                state_value in workload for workload in workload_mappings
-            ), str(
-                f"State '{State(state_value)}' "
-                "is not covered by any workload mapping"
-            )
-        return {i: wl for i, wl in enumerate(workload_mappings)}
 
     def plot_observed_variables_distributions(self, has_outliers):
         suptitle = None

@@ -54,7 +54,12 @@ from pprint import pformat as pretty_format
 from sys import version_info
 from textwrap import wrap
 from typing import Any, Dict, Iterator, Optional, TextIO, Tuple, Union
-from yaml import dump, load, SafeDumper  # fallback, slower interpreted Dumper
+from yaml import (
+    dump,
+    load,
+    SafeDumper,  # fallback, slower interpreted Dumper
+    SafeLoader,  # fallback, slower interpreted Loader
+)
 
 _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("-d", "--debug",): dict(
@@ -216,6 +221,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help="Where results will be stored",
         metavar="path",
         type=str,
+    ),
+    ("--skip-first-z-seeds",): dict(
+        default=0,
+        full_help="Skip the first Z seeds when training HMM",
+        help=SUPPRESS,
+        metavar="Z",
+        type=int,
     ),
     ("--threshold", "--stop-threshold",): dict(
         default=1e-9,
@@ -379,20 +391,13 @@ def _get_flavour_dict(flavour_file: Optional[TextIO]) -> Dict[str, Any]:
     """Return parsed 'flavour' file or an empty dictionary."""
     flavour: Dict[str, Any] = dict(flavour=None)
     if flavour_file is not None:
-        try:
-            # faster compiled (safe) Loader
-            from yaml import CSafeLoader as SafeLoader
-        except ImportError:
-            # fallback, slower interpreted (safe) Loader
-            from yaml import SafeLoader  # type: ignore
-        finally:
-            loaded_flavour: Union[Dict[str, Any], None] = load(
-                flavour_file, Loader=SafeLoader
-            )
-            # Add 'flavour' file name to non-empty 'flavour' dict
-            if loaded_flavour is not None:
-                loaded_flavour["flavour"] = flavour_file.name
-                flavour = loaded_flavour
+        loaded_flavour: Union[Dict[str, Any], None] = load(
+            flavour_file, Loader=SafeLoader
+        )
+        # Add 'flavour' file name to non-empty 'flavour' dict
+        if loaded_flavour is not None:
+            loaded_flavour["flavour"] = flavour_file.name
+            flavour = loaded_flavour
     return flavour
 
 
