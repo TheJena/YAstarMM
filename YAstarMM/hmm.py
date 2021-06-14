@@ -1061,7 +1061,15 @@ class MetaModel(object):
         self._outliers_treatment = outliers
         self._patient_key_col = patient_key_col
         self._postponed_logging_queue = postponed_logging_queue
-        self._previous_msg = random_string(length=80)
+        self._previous_msg = {
+            level: random_string(length=80)
+            for level in (
+                logging.DEBUG,
+                logging.INFO,
+                logging.WARNING,
+                logging.CRITICAL,
+            )
+        }
         if random_seed is None:
             self._random_seed = randint(0, 999999)
         else:
@@ -1319,9 +1327,9 @@ class MetaModel(object):
             f"{' ' if not msg.startswith('[') else ''}"
             f"{msg}"
         )
-        if msg == self._previous_msg:
+        if msg == self._previous_msg[level]:
             return
-        self._previous_msg = msg
+        self._previous_msg[level] = msg
         if not self.has_logging_lock and self._postponed_logging_queue:
             # If there are pending messages try to get the logging
             # lock and flush them; but without wasting too much time
