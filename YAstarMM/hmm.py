@@ -33,6 +33,7 @@ from .charlson_index import (
     reset_charlson_counter,
 )
 from .column_rules import (
+    matches_static_rule,
     minimum_maximum_column_limits,
     rename_helper,
 )
@@ -337,6 +338,7 @@ def function_returning_worst_value_for(column, patient_key_col):
         patient_key_col,
         rename_helper("AGE"),
         rename_helper("CHARLSON_INDEX"),
+        rename_helper("DAYS_IN_STATE", errors="quiet"),
         rename_helper("UPDATED_CHARLSON_INDEX", errors="quiet"),
     ):  # all values should be the same, check it
         return aggregate_constant_values
@@ -350,7 +352,7 @@ def observables_of_interest(state_sequence):
     assert isinstance(state_sequence, (list, tuple)) and all(
         isinstance(state_value, int) for state_value in state_sequence
     ), str("state_sequence must be a sequence of integer")
-    ret = set()
+    ret = set([rename_helper("DAYS_IN_STATE", errors="quiet")])
     state_sequence = set(state_sequence).intersection(
         {
             getattr(State, name.replace(" ", "_"))
@@ -459,15 +461,62 @@ def preprocess_single_patient_df(
         ),
     ].sort_values(rename_helper("DataRef"))
 
+    logger.debug(f"{log_prefix} original patient_df was:\n" + df.to_string())
+
     # ensure each date has exactly one record; if there are multiple
     # values they will be aggregated by choosing the one which denotes
-    # the worst health state
-    df = df.groupby(rename_helper("DataRef"), as_index=False).aggregate(
-        {
-            col: function_returning_worst_value_for(col, patient_key_col)
-            for col in df.columns
-            if col != rename_helper("DataRef")  # otherwise pandas complains
-        }
+    # the worst health state; finally drop nan dates
+    df = (
+        df.groupby(rename_helper("DataRef"), as_index=False)
+        .aggregate(
+            {
+                col: function_returning_worst_value_for(col, patient_key_col)
+                for col in df.columns
+                if col
+                != rename_helper("DataRef")  # otherwise pandas complains
+            }
+        )
+        .dropna(subset=rename_helper(["DataRef"]))
+    )
+
+    # now date column can be safely used as an index
+    df = df.set_index(
+        keys=rename_helper("DataRef"), drop=False, verify_integrity=True
+    )
+
+    # let's compute the days passed in a state
+    days_in_state, count = list(), 1
+    for today_state, tomorrow_state in zip(
+        df[rename_helper("ActualState_val")].tolist(),
+        df[rename_helper("ActualState_val")].shift(periods=1).tolist(),
+    ):
+        if today_state == tomorrow_state:
+            count += 1
+        else:
+            count = 1
+        days_in_state.append(count)
+
+    df = df.assign(
+        **{"DAYS_IN_STATE": pd.Series(days_in_state, dtype="int64")}
+    ).reset_index(
+        drop=True
+    )  # drop dates in favour of 0 to N-1
+
+    old_num_records = df.shape[0]
+    if str(getattr(parsed_args(), "drop_duplicates", False)) == str(True):
+        df = df.drop_duplicates(
+            subset=[
+                col
+                for col in df.columns
+                if col != rename_helper("DataRef")
+                and not matches_static_rule(col)
+            ],
+            keep="last",  # it has the number of days passed in the actual state
+            ignore_index=True,
+        )
+    logger.debug(
+        f"{log_prefix} dropped {old_num_records - df.shape[0]:4d} records "
+        f"in patient_df, which now is:\n" + df.to_string()
     )
 
     global _NEW_DF, _NEW_DF_LOCK
@@ -475,7 +524,7 @@ def preprocess_single_patient_df(
     if _NEW_DF is None:
         _NEW_DF = df.copy()
     else:
-        _NEW_DF = pd.concat([_NEW_DF, df.copy()])
+        _NEW_DF = pd.concat([_NEW_DF, df.copy()], ignore_index=True, sort=True)
     _NEW_DF_LOCK.release()
 
     return df.sort_values(rename_helper("DataRef"))
@@ -533,6 +582,11 @@ def run():
             ["UPDATED_CHARLSON_INDEX"]
             if str(getattr(parsed_args(), "update_charlson_index", True))
             == str(True)
+            else []
+        )
+        + list(
+            ["DAYS_IN_STATE"]
+            if str(getattr(parsed_args(), "add_day_count", True)) == str(True)
             else []
         ),
         oxygen_states=getattr(
@@ -874,7 +928,9 @@ class MetaModel(object):
 
                 if current_state != previous_state:
                     ret[previous_state][current_state] += 1
-                else:
+                elif str(getattr(parsed_args(), "add_day_count", True)) == str(
+                    False
+                ):
                     ret[current_state][current_state] += 1
 
                 previous_date = current_date
@@ -1084,6 +1140,19 @@ class MetaModel(object):
                     ): pd.Series([np.nan for _ in range(df.shape[0])])
                 }
             )
+        if (
+            rename_helper("DAYS_IN_STATE", errors="quiet")
+            in self.observed_variables
+            and rename_helper("DAYS_IN_STATE", errors="quiet")
+            not in df.columns
+        ):
+            df = df.assign(
+                **{
+                    rename_helper("DAYS_IN_STATE", errors="quiet"): pd.Series(
+                        [np.nan for _ in range(df.shape[0])]
+                    )
+                }
+            )
 
         # enforce same column order to make it easier comparing
         # matrices during debugging
@@ -1158,12 +1227,17 @@ class MetaModel(object):
 
             global _NEW_DF_LOCK, _NEW_DF
             _NEW_DF_LOCK.acquire()
-            self._df = _NEW_DF[
-                # cut away records about oxygen state not of interest
-                _NEW_DF[rename_helper("ActualState_val")].isin(
-                    self.oxygen_states
-                )
-            ].copy()
+            self._df = (
+                _NEW_DF.loc[
+                    # cut away records about oxygen state not of interest
+                    _NEW_DF[rename_helper("ActualState_val")].isin(
+                        self.oxygen_states
+                    ),
+                    sort_cols_as_in_df(_NEW_DF.columns, df),
+                ]
+                .sort_values(list(rename_helper((patient_key_col, "DataRef"))))
+                .reset_index(drop=True)
+            )
             _NEW_DF = None
             _NEW_DF_LOCK.release()
 
@@ -1581,7 +1655,10 @@ class MetaModel(object):
                 "Please set only one flag between "
                 "{occurrences,transition,training}_matrix"
             )
-        title += " matrix (count_all)"
+        title += " matrix (with"
+        if str(getattr(parsed_args(), "add_day_count", True)) == str(True):
+            title += "out"
+        title += " self-transitions)"
 
         legend_size = max(len(name) for name in State.names())
         cell_size = max(len(str(col)) for col in col_names)

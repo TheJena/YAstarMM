@@ -1280,12 +1280,14 @@ def matches_static_rule(column_name):
         (
             "admission_date",
             "age",
+            "DAYS_IN_STATE",
             "discharge_date",
             "discharge_mode",
             "height",
             "influenza_vaccine",
             "pneumococcal_vaccine",
             "sex",
+            "UPDATED_CHARLSON_INDEX",
         )
     ).union(
         set(
@@ -1962,6 +1964,7 @@ def translator_helper(old_col_name, mapping=dict(), usetex=False, bold=False):
             "Charlson-Index (updated)": ("updated_charlson_index",),
             "Creatinine": ("",),
             "D-dimer": ("",),
+            "Days in the same state": ("days_in_state",),
             "Dyspnea": ("",),
             "Respiratory rate": ("",),
             "Alanine transaminase": ("gpt_alt",),

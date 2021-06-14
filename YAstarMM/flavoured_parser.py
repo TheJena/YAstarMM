@@ -62,6 +62,13 @@ from yaml import (
 )
 
 _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
+    ("--add-day-count",): dict(
+        choices=(str(False), str(True)),
+        default=True,
+        full_help="Add a counter of the days passed in the same state "
+        "to the observed variables",
+        help=SUPPRESS,
+    ),
     ("-d", "--debug",): dict(
         action="store_true",
         default=False,
@@ -72,6 +79,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
     ("--debug-parser",): dict(
         action="store_true",
         full_help="Print internal state of the CLI argument parser",
+        help=SUPPRESS,
+    ),
+    ("--drop-duplicates",): dict(
+        choices=(str(False), str(True)),
+        default=True,
+        full_help="In each patient dataframe "
+        "keep the last among duplicated records",
         help=SUPPRESS,
     ),
     ("--dump-flavoured-parser",): dict(
