@@ -797,10 +797,7 @@ class StreamLogger(Callback):
         total_improvement = logs["total_improvement"]
         self.log(f"Total Improvement: {total_improvement:20.9f}")
         self.log(f"Training took (s): {self._t_end-self._t_start:20.3f}")
-        self.log(
-            "Average Epoch Time (s): "
-            f"{sum(self._all_epochs)/len(self._all_epochs):15.3f}"
-        )
+        self.log(f"Mean Epoch Time (s): {np.mean(self._all_epochs):18.3f}")
         self.log()
 
 
