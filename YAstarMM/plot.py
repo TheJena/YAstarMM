@@ -206,26 +206,31 @@ def plot_histogram_distribution(
                 ymin=0,
                 ymax=0.88,
             )
-            handles, labels = ax.get_legend_handles_labels()
-            ax.legend(
-                handles[-1:],  # only limits, no hist
-                labels[-1:],  # only limits, no hist
-                bbox_to_anchor=(1, 0.92),
-                borderpad=0.1,
-                borderaxespad=0.1,
-                edgecolor=TRANSPARENT_WHITE,
-                facecolor=TRANSPARENT_WHITE,
-                loc="upper right",
-            )
-            ax.get_xaxis().reset_ticks()
-            ax.set_xticks(
-                np.linspace(
-                    lower_limit if lower_limit is not None else old_ticks[0],
-                    upper_limit if upper_limit is not None else old_ticks[-1],
-                    5,
+            if lower_limit is not None or upper_limit is not None:
+                handles, labels = ax.get_legend_handles_labels()
+                ax.legend(
+                    handles[-1:],  # only limits, no hist
+                    labels[-1:],  # only limits, no hist
+                    bbox_to_anchor=(1, 0.92),
+                    borderpad=0.1,
+                    borderaxespad=0.1,
+                    edgecolor=TRANSPARENT_WHITE,
+                    facecolor=TRANSPARENT_WHITE,
+                    loc="upper right",
                 )
-            )
-            logger.debug(f"new x-ticks: {repr(list(ax.get_xticks()))}")
+                ax.get_xaxis().reset_ticks()
+                ax.set_xticks(
+                    np.linspace(
+                        lower_limit
+                        if lower_limit is not None
+                        else old_ticks[0],
+                        upper_limit
+                        if upper_limit is not None
+                        else old_ticks[-1],
+                        5,
+                    )
+                )
+                logger.debug(f"new x-ticks: {repr(list(ax.get_xticks()))}")
         # enlarge by 10% to the left, top and right
         x_start, x_end = ax.get_xlim()
         pad = abs(x_end - x_start) / 10.0
