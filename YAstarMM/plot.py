@@ -273,6 +273,7 @@ def plot_histogram_distribution(
     else:
         logger.warning("save_to_dir is None")
     fig.clf()
+    plt.close(fig)
 
 
 if __name__ == "__main__":
