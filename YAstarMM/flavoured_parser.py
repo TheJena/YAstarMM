@@ -70,6 +70,14 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         "to the observed variables",
         help=SUPPRESS,
     ),
+    ("--composer",): dict(
+        default=None,
+        dest="composer_input_dir",
+        help="Run composer over several Hidden Markov Models results",
+        metavar="path",
+        mutex_group="train_or_compose",
+        type=str,
+    ),
     ("-d", "--debug",): dict(
         action="store_true",
         default=False,
@@ -114,6 +122,7 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         default=None,
         help="Excel input file containing the DataFrame to parse",
         metavar="xlsx",
+        mutex_group="train_or_compose",
         type=FileType("rb"),
     ),
     ("-j", "--num-workers",): dict(
@@ -344,8 +353,6 @@ def _get_cli_parser(
     mutex_groups = dict()
     for args, kwargs in _CLI_ARGUMENTS.items():
         longest_name = args[-1].lstrip("-").replace("-", "_")
-        if longest_name == "input":
-            kwargs["required"] = "input" not in hardcoded_default_values
         kwargs["default"] = hardcoded_default_values.pop(
             kwargs["dest"]
             if "dest" in kwargs and kwargs["dest"] in hardcoded_default_values
