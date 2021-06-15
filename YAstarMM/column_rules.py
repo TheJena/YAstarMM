@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2021 Federico Motta <191685@studenti.unimore.it>
+# Copyright (C) 2021 Federico Motta <federico.motta@unimore.it>
 #
 # This file is part of YAstarMM
 #
