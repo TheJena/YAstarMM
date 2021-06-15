@@ -511,7 +511,7 @@ def preprocess_single_patient_df(
                 if col != rename_helper("DataRef")
                 and not matches_static_rule(col)
             ],
-            keep="last",  # it has the number of days passed in the actual state
+            keep="last",  # keep the biggest number of days passed in the state
             ignore_index=True,
         )
     logger.debug(
@@ -531,18 +531,28 @@ def preprocess_single_patient_df(
 
 
 def run():
-    assert getattr(parsed_args(), "max_workers") > 0
-    assert getattr(parsed_args(), "save_dir") is not None
+    assert getattr(parsed_args(), "input", None) is not None, str(
+        "Please provide -i/--input dataset"
+    )
     assert any(
         (
-            getattr(parsed_args(), "light_meta_model_random_seeds", None)
-            is not None,
+            # -n/--explore-n-seeds
             getattr(parsed_args(), "seeds_to_explore", None) is not None
-            and getattr(parsed_args(), "seeds_to_explore", None) > 0,
+            and getattr(parsed_args(), "seeds_to_explore") > 0,
+            # -s/--hmm-seeds
+            getattr(parsed_args(), "light_meta_model_random_seeds", None)
+            is not None
+            and len(getattr(parsed_args(), "light_meta_model_random_seeds")),
         )
+    ), str(
+        "Please provide either -n/--explore-n-seeds or -s/--hmm-seeds "
+        "(with a positive number of seeds)"
     )
-    skip_first_seeds = getattr(parsed_args(), "skip_first_z_seeds", 0)
-    assert skip_first_seeds >= 0
+    assert getattr(parsed_args(), "max_workers") > 0
+    assert getattr(parsed_args(), "skip_first_z_seeds", 0) >= 0
+    assert getattr(parsed_args(), "save_dir") is not None, str(
+        "Please provide --save-dir path"
+    )
 
     initialize_logging(
         f"{__name__.replace('.', '_')}_{run.__name__}__debug.log",
@@ -606,6 +616,7 @@ def run():
             getattr(parsed_args(), "light_meta_model_random_seeds")
         )
     num_workers = min(getattr(parsed_args(), "max_workers"), cpu_count())
+    skip_first_seeds = getattr(parsed_args(), "skip_first_z_seeds", 0)
 
     light_mm_df = heavy_mm.light_meta_model_df
     light_mm_kwargs = heavy_mm.light_meta_model_kwargs
@@ -1349,7 +1360,7 @@ class MetaModel(object):
                         str(State.Transferred),
                     }
                 ),
-                :,
+                self._df.columns,
             ]
         else:
             df = self._df  # whole df

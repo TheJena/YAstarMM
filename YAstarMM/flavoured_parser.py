@@ -110,6 +110,7 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help=SUPPRESS,
     ),
     ("-i", "--input",): dict(
+        default=None,
         help="Excel input file containing the DataFrame to parse",
         metavar="xlsx",
         type=FileType("rb"),
@@ -339,7 +340,6 @@ def _get_cli_parser(
         "_get_flavour_parser" in globals()
     ), "Please update the comment in the line before this one :D"
 
-    abolish_required = help_value in (None, "full")
     mutex_groups = dict()
     for args, kwargs in _CLI_ARGUMENTS.items():
         longest_name = args[-1].lstrip("-").replace("-", "_")
@@ -357,8 +357,8 @@ def _get_cli_parser(
             kwargs.pop("full_help", None)  # drop this unused kwarg
         if "metavar" not in kwargs and "type" in kwargs:
             kwargs["metavar"] = kwargs["type"].__name__
-        if abolish_required:
-            kwargs["required"] = False
+        if help_value in (None, "full"):
+            kwargs["required"] = False  # abolish required
         if "mutex_group" not in kwargs:
             cli_parser.add_argument(*args, **kwargs)
         else:
@@ -366,9 +366,7 @@ def _get_cli_parser(
             if mutex_group not in mutex_groups:
                 mutex_groups[
                     mutex_group
-                ] = cli_parser.add_mutually_exclusive_group(
-                    required=not abolish_required
-                )
+                ] = cli_parser.add_mutually_exclusive_group(required=False)
             mutex_groups[mutex_group].add_argument(*args, **kwargs)
     return cli_parser
 
