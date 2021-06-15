@@ -1594,7 +1594,7 @@ class MetaModel(object):
                 specs["has_outliers"] = True
             else:
                 # explain how outliers were treated/removed
-                specs["outliers_treatement"] = self._outliers_treatment
+                specs["outliers_treatment"] = self._outliers_treatment
                 specs["outliers_limits"] = getattr(
                     parsed_args(), "outlier_limits"
                 )
@@ -1817,7 +1817,7 @@ class MetaModel(object):
             for state in self.oxygen_states:
                 f.write(f"# State({state}).name == '{State(state).name}'\n")
 
-        with open(join_path(dir_name, "outliers_treatement.yaml"), "w") as f:
+        with open(join_path(dir_name, "outliers_treatment.yaml"), "w") as f:
             dump(
                 dict(
                     _outliers_treatment=self._outliers_treatment,

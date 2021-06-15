@@ -51,7 +51,7 @@ import pandas as pd
 
 META_MODEL_DATA = dict(
     # meta_model_path
-    outliers_treatment="outliers_treatement.yaml",
+    outliers_treatment="outliers_treatment.yaml",
     seed="_random_seed.yaml",
     test_df="_test_df.csv",
     test_matrix="test_matrix.npy",
