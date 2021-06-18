@@ -37,7 +37,9 @@ from .constants import LOGGING_LEVEL, MIN_PYTHON_VERSION
 from .flavoured_parser import parsed_args
 from .hmm import dataframe_to_numpy_matrix, sort_cols_as_in_df
 from .model import State
-from .utility import initialize_logging
+from .utility import black_magic, initialize_logging
+from collections import Counter
+from functools import lru_cache
 from io import BufferedIOBase, TextIOBase
 from logging import debug, info, warning
 from os import walk
@@ -67,10 +69,22 @@ HMM_DATA = dict(
     init_kwargs="hmm_constructor_parameters.yaml",
     # log probability of observing sequences like those in validation matrix
     log_prob="log_probability.yaml",
-    score="score.yaml",
+    score="score.yaml",  # scalar float (accuracy of the model)
     serialized_obj="hmm_trained_and_serialized.yaml",
     state_mapping="state_mapping.yaml",
 )
+
+
+def convert_hmm_predictions(predicted_state_indexes, state_mapping):
+    reverse_state_mapping = {  # predicted_state_index: State(X).name
+        v: k for k, v in state_mapping.items()
+    }
+    return [
+        getattr(State, reverse_state_mapping[state_index]).value
+        if state_index in reverse_state_mapping
+        else -1
+        for state_index in predicted_state_indexes
+    ]
 
 
 def get_meta_model_path(dirpath, choices):
@@ -160,6 +174,7 @@ def load(*args):
         return ret
 
 
+@black_magic
 def load_composer_models(composer_input_dir):
     assert isdir(composer_input_dir)
     ret = dict()
@@ -233,6 +248,15 @@ def load_composer_models(composer_input_dir):
     return new_ret
 
 
+@lru_cache(maxsize=None, typed=True)
+def outcome_probability(label, all_labels, inverse=False):
+    assert isinstance(all_labels, tuple)
+    prob = float(Counter(all_labels)[label]) / len(all_labels)
+    if inverse:
+        return 1 - prob
+    return prob
+
+
 def run():
     assert getattr(parsed_args(), "composer_input_dir", None) is not None
 
@@ -264,8 +288,11 @@ def run():
                 mm_test_df[rename_helper("ActualState_val")].to_dict()
                 == test_labels
             ), str(
-                "test_labels must be the same in MetaModels "
-                "built with the same seed ({mm_seed})"
+                "test_labels must be the same if MetaModels were "
+                f"built with the same seed ({mm_seed})\n\t"
+                f"test_labels    = {repr(test_labels)}\n\t"
+                f"mm_test_labels = "
+                + repr(mm_test_df[rename_helper("ActualState_val")].to_dict())
             )
             mm_columns = sorted(mm_test_df.columns, key=str.lower)
             for light_mm_data, hmm_data in zip(
@@ -294,65 +321,106 @@ def run():
                         test_df.columns, mm_test_df
                     ),
                 )
-                reverse_state_mapping = {
-                    # hmm_predicted_state_index: State(X).name
-                    v: k
-                    for k, v in hmm_data["state_mapping"].items()
-                }
-                for i, predicted_state_index in enumerate(
-                    HiddenMarkovModel.from_dict(
-                        hmm_data["serialized_obj"]
-                    ).predict(test_matrix, algorithm="map")
-                ):
-                    if predicted_state_index in reverse_state_mapping:
-                        predicted_state_index = getattr(
-                            State,
-                            reverse_state_mapping[predicted_state_index],
-                        ).value
-                    else:
-                        predicted_state_index = -1
+
+                hidden_markov_model = HiddenMarkovModel.from_dict(
+                    hmm_data["serialized_obj"]
+                )
+                predicted_test_labels = tuple(
+                    convert_hmm_predictions(
+                        hidden_markov_model.predict(
+                            test_matrix, algorithm="map"
+                        ),
+                        hmm_data["state_mapping"],
+                    )
+                )
+
+                for i, state_index in enumerate(predicted_test_labels):
                     prediction_pool[i].append(
                         {
-                            "seed": light_mm_data["seed"],
+                            "inv_outcome_prob_test": outcome_probability(
+                                state_index,
+                                predicted_test_labels,
+                                inverse=True,
+                            ),
                             "score": hmm_data["score"],
-                            "prediction": predicted_state_index,
+                            "seed": light_mm_data["seed"],
+                            "outcome_prob_test": outcome_probability(
+                                state_index,
+                                predicted_test_labels,
+                            ),
+                            "prediction": state_index,
                         }
                     )
 
-        prediction_pool = {  # sort once predictions by descending score
-            i: sorted(predictions, key=lambda d: d["score"], reverse=True)
-            for i, predictions in prediction_pool.items()
-        }
-        for i, predictions in prediction_pool.items():
-            debug(
-                f"test_set_sample = {i:6d} | "
-                f"actual_state = {State(test_labels[i]).name.rjust(12)} | "
-                f"ranked_by_score_predictions = "
-                + str(
-                    repr(
-                        [
-                            (State(d["prediction"]).name, round(d["score"], 6))
-                            for d in predictions
-                        ]
-                    )[1:-1]
-                    if predictions
-                    else "empty list"
+
+        for rank_criteria, sort_kwargs in {
+            "Decreasing HMM accuracy": dict(by="score", reverse=True),
+            "Inverse of HMM outcome probability (test)": dict(
+                by="inv_outcome_prob_test",
+            ),
+            "HMM outcome probability (test)": dict(
+                by="outcome_prob_test",
+            ),
+        }.items():
+            sort_label = sort_kwargs.pop("by")
+            prediction_pool = {  # sort once
+                i: sorted(
+                    predictions, key=lambda d: d.get(sort_label), **sort_kwargs
                 )
+                for i, predictions in prediction_pool.items()
+            }
+            debug(f"Ranking criteria is: {repr(rank_criteria)}")
+            for i, predictions in prediction_pool.items():
+                debug(
+                    " | ".join(
+                        (
+                            f"test_set_sample = {i:6d}",
+                            "actual_state = "
+                            + State(test_labels[i]).name.rjust(12),
+                            "ranking = "
+                            + str(
+                                ", ".join(
+                                    [
+                                        f"({State(d['prediction']).name},"
+                                        f" {d[sort_label]:.6f})"
+                                        for d in predictions
+                                    ]
+                                ).replace("'", "")
+                                if predictions
+                                else "empty list"
+                            ),
+                        )
+                    )
+                )
+            info(f"Ranking criteria is: {repr(rank_criteria)}")
+            predicted_labels = {
+                i: predictions[0]["prediction"] if predictions else -1
+                for i, predictions in prediction_pool.items()
+            }
+            mm_score = np.mean(
+                [
+                    actual_state == predicted_labels[i]
+                    for i, actual_state in test_labels.items()
+                ]
             )
-        predicted_labels = {
-            i: predictions[0]["prediction"] if predictions else -1
-            for i, predictions in prediction_pool.items()
-        }
-        mm_score = np.mean(
+            info(
+                f"Composer of HMMs descending from MetaModel(seed={mm_seed}) "
+                f"got an {'accuracy'.center(16)} of = {mm_score:.6f}"
+            )
+            info("")
+
+        info("Ranking criteria is: 'ORACLE'")
+        oracle_mm_score = np.mean(
             [
-                actual_state == predicted_labels[i]
+                actual_state in [d["prediction"] for d in prediction_pool[i]]
                 for i, actual_state in test_labels.items()
             ]
         )
         info(
-            "Composition of all HMMs descending from "
-            f"MetaModel(seed={mm_seed}) got a score of = {mm_score:.6f}"
+            f"Composer of HMMs descending from MetaModel(seed={mm_seed}) "
+            f"got an {'ORACLE-SCORE'.center(16)} of = {oracle_mm_score:.6f}"
         )
+        info("")
 
 
 if __name__ == "__main__":
