@@ -68,7 +68,6 @@ LIGHT_MM_DATA = dict(
 HMM_DATA = dict(
     init_kwargs="hmm_constructor_parameters.yaml",
     # log probability of observing sequences like those in validation matrix
-    log_prob="log_probability.yaml",
     score="score.yaml",  # scalar float (accuracy of the model)
     serialized_obj="hmm_trained_and_serialized.yaml",
     state_mapping="state_mapping.yaml",
@@ -227,17 +226,6 @@ def load_composer_models(composer_input_dir):
                 ret[meta_model_path][sub_model_name] = ret[
                     meta_model_path
                 ].get(sub_model_name, list())
-                if "score" in sub_model and (
-                    sub_model["score"] is None or sub_model["score"] < 0.5
-                ):
-                    info(
-                        "Ignoring "
-                        + dirpath.replace(meta_model_path, "")
-                        .replace(sub_model_name, "")
-                        .strip("/")
-                        + f"/{sub_model_name} with score: {sub_model['score']}"
-                    )
-                    continue
                 ret[meta_model_path][sub_model_name].append(sub_model)
     new_ret = dict()
     for meta_model_path, mm_data in ret.items():
@@ -270,6 +258,7 @@ def run():
 
     for mm_seed, mm_list in data.items():
         info(f"Started composing descendands of MetaModel(seed={mm_seed})")
+        useful_hmm, total_hmm = 0, 0
         test_labels, prediction_pool = None, None
         for mm_data in mm_list:
             mm_test_df = mm_data.get("test_df", None).astype(
@@ -299,6 +288,30 @@ def run():
                 mm_data.get("LightMetaModel_class", list()),
                 mm_data.get("HiddenMarkovModel_class", list()),
             ):
+                total_hmm += 1
+                hmm_description = (
+                    repr(
+                        dict(
+                            oxygen_states=hmm_data["init_kwargs"].get(
+                                "state_names",
+                                [
+                                    State(i).name
+                                    for i in light_mm_data["oxygen_states"]
+                                ],
+                            ),
+                            seed=f"{light_mm_data['seed']:06d}",
+                        )
+                    )
+                    .strip("{}")
+                    .replace("'", "")
+                    .replace(": ", "=")
+                )
+                if hmm_data["score"] is None or hmm_data["score"] < 0.5:
+                    info(
+                        f"Ignoring HiddenMarkovModel({hmm_description}) "
+                        f"with accuracy: {hmm_data['score']:15.9f}"
+                    )
+                    continue
                 test_df = mm_test_df.loc[
                     mm_test_df[rename_helper("ActualState_val")].isin(
                         light_mm_data["oxygen_states"]
@@ -315,6 +328,7 @@ def run():
                 ]
                 if test_df.empty:
                     continue
+                useful_hmm += 1
                 test_matrix = dataframe_to_numpy_matrix(
                     test_df,
                     only_columns=sort_cols_as_in_df(
@@ -342,6 +356,9 @@ def run():
                                 predicted_test_labels,
                                 inverse=True,
                             ),
+                            "log_prob": hidden_markov_model.log_probability(
+                                test_matrix[i : i + 1]  # one line i-th matrix
+                            ),
                             "score": hmm_data["score"],
                             "seed": light_mm_data["seed"],
                             "outcome_prob_test": outcome_probability(
@@ -352,9 +369,14 @@ def run():
                         }
                     )
 
-
+        info("")
+        info(f"{useful_hmm} useful HMMs were found (among {total_hmm})")
+        info("")
         for rank_criteria, sort_kwargs in {
             "Decreasing HMM accuracy": dict(by="score", reverse=True),
+            "Decreasing HMM log-probability": dict(
+                by="log_prob", reverse=True
+            ),
             "Inverse of HMM outcome probability (test)": dict(
                 by="inv_outcome_prob_test",
             ),
