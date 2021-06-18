@@ -247,6 +247,10 @@ def outcome_probability(label, all_labels, inverse=False):
 
 def run():
     assert getattr(parsed_args(), "composer_input_dir", None) is not None
+    assert (
+        getattr(parsed_args(), "minimum_score_threshold") > 0
+        and getattr(parsed_args(), "minimum_score_threshold") < 1
+    ), str("--minimum-score-threshold must be in (0, 1)")
 
     initialize_logging(
         f"{__name__.replace('.', '_')}_{run.__name__}__debug.log",
@@ -306,10 +310,43 @@ def run():
                     .replace("'", "")
                     .replace(": ", "=")
                 )
-                if hmm_data["score"] is None or hmm_data["score"] < 0.5:
+                if hmm_data["score"] is None or hmm_data["score"] < getattr(
+                    parsed_args(), "minimum_score_threshold"
+                ):
                     info(
                         f"Ignoring HiddenMarkovModel({hmm_description}) "
                         f"with accuracy: {hmm_data['score']:15.9f}"
+                    )
+                    continue
+                if all(
+                    (
+                        str(
+                            getattr(
+                                parsed_args(), "ignore_overfitted_models", True
+                            )
+                        )
+                        == str(True),
+                        len(set(hmm_data["predicted_validation_labels"])) == 1,
+                        len(
+                            light_mm_data["validation_df"]
+                            .loc[:, rename_helper("ActualState_val")]
+                            .dropna()
+                            .unique()
+                        )
+                        != 1,
+                    )
+                ):
+                    info(
+                        f"Ignoring HiddenMarkovModel({hmm_description}) "
+                        f"always predicting: "
+                        + str(
+                            State(
+                                convert_hmm_predictions(
+                                    hmm_data["predicted_validation_labels"],
+                                    hmm_data["state_mapping"],
+                                )[0]
+                            ).name
+                        )
                     )
                     continue
                 test_df = mm_test_df.loc[

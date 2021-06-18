@@ -111,6 +111,12 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         "following suggestions from experts on the domain",
         help=SUPPRESS,
     ),
+    ("--ignore-overfitted-models",): dict(
+        choices=(str(False), str(True)),
+        default=True,
+        full_help="Ignore models which always return the same prediction",
+        help=SUPPRESS,
+    ),
     ("--ignore-transferred-state",): dict(
         choices=(str(False), str(True)),
         default=True,
@@ -130,6 +136,11 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         dest="max_workers",
         help="Split workload among several workers",
         type=int,
+    ),
+    ("-k", "--minimum-score-threshold",): dict(
+        default=0.5,
+        help="Consider only models with a score greater than this",
+        type=float,
     ),
     ("-l", "--min-iter",): dict(
         default=max(1, round(30 / AVG_ITER_TIME)),  # 30 seconds
