@@ -480,28 +480,29 @@ def preprocess_single_patient_df(
         .dropna(subset=rename_helper(["DataRef"]))
     )
 
-    # now date column can be safely used as an index
-    df = df.set_index(
-        keys=rename_helper("DataRef"), drop=False, verify_integrity=True
-    )
+    if rename_helper("DAYS_IN_STATE", errors="quiet") in observed_variables:
+        # now date column can be safely used as an index
+        df = df.set_index(
+            keys=rename_helper("DataRef"), drop=False, verify_integrity=True
+        )
 
-    # let's compute the days passed in a state
-    days_in_state, count = list(), 1
-    for today_state, tomorrow_state in zip(
-        df[rename_helper("ActualState_val")].tolist(),
-        df[rename_helper("ActualState_val")].shift(periods=1).tolist(),
-    ):
-        if today_state == tomorrow_state:
-            count += 1
-        else:
-            count = 1
-        days_in_state.append(count)
+        # let's compute the days passed in a state
+        days_in_state, count = list(), 1
+        for today_state, tomorrow_state in zip(
+            df[rename_helper("ActualState_val")].tolist(),
+            df[rename_helper("ActualState_val")].shift(periods=1).tolist(),
+        ):
+            if today_state == tomorrow_state:
+                count += 1
+            else:
+                count = 1
+            days_in_state.append(count)
 
-    df = df.assign(
-        **{"DAYS_IN_STATE": pd.Series(days_in_state, dtype="int64")}
-    ).reset_index(
-        drop=True
-    )  # drop dates in favour of 0 to N-1
+        df = df.assign(
+            **{"DAYS_IN_STATE": pd.Series(days_in_state, dtype="int64")}
+        ).reset_index(
+            drop=True
+        )  # drop dates in favour of 0 to N-1
 
     old_num_records = df.shape[0]
     if str(getattr(parsed_args(), "drop_duplicates", False)) == str(True):
