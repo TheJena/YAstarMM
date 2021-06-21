@@ -1936,13 +1936,15 @@ def switch_to_date_features(sheet_name):
 
 
 @lru_cache(maxsize=None)
-def translator_helper(old_col_name, mapping=dict(), usetex=False, bold=False):
+def translator_helper(old_col_name, usetex=False, bold=False, **kwargs):
     """Make column names pretty enough to be used as plot titles"""
     if bold and not usetex:
         warning("bold flag is useless without also usetex flag set")
     col_name = _rename_helper(old_col_name, errors="quiet")
+    mapping = dict(**kwargs)
     mapping.update(
         {
+            "Alanine transaminase": ("gpt_alt",),
             "Age": ("age",),
             {
                 True: "".join(
@@ -1960,14 +1962,14 @@ def translator_helper(old_col_name, mapping=dict(), usetex=False, bold=False):
                 ),
                 False: "pCO2",
             }.get(usetex): ("carbon_dioxide_partial_pressure",),
-            "Charlson-Index": ("",),
-            "Charlson-Index (updated)": ("updated_charlson_index",),
+            "Charlson Comorbidity Index": ("",),
+            "Charlson Comorbidity Index (updated)": (
+                "updated_charlson_index",
+            ),
             "Creatinine": ("",),
             "D-dimer": ("",),
             "Days in the same state": ("days_in_state",),
             "Dyspnea": ("",),
-            "Respiratory rate": ("",),
-            "Alanine transaminase": ("gpt_alt",),
             "Horowitz-Index": ("horowitz_index",),
             "Lactate dehydrogenase": ("ldh",),
             "Lymphocytes": ("",),
@@ -1975,6 +1977,7 @@ def translator_helper(old_col_name, mapping=dict(), usetex=False, bold=False):
             "pH (urine)": ("urine_ph",),
             "Phosphocreatine": ("pcr",),
             "Procalcitonin": ("",),
+            "Respiratory rate": ("",),
             "Urea": ("urea",),
         }
     )
@@ -1985,13 +1988,7 @@ def translator_helper(old_col_name, mapping=dict(), usetex=False, bold=False):
                 f"{old_col_name} ~> {col_name} ~> {new_col_name}"
             )
             if usetex and bold:
-                return "".join(
-                    (
-                        r"\textbf{ " if usetex else "",
-                        new_col_name,
-                        r" }" if usetex else "",
-                    )
-                )
+                return "".join((r"\textbf{", new_col_name, r"}"))
             return new_col_name
     raise KeyError(
         f"No translation was found for '{old_col_name}' ('{col_name}');"
