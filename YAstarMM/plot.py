@@ -26,12 +26,14 @@
    Usage:
             from  YAstarMM.plot  import  (
                 create_new_axes,
+                plot_sparsity,
             )
 
    ( or from within the YAstarMM package )
 
             from          .plot  import  (
                 create_new_axes,
+                plot_sparsity,
             )
 
 """
@@ -48,6 +50,8 @@ from sys import version_info
 import itertools
 import logging
 import matplotlib.pyplot as plt
+import missingno as msno
+import pandas as pd
 
 _USETEX = getattr(parsed_args(), "use_latex", False)
 TRANSPARENT_WHITE = colors.to_rgba("w", alpha=0)
@@ -273,6 +277,34 @@ def plot_histogram_distribution(
             logger.debug(f"Saved plot '{save_path}'")
     else:
         logger.warning("save_to_dir is None")
+    fig.clf()
+    plt.close(fig)
+
+
+def plot_sparsity():
+    input_file = getattr(parsed_args(), "plot_dataset_sparsity", None)
+    assert input_file is not None
+    df = pd.read_csv(input_file).drop(columns="Unnamed: 0")
+    df2 = df.rename(
+        columns={
+            c: translator_helper(
+                c,
+                bold=_USETEX,
+                usetex=_USETEX,
+                **{"Oxygen Therapy State": "oxygen_therapy_state_value"},
+            )
+            for c in df.columns
+            if c not in ("date", "", "UPDATED_CHARLSON_INDEX")
+        }
+    ).drop(columns=["date", "", "UPDATED_CHARLSON_INDEX"])
+    msno.bar(
+        df2,
+        sort="ascending",
+        ax=create_new_axes(tight_layout=True),
+    )
+    fig = plt.gcf()
+    for extension in ("svg",):
+        plt.savefig(f"./plots/sparsity.{extension}")
     fig.clf()
     plt.close(fig)
 

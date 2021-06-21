@@ -222,6 +222,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help=SUPPRESS,
         type=str,
     ),
+    ("--plot-sparsity",): dict(
+        default=None,
+        dest="plot_dataset_sparsity",
+        help="Plot the dataframe sparsity in an histogram",
+        metavar="_df.csv",
+        type=FileType("r"),
+    ),
     ("-r", "--random-seed",): dict(
         default=None,
         dest="meta_model_random_seed",
