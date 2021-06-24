@@ -397,18 +397,28 @@ keep_rules = OrderedDict(
                 ),
             ],
             oxygen_journey=[
+                dict(
+                    no_oxygen_therapy_state_start=r"",
+                    no_oxygen_therapy_state_end=r"",
+                    oxygen_therapy_state_start=r"",
+                    oxygen_therapy_state_end=r"",
+                    hfno_state_start=r"",
+                    hfno_state_end=r"",
+                    niv_state_start=r"",
+                    niv_state_end=r"",
+                    intubation_state_start=r"",
+                    intubation_state_end=r"",
+                    post_niv_state_start=r"",
+                    post_niv_state_end=r"",
+                    post_hfno_state_start=r"",
+                    post_hfno_state_end=r"",
+                    post_oxygen_therapy_state_start=r"",
+                    post_oxygen_therapy_state_end=r"",
+                    post_no_oxygen_therapy_state_start=r"",
+                    post_no_oxygen_therapy_state_end=r"",
+                ),
                 {
-                    "": str(
-                        r"("  # start of group
-                        r""
-                        r""
-                        r""
-                        r""
-                        r")"  # end of group
-                        r""
-                        r""
-                        r""
-                    ),
+                    "": r"",
                 },
             ],
             respiration=[
@@ -605,6 +615,7 @@ keep_rules = OrderedDict(
                     hepatitis_c=r"",
                     hiv=r"",
                     hypertension=r"",
+                    hypertension_notes=r"",
                     liver_failure=r"",
                     neoplasms=r"",
                     organ_damage=r"",
@@ -2020,28 +2031,6 @@ def verticalize_features():
         VerticalizeFeatureItem("DYSPNEA_START", "DYSPNEA_START", list()),
         VerticalizeFeatureItem(
             "", "SYMPTOMS_START", [""]
-        ),
-        VerticalizeFeatureItem(
-            "INTUBATION_STATE_END", "INTUBATION_STATE_END", list()
-        ),
-        VerticalizeFeatureItem(
-            "", "INTUBATION_STATE_END", list()
-        ),
-        VerticalizeFeatureItem(
-            "INTUBATION_STATE_START", "INTUBATION_STATE_START", list()
-        ),
-        VerticalizeFeatureItem(
-            "", "INTUBATION_STATE_START", list()
-        ),
-        VerticalizeFeatureItem("NIV_STATE_END", "NIV_STATE_END", list()),
-        VerticalizeFeatureItem("", "NIV_STATE_END", list()),
-        VerticalizeFeatureItem("NIV_STATE_START", "NIV_STATE_START", list()),
-        VerticalizeFeatureItem("", "NIV_STATE_START", list()),
-        VerticalizeFeatureItem(
-            "", "OXYGEN_THERAPY_STATE_END", list()
-        ),
-        VerticalizeFeatureItem(
-            "", "OXYGEN_THERAPY_STATE_START", list()
         ),
         VerticalizeFeatureItem("PLAQUENIL", "PLAQUENIL", list()),
         VerticalizeFeatureItem(

@@ -1024,7 +1024,11 @@ def run_clear_and_refill_algorithm_over_patient_df(
         "Please set either use_insomnia=True or use_dumbydog=True"
     )
 
-    journey = HospitalJourney(patient_df, patient_key_col, log_level=log_level)
+    journey = HospitalJourney(
+        patient_df.loc[:, sorted(patient_df.columns, key=str.lower)],
+        patient_key_col,
+        log_level=log_level,
+    )
 
     if use_insomnia:
         algorithm = Insomnia(journey, log_level=log_level)
@@ -1061,11 +1065,11 @@ def run_clear_and_refill_algorithm_over_patient_df(
         if start_col is not None:
             patient_df.loc[
                 patient_df[rename_helper("DataRef")] == start_day, [start_col]
-            ] = True
+            ] = start_day
         if end_col is not None:
             patient_df.loc[
                 patient_df[rename_helper("DataRef")] == end_day, [end_col]
-            ] = True
+            ] = end_day
         if fill_col is not None:
             patient_df.loc[
                 (patient_df[rename_helper("DataRef")] >= start_day)
