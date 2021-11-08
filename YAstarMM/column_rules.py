@@ -20,7 +20,7 @@
 # You should have received a copy of the GNU General Public License
 # along with YAstarMM.  If not, see <https://www.gnu.org/licenses/>.
 """
-    New naming comvention, with rules to keep or drop columns
+    New naming convention, with rules to keep or drop columns
 
    Usage:
             from  YAstarMM.column_rules  import  (
@@ -398,24 +398,20 @@ keep_rules = OrderedDict(
             ],
             oxygen_journey=[
                 dict(
-                    no_oxygen_therapy_state_start=r"",
-                    no_oxygen_therapy_state_end=r"",
-                    oxygen_therapy_state_start=r"",
-                    oxygen_therapy_state_end=r"",
-                    hfno_state_start=r"",
                     hfno_state_end=r"",
-                    niv_state_start=r"",
-                    niv_state_end=r"",
-                    intubation_state_start=r"",
+                    hfno_state_start=r"",
                     intubation_state_end=r"",
-                    post_niv_state_start=r"",
-                    post_niv_state_end=r"",
-                    post_hfno_state_start=r"",
+                    intubation_state_start=r"",
+                    niv_state_end=r"",
+                    niv_state_start=r"",
+                    oxygen_therapy_state_end=r"",
+                    oxygen_therapy_state_start=r"",
                     post_hfno_state_end=r"",
-                    post_oxygen_therapy_state_start=r"",
+                    post_hfno_state_start=r"",
+                    post_niv_state_end=r"",
+                    post_niv_state_start=r"",
                     post_oxygen_therapy_state_end=r"",
-                    post_no_oxygen_therapy_state_start=r"",
-                    post_no_oxygen_therapy_state_end=r"",
+                    post_oxygen_therapy_state_start=r"",
                 ),
                 {
                     "": r"",
@@ -840,6 +836,71 @@ keep_rules = OrderedDict(
                     other_symptoms=r"",
                 ),
             ],
+            has_respiratory_symptoms=[
+                dict(
+                    has_breathing_pain_symptom=r"",
+                    has_chest_pain_symptom=r"",
+                    has_cough_and_becomes_easily_exhausted_symptom=r"",
+                    has_cough_and_breathing_causes_sleep_disorder_symptom=r"",
+                    has_cough_and_coughing_causes_physical_tiredness_symptom=r"",
+                    has_cough_and_feels_breathless_when_bending_symptom=r"",
+                    has_cough_and_feels_breathless_when_talking_symptom=r"",
+                    has_cough_and_feels_pain_when_coughing_symptom=r"",
+                    has_cough_symptom=r"",
+                    has_dyspnea_on_exertion_symptom=r"",
+                    has_dyspnea_symptom=r"",
+                    has_dyspnea_while_sitting_lying_symptom=r"",
+                    has_dyspnea_while_walking_in_room_symptom=r"",
+                    has_dyspnea_while_washing_dressing_symptom=r"",
+                ),
+            ],
+            has_musculoskeletal_symptoms=[
+                dict(
+                    has_asthenia_symptom=r"",
+                    has_falls_symptom=r"",
+                    has_imbalance_disorder_symptom=r"",
+                    has_inability_to_control_movement_symptom=r"",
+                    has_joint_pain_symptom=r"",
+                    has_muscle_pain_symptom=r"",
+                ),
+            ],
+            has_neurocognitive_symptoms=[
+                dict(
+                    has_abdominal_pain_symptom=r"",
+                    has_ageusia_symptom=r"",
+                    has_altered_emotional_state_symptom=r"",
+                    has_anosmia_symptom=r"",
+                    has_behavior_alteration_symptom=r"",
+                    has_clouded_mind_symptom=r"",
+                    has_cognitive_attention_symptom=r"",
+                    has_cognitive_concentration_symptom=r"",
+                    has_cognitive_memory_symptom=r"",
+                    has_diarrhea_symptom=r"",
+                    has_dizziness_symptom=r"",
+                    has_effluvium_symptom=r"",
+                    has_epileptic_seizures_convulsions_symptom=r"",
+                    has_erectile_dysfunction_symptom=r"",
+                    has_eye_disorder_symptom=r"",
+                    has_fainting_blackout_symptom=r"",
+                    has_fear_of_the_future_symptom=r"",
+                    has_headache_symptom=r"",
+                    has_hearing_disorder_symptom=r"",
+                    has_lost_appetite_symptom=r"",
+                    has_menstrual_cycle_change_symptom=r"",
+                    has_nausea_symptom=r"",
+                    has_others_symptom=r"",
+                    has_psychological_activation_symptom=r"",
+                    has_skin_alteration_symptom=r"",
+                    has_sleep_disorder_symptom=r"",
+                    has_swallowing_troubles_symptom=r"",
+                    has_sweating_symptom=r"",
+                    has_tachycardia_symptom=r"",
+                    has_throat_scraper_symptom=r"",
+                    has_tremors_symptom=r"",
+                    has_urinating_troubles_symptom=r"",
+                    has_weak_legs_arms_symptom=r"",
+                ),
+            ],
             blood=[
                 dict(
                     hearth_rate=str(
@@ -1053,6 +1114,7 @@ def does_not_match_categorical_rule(column_name, df):
             str(df.dtypes[column_name])
             in ("boolean", "datetime64[ns]"),  # already casted
             "" in column_name.lower(),  # free text notes
+            "audit" in column_name.lower(),   # AUDIT-C alcool use
             "_description" in column_name.lower(),  # free text notes
             "" in column_name.lower(),  # exam results
             "_notes" in column_name.lower(),  # free text notes
@@ -1077,6 +1139,9 @@ def does_not_match_categorical_rule(column_name, df):
             "the regexp against all the blood tests"
         )
 
+    if column_name.lower().startswith("drug"):
+        return False
+
     column_unique_values = set(df.loc[:, column_name].unique())
     if any(
         (
@@ -1086,7 +1151,7 @@ def does_not_match_categorical_rule(column_name, df):
                 for value in column_unique_values
                 if pd.notna(value)
             ),
-            "" in (str(v).lower() for v in column_unique_values),
+            "absent" in (str(v).lower() for v in column_unique_values),
         )
     ):
         return True
@@ -1099,6 +1164,7 @@ def does_not_match_float_rule(column_name, dtype):
         return False
     if any(
         (
+            str(column_name).lower().startswith("drug"),
             str(column_name).lower().endswith("_all_dates"),
             str(column_name).lower().endswith(""),
             str(column_name).lower().endswith("_code"),
@@ -1291,6 +1357,7 @@ def matches_static_rule(column_name):
         (
             "admission_date",
             "age",
+            "birth_date",
             "DAYS_IN_STATE",
             "discharge_date",
             "discharge_mode",
@@ -1681,6 +1748,19 @@ def _rename_helper(old_col_name, errors="warn"):
         )
         return new_col_name
 
+    if old_col_name.replace(" ", "_") in (
+        "No_O2",
+        "O2",
+        "HFNO",
+        "NIV",
+        "Intubated",
+        "Deceased",
+        "Discharged",
+        "Transferred",
+    ):
+        debug(f"Skipping state name {old_col_name}")
+        return old_col_name
+
     for reason, list_of_rules in drop_rules.items():
         for rule in list_of_rules:
             if rule.match(old_col_name) is not None:
@@ -1947,7 +2027,7 @@ def switch_to_date_features(sheet_name):
 
 
 @lru_cache(maxsize=None)
-def translator_helper(old_col_name, usetex=False, bold=False, **kwargs):
+def translator_helper(old_col_name, bold=False, usetex=False, **kwargs):
     """Make column names pretty enough to be used as plot titles"""
     if bold and not usetex:
         warning("bold flag is useless without also usetex flag set")
@@ -1955,6 +2035,44 @@ def translator_helper(old_col_name, usetex=False, bold=False, **kwargs):
     mapping = dict(**kwargs)
     mapping.update(
         {
+            {
+                True: "".join(
+                    (
+                        r"$\mathrm{",
+                        r"\mathbf{" if bold else "",
+                        "No~O",
+                        r"}" if bold else "",
+                        r"}_{\mathrm{",
+                        r"\mathbf{" if bold else "",
+                        "2",
+                        r"}" if bold else "",
+                        r"}}$",
+                    )
+                ),
+                False: "No O2",
+            }.get(usetex): ("no_o2",),
+            {
+                True: "".join(
+                    (
+                        r"$\mathrm{",
+                        r"\mathbf{" if bold else "",
+                        "O",
+                        r"}" if bold else "",
+                        r"}_{\mathrm{",
+                        r"\mathbf{" if bold else "",
+                        "2",
+                        r"}" if bold else "",
+                        r"}}$",
+                    )
+                ),
+                False: "O2",
+            }.get(usetex): ("o2",),
+            "HFNO": ("hfno",),
+            "NIV": ("niv",),
+            "Intubated": ("intubated",),
+            "Deceased": ("deceased",),
+            "Discharged": ("discharged",),
+            "Transferred": ("transferred",),
             "Alanine transaminase": ("gpt_alt",),
             "Age": ("age",),
             {
@@ -1998,9 +2116,13 @@ def translator_helper(old_col_name, usetex=False, bold=False, **kwargs):
                 "Translator helper hit a match:\t"
                 f"{old_col_name} ~> {col_name} ~> {new_col_name}"
             )
-            if usetex and bold:
-                return "".join((r"\textbf{", new_col_name, r"}"))
+            if usetex:
+                new_col_name = new_col_name.replace("-", "--")
+                if bold:
+                    new_col_name = "".join((r"\textbf{", new_col_name, r"}"))
             return new_col_name
+
+    return old_col_name
     raise KeyError(
         f"No translation was found for '{old_col_name}' ('{col_name}');"
         " you can provide a custom mapping to extend the hardcoded defaults"
