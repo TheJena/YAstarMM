@@ -858,7 +858,27 @@ def clear_and_refill_state_transition_columns(
         whole_df = open(whole_df, "rb")
     if isinstance(whole_df, BufferedIOBase):  # df = open('file.xlsx', 'rb')
         logging.debug(f"Reading whole_df from '{whole_df.name}'")
-        whole_df = pd.read_excel(whole_df)
+        try:
+            whole_df = pd.read_excel(whole_df)
+        except ValueError as e:
+            if all(
+                (
+                    "value must be one of" in str(e).lower(),
+                    "greaterthanorequal" in str(e).lower(),
+                    "lessthan" in str(e).lower(),
+                    "equal" in str(e).lower(),
+                    "lessthanorequal" in str(e).lower(),
+                    "greaterthan" in str(e).lower(),
+                    "notequal" in str(e).lower(),
+                )
+            ):
+                logging.debug(str(e))
+                logging.critical(
+                    f"\nFile {whole_df.name} seems to have some"
+                    " conditional formatting; please remove it\n"
+                )
+                raise SystemExit(1)
+
     assert isinstance(whole_df, pd.DataFrame)
     assert bool(use_insomnia) != bool(use_dumbydog), str(
         "Please set either use_insomnia=True or use_dumbydog=True"

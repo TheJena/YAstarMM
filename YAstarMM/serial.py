@@ -164,15 +164,15 @@ def _convert_single_cell_float(value, column=None):
             (
                 "" in ret and "" in ret,
                 "" in ret and "" in ret,
-                "" in ret and "" in ret,
-                "" in ret and "" in ret,
+                "not" in ret and "detectable" in ret,
+                "not" in ret and "determinable" in ret,
             )
         ):
             return np.nan
         ret = (
-            ret.replace("", " 0 ")
-            .replace("", " 0 ")
-            .replace("", " 0 ")
+            ret.replace("absent", " 0 ")
+            .replace("negative", " 0 ")
+            .replace("not measurable", " 0 ")
         )
         ret = ret.replace("./", "/").replace(". ", " ")
         if column != "icd9_code":
@@ -210,10 +210,10 @@ def _merge_multiple_columns(sheet_name, df, col):
     )
     data = list()
     for _, row in df.loc[:, col].iterrows():
-        if col not in NORMALIZED_TIMESTAMP_COLUMNS:
-            row = set(row.dropna())
-        else:
+        if col in NORMALIZED_TIMESTAMP_COLUMNS:
             row = set(row.dropna().astype("datetime64[ns]").dt.normalize())
+        else:
+            row = set(row.dropna())
         if row and col in COLUMNS_WITH_FLOAT_MIXED_WITH_NOTES:
             new_row, notes = list(), set()
             for cell in row:
@@ -344,15 +344,16 @@ def cast_columns_to_booleans(df_dict):
                         + "now is:    "
                         + new_col_repr
                     )
-    sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
-    for sheet_name, new_columns in sorted(
-        new_df_columns.items(), key=lambda tup: tup[0].lower()
-    ):
-        df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
-        info(
-            f"Successfully converted {len(new_columns): >2d} columns of "
-            f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to boolean"
-        )
+    if new_df_columns:
+        sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
+        for sheet_name, new_columns in sorted(
+            new_df_columns.items(), key=lambda tup: tup[0].lower()
+        ):
+            df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
+            info(
+                f"Successfully converted {len(new_columns): >3d} columns of "
+                f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to boolean"
+            )
     return df_dict
 
 
@@ -419,7 +420,7 @@ def cast_columns_to_categorical(df_dict, **kwargs):
     ):
         df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
         info(
-            f"Successfully converted {len(new_columns): >2d} columns of "
+            f"Successfully converted {len(new_columns): >3d} columns of "
             f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to Categorical"
         )
     return df_dict
@@ -465,7 +466,7 @@ def cast_columns_to_floating_point(df_dict, **kwargs):
         )
         if amount > 0:
             info(
-                f"Successfully converted {amount: >2d} columns of "
+                f"Successfully converted {amount: >3d} columns of "
                 f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to "
                 f"floating-point"
             )
@@ -587,7 +588,9 @@ def create_new_unique_identifier(
     debug(f"updating all sheets with the new key column '{new_key_col}'")
     df_dict = update_all_sheets(
         df_dict,
-        aux_df.drop(columns=["date"] if "date" in aux_df.columns else []),
+        aux_df.drop(
+            columns=["date"] if "date" in aux_df.columns else []
+        ).drop_duplicates(),
         receiver=new_key_col,
         giver=new_key_col,
     )
@@ -804,13 +807,13 @@ def fill_missing_days_in_hospital(
         patient_df = df.loc[
             patient_selector, [key_col, date_col, range_start, range_end]
         ]
-        if not len(set(patient_df[range_start].dropna())) == 1:
+        if len(set(patient_df[range_start].dropna())) == 0:
             warning(
                 f"'{patient}' has only nan in '{range_start}' "
                 + repr(patient_df[range_start].tolist())
             )
             continue
-        if not len(set(patient_df[range_end].dropna())) == 1:
+        if len(set(patient_df[range_end].dropna())) == 0:
             debug(
                 f"'{patient}' has only nan in '{range_end}' "
                 + repr(patient_df[range_end].tolist())
@@ -827,8 +830,8 @@ def fill_missing_days_in_hospital(
         if pd.notna(start_date) and pd.notna(end_date):
             original_dates = set(
                 pd.date_range(
-                    start=start_date,
-                    end=end_date,
+                    start=min(start_date, end_date),
+                    end=max(start_date, end_date),
                     freq="D",
                     normalize=True,
                 ).array
@@ -838,9 +841,16 @@ def fill_missing_days_in_hospital(
                 d for d in (start_date, end_date) if pd.notna(d)
             )
         original_dates.update(
-            set(patient_df[date_col].dt.normalize().dropna())
+            set(patient_df[date_col].dropna().dt.normalize())
         )
         original_dates = pd.Series(sorted(original_dates))
+        if original_dates.empty:
+            warning(
+                f"f'{patient}' has any date available in: "
+                + str(", ".join((range_start, date_col, range_end)))
+                + "."
+            )
+            continue
         debug(f"patient {repr(patient)} has dates = {original_dates.tolist()}")
         q1, q3 = original_dates.quantile(0.25), original_dates.quantile(0.75)
         iqr = q3 - q1
@@ -852,7 +862,7 @@ def fill_missing_days_in_hospital(
             f"whisker_up = {str(q3 + whisker_coeff * iqr)}, "
             f"IQR = {str(iqr)}"
         )
-        if iqr < timedelta(days=max_iqr_days):
+        if pd.notna(iqr) and iqr < timedelta(days=max_iqr_days):
             whiskers_range = pd.date_range(
                 start=q1 - whisker_coeff * iqr,
                 end=q3 + whisker_coeff * iqr,
@@ -871,12 +881,13 @@ def fill_missing_days_in_hospital(
                     debug(
                         f"patient {repr(patient)} has too large IQR;"
                         " falling back to original hospitalization "
-                        f"period: [{start_date.date()} ÷ {end_date.date()}])"
+                        f"period: [{min(start_date, end_date).date()}"
+                        f" ÷ {max(start_date, end_date).date()}])"
                     )
                     one_week = timedelta(days=7)
                     whiskers_range = pd.date_range(
-                        start=start_date - one_week,
-                        end=end_date + one_week,
+                        start=min(start_date, end_date) - one_week,
+                        end=max(start_date, end_date) + one_week,
                         freq="D",
                         normalize=True,
                     )

@@ -145,13 +145,11 @@ def _convert_single_cell_timestamp(cell, column_name, sheet_name):
                     # This is a useless incremental timestamp,
                     # let us drop it
                     return pd.NaT
-                else:
-                    debug(
-                        f"Could not convert integer {cell_value} from column "
-                        f"'{column_name}' of sheet '{sheet_name}' to timestamp"
-                    )
-                    return cell_value  # integer
-        elif "." in cell_value and column_name == "":
+
+        # a CENSORED_DATE_NAME could also be an integer
+        if (
+            column_name == "" and "__" not in cell_value
+        ):
             try:
                 # Please take your seat before reading further ...
                 #
@@ -790,11 +788,15 @@ def _update_all_sheets(
                 )
             ),
         ].groupby(giver_list[0]):
+            sub_lookup_table = sub_lookup_table.drop_duplicates()
             selector = row_selector(index=df.index)
             for sub_col, sub_series in sub_lookup_table.items():
                 if sub_col in giver_list:
                     continue
-                selector = (selector) & df[sub_col].isin(sub_series.unique())
+                selector = (selector) & (
+                    df[sub_col].isin(sub_series.dropna().unique())
+                    | (df[sub_col].isna() & sub_series.isna().any())
+                )
                 if not selector.any():
                     # selector is not selecting any row, go on
                     break
@@ -816,7 +818,7 @@ def _update_all_sheets(
                             (selector) & (df[receiver_list[0]] == giver_value),
                             receiver_col,
                         ] = receiver_values.pop()
-                    else:
+                    elif len(set(receiver_values)) > 1:
                         warning(
                             "could not choose between so many receiver "
                             f"values ({repr(receiver_values)}) for "
@@ -868,15 +870,25 @@ def cast_date_time_columns_to_timestamps(df_dict, **kwargs):
             )
     for _ in timestamp_workers:
         sheet_name, column_name, new_series = tw_output_queue.get()
+
+        try:
+            new_series = pd.to_datetime(new_series, utc=True).dt.tz_convert(
+                None
+            )
+        except Exception as exception:
+            warning(
+                "Could not convert dates/times of "
+                f"column '{column_name}' in sheet '{sheet_name}' "
+                f"got the following exception: {str(exception)}"
+            )
+            continue
         new_df_columns[sheet_name] = new_df_columns.get(sheet_name, dict())
         if column_name in NORMALIZED_TIMESTAMP_COLUMNS:
-            new_df_columns[sheet_name][column_name] = new_series.astype(
-                "datetime64[ns]"
-            ).dt.normalize()  # normalize to midnight
+            new_df_columns[sheet_name][
+                column_name
+            ] = new_series.dt.normalize()  # normalize to midnight
         else:
-            new_df_columns[sheet_name][column_name] = new_series.astype(
-                "datetime64[ns]"
-            ).dt.round(
+            new_df_columns[sheet_name][column_name] = new_series.dt.round(
                 "S"  # round to second precision
             )
         debug(
@@ -884,15 +896,16 @@ def cast_date_time_columns_to_timestamps(df_dict, **kwargs):
             f"the other ones for '{sheet_name}'"
         )
     _join_all(timestamp_workers, "timestamp workers")
-    sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
-    for sheet_name, new_columns in sorted(
-        new_df_columns.items(), key=lambda tup: tup[0].lower()
-    ):
-        df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
-        info(
-            f"Successfully converted {len(new_columns): >2d} columns of "
-            f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to pd.Timestamp"
-        )
+    if new_df_columns:
+        sheet_name_pad = 2 + max((len(sn) for sn in new_df_columns.keys()))
+        for sheet_name, new_columns in sorted(
+            new_df_columns.items(), key=lambda tup: tup[0].lower()
+        ):
+            df_dict[sheet_name] = df_dict[sheet_name].assign(**new_columns)
+            info(
+                f"Successfully converted {len(new_columns): >2d} columns of "
+                f"sheet {repr(sheet_name).ljust(sheet_name_pad)} to pd.Timestamp"
+            )
     return df_dict
 
 
@@ -931,7 +944,13 @@ def fill_nan_backward_forward(
     ):
         if group_is_not_a_tuple:
             group_name = [group_name]
-        if not dropna and any(pd.isna(value) for value in group_name):
+        if group_df.shape[0] <= tail:
+            debug(
+                "skipping fill-backward-forward+tail for group "
+                f"{group_name}; since already shorter or equal to tail"
+            )
+            all_groups.append(group_df.copy(deep=True))
+        elif not dropna and any(pd.isna(value) for value in group_name):
             debug(
                 "skipping fill-backward-forward+tail for group "
                 f"{group_name}; since it contains nan "
@@ -941,6 +960,7 @@ def fill_nan_backward_forward(
             gw_input_queue.put(GroupWorkerInput(group_name, group_df))
     for _ in group_workers:
         gw_input_queue.put(None)  # send termination signals
+    del df
 
     output_ack, error_ack = len(group_workers), len(group_workers)
     while output_ack > 0:
