@@ -200,14 +200,13 @@ def _plot_histogram_distribution(
             .replace(r"\textbf", "")
             .strip(r"{ }"),
         ),
-        list(itertools.chain.from_iterable(all_axes.tolist()))[:num_axes],
+        list(itertools.chain.from_iterable(all_axes))[:num_axes],
     ):
         logger.debug(f"Plotting histogram distribution of '{col}'")
         ax.set_title(
             translator_helper(col, usetex=_USETEX, bold=_USETEX),
             fontsize=10.5,
-            pad=-14,
-            y=1.0,
+            y=None,
         )
         max_hex_digits = 6
         n, bins, _ = ax.hist(
@@ -384,7 +383,7 @@ def plot_sparsity(
                 for c in df.columns
                 if c not in ("date", "", "UPDATED_CHARLSON_INDEX")
             }
-        )  # .drop(columns=["date", "", "UPDATED_CHARLSON_INDEX"])
+        ).drop(columns=["date", "", "UPDATED_CHARLSON_INDEX"])
     else:
         df2 = df.copy(deep=True)
     msno.bar(
@@ -474,7 +473,7 @@ def plot_transition_probabilities(transition_matrix, selfedges=True):
         if not selfedges and graph.has_edge(node, node):
             prob = graph.edges[node, node]["probability"]
             ax.text(
-                fontweight="bold",
+                fontweight="bold",  # that's readable in a IEEE 2cols US-letter
                 ha="center",
                 s=str(
                     r"\textbf{(self--trans.:\:"
@@ -486,10 +485,7 @@ def plot_transition_probabilities(transition_matrix, selfedges=True):
                 size=24,
                 va="center",
                 x=x + 1.25 * sign(x) / 7,
-                y=y
-                + 16
-                * sign(y)
-                / 40,
+                y=y + 16 * sign(y) / 40,
             )
             # since we wrote the probability in the label there is no
             # reason to also draw a fat self-edge; let us remove it

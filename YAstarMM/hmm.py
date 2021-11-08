@@ -113,9 +113,6 @@ def _hmm_trainer(hti, **kwargs):
             light_mm.show_start_probability()
             light_mm.show(occurrences_matrix=True)
             light_mm.show(transition_matrix=True)
-            if False:
-                light_mm.show(training_matrix=True)
-                light_mm.show(validation_matrix=True)
 
             hmm_kwargs = light_mm.hidden_markov_model_kwargs
             hmm_save_dir = light_mm.hidden_markov_model_dir
@@ -673,9 +670,6 @@ def run():
         random_seed=getattr(parsed_args(), "meta_model_random_seed", None),
         save_to_dir=getattr(parsed_args(), "save_dir"),
     )
-    if False:
-        heavy_mm.show(training_matrix=True)
-        heavy_mm.show(testing_matrix=True)
 
     if getattr(parsed_args(), "seeds_to_explore", None) is not None:
         max_seeds = getattr(parsed_args(), "seeds_to_explore")
@@ -795,12 +789,6 @@ def save_hidden_markov_model(
         logger.info(
             f"Saved {k.rjust(pad)} to {str(basename(join_path(dir_name, k)))}"
             + ".{txt,npy}"
-        )
-
-    if False:
-        logger.info(
-            "maximum_a_posteriori: "
-            + repr(hmm.maximum_a_posteriori(validation_matrix))
         )
 
     with open(
@@ -1003,7 +991,6 @@ class MetaModel(object):
                     continue
 
                 ret[previous_state][current_state] += 1
-
                 previous_date = current_date
                 previous_state = current_state
         return ret

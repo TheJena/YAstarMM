@@ -5,9 +5,13 @@ Bottleneck			# recommended by pandas
 Cython				# required by pomegranate
 ipython
 matplotlib
-numexpr			# recommended by pandas
+missingno
+networkx
+numexpr				# remmended by pandas
 numpy
 openpyxl			# required by pandas.read_excel() for 'xlsx'
 pandas
 pomegranate
+scipy
+tabulate			# pandas markdown friendly printing
 # xlrd				# versions >= 2.0, support only 'xls' format
