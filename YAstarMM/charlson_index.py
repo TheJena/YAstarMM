@@ -454,33 +454,38 @@ def _max_icd9_code(
     return min(
         weight,
         max(
-            _series_replaced_with_mapping_or_nan(
-                df,
-                icd9_code_column,
-                {
-                    k: weight
-                    for k in (
-                        float(code),
-                        int(code),
-                        str(code),
-                        # In some countries comma is used in place of
-                        # period to separate decimal places
-                        str(code).replace(".", ","),
-                        # These last three substitution rules are
-                        # necessary because icd9 codes are often
-                        # stored as '49121', which are obviously out
-                        # of range [001-999], thus they are meant to
-                        # signify '491.21' (e.g. Obstructive chronic
-                        # bronchitis without exacerbation) as the
-                        # icd9_description column confirms
-                        float(str(code).replace(".", "")),
-                        int(str(code).replace(".", "")),
-                        str(code).replace(".", ""),
-                    )
-                },
-                **kwargs,
-            ).max()
-            for code in ICD9_CODES.get(disease_name, tuple())
+            0,
+            max(
+                set(
+                    _series_replaced_with_mapping_or_nan(
+                        df,
+                        icd9_code_column,
+                        {
+                            k: weight
+                            for k in (
+                                float(code),
+                                int(code),
+                                str(code),
+                                # In some countries comma is used in place of
+                                # period to separate decimal places
+                                str(code).replace(".", ","),
+                                # These last three substitution rules are
+                                # necessary because icd9 codes are often
+                                # stored as '49121', which are obviously out
+                                # of range [001-999], thus they are meant to
+                                # signify '491.21' (e.g. Obstructive chronic
+                                # bronchitis without exacerbation) as the
+                                # icd9_description column confirms
+                                float(str(code).replace(".", "")),
+                                int(str(code).replace(".", "")),
+                                str(code).replace(".", ""),
+                            )
+                        },
+                        **kwargs,
+                    ).max()
+                    for code in ICD9_CODES.get(disease_name, tuple())
+                )
+            ),
         ),
     )
 
@@ -602,11 +607,12 @@ def _series_replaced_with_mapping_or_nan(
 ):
     col_name = rename_helper(col_name)
     if col_name in df.columns:
-        return (
-            df.loc[:, col_name]
-            .replace(defaultdict(_missing_as_nan, mapping))
-            .fillna(default)
-        )
+        return pd.Series(
+            [
+                defaultdict(_missing_as_nan, mapping).get(v)
+                for v in df.loc[:, col_name].tolist()
+            ]
+        ).fillna(default)
     return pd.Series([column_not_found for _ in range(df.shape[0])])
 
 
