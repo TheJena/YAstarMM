@@ -588,6 +588,15 @@ def parsed_args(
     default_flavour_file: Optional[str] = None,
 ) -> FlavouredNamespace:  # make black auto-formatting prettier
     """Return parsed arguments from CLI and YAML file hiding complexity."""
+    try:
+        get_ipython()
+    except NameError:
+        pass  # continue CLI arguments parsing
+    else:
+        # no CLI arguments to parse since we are probably running in a
+        # jupyter notebook
+        return dict()
+
     global _PARSED_ARGS
     if _PARSED_ARGS is None:
         # 1st parser just parses -f / --flavour cli argument (if present)
