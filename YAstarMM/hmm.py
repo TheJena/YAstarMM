@@ -40,9 +40,9 @@ from .column_rules import (
 )
 from .constants import LOGGING_LEVEL, HmmTrainerInput, MIN_PYTHON_VERSION
 from .flavoured_parser import parsed_args
-from .model import State
+from .model import HospitalJourney, ReleaseEvent, State
 from .parallel import _join_all
-from .plot import plot_histogram_distribution
+from .plot import plot_histogram_distribution, plot_transition_probabilities
 from .preprocessing import clear_and_refill_state_transition_columns
 from .utility import initialize_logging, random_string
 from collections import Counter
@@ -52,11 +52,12 @@ from os import listdir, makedirs, remove, rmdir
 from os.path import abspath, basename, join as join_path, isdir, isfile
 from pomegranate import (
     HiddenMarkovModel,
+    # MultivariateGaussianDistribution,
     NormalDistribution,
 )
 from pomegranate.callbacks import Callback, CSVLogger
 from random import randint
-from sys import version_info
+from sys import stderr, version_info
 from time import time
 from yaml import dump, Dumper, SafeDumper
 from zipfile import ZipFile, ZIP_DEFLATED
@@ -577,6 +578,71 @@ def run():
         use_insomnia=getattr(parsed_args(), "use_insomnia", False),
     )
 
+    num_patients, patients_to_drop = 0, list()
+    for patient_id, patient_df in df.groupby(patient_key_col):
+        num_patients += 1
+        oxygen_states = (
+            patient_df.loc[:, rename_helper("ActualState_val")]
+            .dropna()
+            .tolist()
+        )
+        logging.debug(str(patient_id) + " " + repr(oxygen_states))
+        if len(oxygen_states) < 1 or all(
+            (
+                oxygen_states[-1]
+                in (State.No_O2, State.Discharged, State.Transferred),
+                set(oxygen_states[:-1]) == set([State.No_O2]),
+            )
+        ):
+            # these patients just had an admission and discharge date,
+            # most of them were transferred to other hospitals before
+            # starting any kind of oxygen therapy
+            patients_to_drop.append(patient_id)
+            logging.debug(f"Dropping patient {patient_id}:")
+            for ev in HospitalJourney(patient_df, patient_key_col):
+                if isinstance(ev, ReleaseEvent):
+                    try:
+                        reason = ev.reason
+                    except ValueError as e:
+                        reason = str(e)
+                    finally:
+                        logging.debug(f"{repr(ev)}\t{reason}")
+                else:
+                    logging.debug(repr(ev))
+            logging.debug("")
+    logging.info(
+        f"{len(patients_to_drop)} patients (of {num_patients}, i.e.: "
+        f"{100*len(patients_to_drop)/num_patients:.2f}%) were dropped"
+        " because they did not get any relevant oxygen therapy"
+    )
+    df = df.loc[
+        ~df[patient_key_col].isin(patients_to_drop),
+        sorted(df.columns, key=str.lower),
+    ]
+    logging.info(
+        f"{len(set(df[patient_key_col].dropna().unique()))} "
+        "patients received a relevant oxygen therapy"
+    )
+
+    stats = {
+        patient_id: df.loc[
+            df[patient_key_col] == patient_id,
+            rename_helper(("DataRef", "ActualState_val")),
+        ]
+        .dropna()
+        .shape[0]
+        for patient_id in set(df[patient_key_col].dropna().unique())
+    }
+    for label, value in {
+        "Minimum": min(stats.values()),
+        "Average": sum(stats.values()) / len(stats),
+        "Mean": np.mean(list(stats.values())),
+        "Maximum": max(stats.values()),
+    }.items():
+        logging.info(
+            f"{label.ljust(8)} number of records per patient is: {value:7.3f}"
+        )
+
     # finish dataframe preprocessing and split training/test set
     heavy_mm = MetaModel(
         df,
@@ -936,12 +1002,7 @@ class MetaModel(object):
                 if current_state not in self.oxygen_states:
                     continue
 
-                if current_state != previous_state:
-                    ret[previous_state][current_state] += 1
-                elif str(getattr(parsed_args(), "add_day_count", True)) == str(
-                    False
-                ):
-                    ret[current_state][current_state] += 1
+                ret[previous_state][current_state] += 1
 
                 previous_date = current_date
                 previous_state = current_state
@@ -1982,6 +2043,76 @@ class MetaModel(object):
     def warning(self, msg=""):
         """Log warning message."""
         self._log(logging.WARNING, msg)
+
+
+class DummyMetaModel(MetaModel):
+    """Allow plot module to get transition_matrix from input_data"""
+
+    def __init__(self):
+        input_file = getattr(
+            parsed_args(), "plot_transition_probabilities", None
+        )
+        assert input_file is not None
+
+        initialize_logging(
+            f"{__name__.replace('.', '_')}"
+            f"_{DummyMetaModel.plot_state_transitions.__name__}"
+            "__debug.log",
+            getattr(parsed_args(), "log_level", LOGGING_LEVEL),
+            debug_mode=getattr(parsed_args(), "verbose", False),
+        )
+        self._random_seed = 0
+        self._previous_msg = {
+            level: random_string(length=80)
+            for level in (
+                logging.DEBUG,
+                logging.INFO,
+                logging.WARNING,
+                logging.CRITICAL,
+            )
+        }
+        self._has_logging_lock = True
+        self._input_data_dict = {
+            patient_id: {
+                date: state
+                for date, state in patient_data.items()
+                if state != State.Transferred
+            }
+            for patient_id, patient_data in pickle.load(input_file).items()
+        }
+        survived, deceased = set(), set()
+        for patient, journey in self._input_data_dict.items():
+            if State.Deceased in journey.values():
+                deceased.add(patient)
+            if State.Discharged in journey.values():
+                survived.add(patient)
+        assert not survived.intersection(deceased), str(
+            "Sets must be mutually exclusive"
+        )
+        logging.info("")
+        logging.info(f"{len(deceased):4d} patients died")
+        logging.info(f"{len(survived):4d} patients survived")
+        still_in_charge = len(self._input_data_dict.keys())
+        still_in_charge -= len(deceased)
+        still_in_charge -= len(survived)
+        logging.info(f"{still_in_charge:4d} patients are still hospitalized")
+        self.oxygen_states = sorted(
+            set(
+                state.value
+                for patient_data in self._input_data_dict.values()
+                for date, state in patient_data.items()
+            )
+        )
+        logging.info("")
+
+    def plot_state_transitions(self):
+        self.show(transition_matrix=True)
+        logging.info("")
+        plot_transition_probabilities(
+            self.transition_matrix,
+            selfedges=str(getattr(parsed_args(), "add_day_count", True))
+            == str(False),
+        )
 
 
 class LightMetaModel(MetaModel):

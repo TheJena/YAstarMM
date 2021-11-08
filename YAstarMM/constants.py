@@ -56,7 +56,6 @@ import numpy as np
 import pandas as pd
 import re
 import sys
-import yaml
 
 
 MIN_PYTHON_VERSION = (3, 8)
@@ -80,7 +79,11 @@ AVG_ITER_TIME = 6.283185  # seconds
 
 BOOLEANIZATION_MAP = {
     "": np.nan,
+    "none": False,
     "nan": np.nan,
+    "any": False,
+    "no": False,
+    "yes": True,
     False: False,
     True: True,
     float(0.0): False,
@@ -190,6 +193,16 @@ FileWorkerError = namedtuple("FileWorkerError", ["filename", "exception"])
 FileWorkerInput = namedtuple("FileWorkerInput", ["filename", "rename_mapping"])
 FileWorkerOutput = namedtuple("FileWorkerOutput", ["filename", "sheets_dict"])
 
+FilterWorkerError = namedtuple(
+    "FilterWorkerError", ["hmm_description", "exception"]
+)
+FilterWorkerInput = namedtuple(
+    "FilterWorkerInput", ["light_mm_data", "hmm_data"]
+)
+FilterWorkerOutput = namedtuple(
+    "FilterWorkerOutput", ["ith_record", "model_ranking_data", "stats"]
+)
+
 GroupWorkerError = namedtuple("GroupWorkerError", ["group_name", "exception"])
 GroupWorkerInput = namedtuple("GroupWorkerInput", ["group_name", "dataframe"])
 GroupWorkerOutput = namedtuple("GroupWorkerOutput", ["df", "stats"])
@@ -230,40 +243,25 @@ HARDCODED_COLUMN_NAMES = dict(
     DYSPNEA_START="",
     D_DIMER="",
     DayCount="",
-    day_count="",
     GPT_ALT="",
     HEART_FAILURE="",
     HFNO_STATE="",
-    # HFNO_STATE_END="",
-    # HFNO_STATE_START="",
     HOROWITZ_INDEX_UNDER_150="",
     HOROWITZ_INDEX_UNDER_250="",
     ICU_TRANSFER="",
     INFECTIOUS_DISEASES_UNIT_TRANSFER="",
     INTUBATION_STATE="",
-    # INTUBATION_STATE_END="",
-    # INTUBATION_STATE_START="",
     LACTATES="",
     LDH="",
     LYMPHOCYTE="",
     NIV_STATE="",
-    # NIV_STATE_END="",
-    # NIV_STATE_START="",
     NO_OXYGEN_THERAPY_STATE="",
     NO_OXYGEN_THERAPY_STATE_END="",
     NO_OXYGEN_THERAPY_STATE_START="",
     OTHER_LIVER_PATOLOGIES="",
     OXYGEN_THERAPY_STATE="",
-    # OXYGEN_THERAPY_STATE_END="",
-    # OXYGEN_THERAPY_STATE_START="",
     PHOSPHOCREATINE="",
     PORTAL_HYPERTENSION="",
-    # POST_HFNO_STATE_END="",
-    # POST_HFNO_STATE_START="",
-    # POST_NIV_STATE_END="",
-    # POST_NIV_STATE_START="",
-    # POST_OXYGEN_THERAPY_STATE_END="",
-    # POST_OXYGEN_THERAPY_STATE_START="",
     PROCALCITONIN="",
     RESPIRATORY_RATE="",
     SOLID_TUMOR="",
@@ -273,6 +271,7 @@ HARDCODED_COLUMN_NAMES = dict(
     TEMPERATURE="",
     UREA="",
     USE_OXYGEN="",
+    day_count="",
 )
 """Lazy renaming mapping for columns not covered by regular expressions"""
 
@@ -1157,6 +1156,7 @@ NORMALIZED_TIMESTAMP_COLUMNS = [
     # that two record do not differ for a few seconds/minutes (since
     # we are interested in a daily time granularity). So we are going
     # to keep the date information and drop the time information.
+    "birth_date",
     "date",
     "dexamethasone_end_date",
     "dexamethasone_start_date",
@@ -1184,6 +1184,8 @@ NORMALIZED_TIMESTAMP_COLUMNS = [
 
 ORDINARILY_HOME_DISCHARGED = ""
 
+Point = namedtuple("Point", ["x", "y"])
+
 RowFillerError = namedtuple("RowFillerError", ["row", "exception"])
 RowFillerOutput = namedtuple(
     "RowFillerOutput", ["row_index", "chosen_id", "stats"]
@@ -1200,12 +1202,12 @@ SHEET_RENAMING_RULES = OrderedDict(
         new_sheet_name: re.compile(case_insensitive_regexp, re.IGNORECASE)
         for new_sheet_name, case_insensitive_regexp in sorted(
             dict(
-                anagraphic=r"",
                 DRG=r"",
+                ICD__9=r"",
+                anagraphic=r"",
                 emogas=r"",
                 exams=r"",
                 heparine_and_remdesivir=r"",
-                ICD__9=r"",
                 patient_journey=r"",
                 sofa=r"",
                 sofa_history=r"",
@@ -1219,17 +1221,17 @@ SHEET_RENAMING_RULES = OrderedDict(
                     r""
                 ),
                 diary=r"",
-                steroids=r"",
-                swabs=r"",
                 infections=r"",
                 involved_units=r"",
+                steroids=r"",
+                swabs=r"",
                 #
                 # post-COVID sheets
                 # v v v v v v v v v
                 cog=r"",
+                covid_hospitalization=r"",
                 fibroscan=r"",
                 frailty=r"",
-                hospitalization=r"",
                 nutrition=r"",
                 pneumological_exam=r"",
                 radiology_report=r"",
@@ -1253,6 +1255,18 @@ SheetWorkerOutput = namedtuple(
 )
 
 SORTING_PREFIX = "\t"
+
+SubModelWorkerError = namedtuple(
+    "SubModelWorkerError", ["sub_model_path", "exception"]
+)
+SubModelWorkerInput = namedtuple(
+    "SubModelWorkerInput",
+    ["meta_model_path", "sub_model_path", "sub_model_name", "sub_model_files"],
+)
+SubModelWorkerOutput = namedtuple(
+    "SubModelWorkerOutput",
+    ["meta_model_path", "sub_model_name", "sub_model_dict"],
+)
 
 SummarizeFeatureItem = namedtuple(
     "SummarizeFeatureItem", ["old_columns", "old_values_checker", "new_enum"]

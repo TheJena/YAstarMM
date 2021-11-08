@@ -70,6 +70,13 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         "to the observed variables",
         help=SUPPRESS,
     ),
+    ("--ban-too-learned-outcomes",): dict(
+        choices=(str(False), str(True)),
+        default=True,
+        full_help="Ban predicted outcomes which happend to be learned "
+        "too much in comparison to other ones.",
+        help=SUPPRESS,
+    ),
     ("--composer",): dict(
         default=None,
         dest="composer_input_dir",
@@ -228,6 +235,15 @@ _CLI_ARGUMENTS: Dict[Tuple[str, ...], Dict[str, Any]] = {
         help="Plot the dataframe sparsity in an histogram",
         metavar="_df.csv",
         type=FileType("r"),
+    ),
+    ("--plot-transition-probabilities",): dict(
+        default=None,
+        dest="plot_transition_probabilities",
+        help="Plot a star/polygon with oxygen states on vertices and edges "
+        "weighted accordingly to the transition probability matrix built "
+        "from the provided input data.",
+        metavar="input_data.pickle",
+        type=FileType("rb"),
     ),
     ("-r", "--random-seed",): dict(
         default=None,

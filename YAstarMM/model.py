@@ -178,23 +178,31 @@ def ordered_state_transition_columns() -> Tuple[str, ...]:
     # Order does matter, do not change it please
     return rename_helper(
         (
-            "NO_OXYGEN_THERAPY_STATE_START",
             "NO_OXYGEN_THERAPY_STATE",
-            "NO_OXYGEN_THERAPY_STATE_END",
-            "OXYGEN_THERAPY_STATE_START",
             "OXYGEN_THERAPY_STATE",
-            "OXYGEN_THERAPY_STATE_END",
-            "HFNO_STATE_START",
             "HFNO_STATE",
-            "HFNO_STATE_END",
-            "NIV_STATE_START",
             "NIV_STATE",
-            "NIV_STATE_END",
-            "INTUBATION_STATE_START",
             "INTUBATION_STATE",
-            "INTUBATION_STATE_END",
             "ActualState",
             "ActualState_val",
+            "NO_OXYGEN_THERAPY_STATE_START",
+            "NO_OXYGEN_THERAPY_STATE_END",
+            "OXYGEN_THERAPY_STATE_START",
+            "OXYGEN_THERAPY_STATE_END",
+            "HFNO_STATE_START",
+            "HFNO_STATE_END",
+            "NIV_STATE_START",
+            "NIV_STATE_END",
+            "INTUBATION_STATE_START",
+            "INTUBATION_STATE_END",
+            "POST_NIV_STATE_START",
+            "POST_NIV_STATE_END",
+            "POST_HFNO_STATE_START",
+            "POST_HFNO_STATE_END",
+            "POST_OXYGEN_THERAPY_STATE_START",
+            "POST_OXYGEN_THERAPY_STATE_END",
+            "POST_NO_OXYGEN_THERAPY_STATE_END",
+            "POST_NO_OXYGEN_THERAPY_STATE_START",
         )
     )
 
@@ -371,20 +379,13 @@ class Event(object):
                 self._value = pd.to_datetime(pd.NaT)
                 return self._value
             filtered_series = self.callable(filtered_df)
-            my_max = self.callable(filtered_series)
-            my_series = my_max
-            if not isinstance(
-                my_series,
-                (
-                    pd.Timestamp,
-                    type(pd.NaT),
-                ),
-            ):
+            min_max_timestamp = self.callable(filtered_series)
+            if not isinstance(min_max_timestamp, (pd.Timestamp, type(pd.NaT))):
                 raise ValueError(
                     "Event.callable should return a Pandas.Timestamp; "
-                    f"got a '{type(my_series)}' instead"
+                    f"got a '{type(min_max_timestamp)}' instead"
                 )
-            self._value = pd.to_datetime(my_series)
+            self._value = pd.to_datetime(min_max_timestamp)
         return self._value
 
     @value.setter
@@ -459,6 +460,7 @@ class Event(object):
         if filter_col is None:
             self._filter_col = timestamp_col
         else:
+            raise NotImplementedError("THIS SHOULD NEVER HAPPEN")
             self._filter_col = filter_col
         self._start = bool(start)
         assert self._start == (not bool(end)), "start_flag != not end_flag"
@@ -1032,7 +1034,8 @@ class ReleaseEvent(Event):
         logging.warning(
             "".join(
                 (
-                    f" Patient '{patient_id}' has several discharge reasons: ",
+                    f" Patient '{patient_id}' has any"
+                    " or several discharge reasons: ",
                     f"\n{' ' * 10}" if EXECUTING_IN_JUPYTER_KERNEL else "",
                     f"\n{' ' * 10}".join(
                         (
@@ -1043,7 +1046,7 @@ class ReleaseEvent(Event):
                         )
                     )
                     if EXECUTING_IN_JUPYTER_KERNEL
-                    else repr(sorted(reasons))[1:-1],
+                    else repr(sorted(reasons)),
                 )
             )
         )
