@@ -381,9 +381,16 @@ def plot_sparsity(
                     **{"Oxygen Therapy State": "oxygen_therapy_state_value"},
                 )
                 for c in df.columns
-                if c not in ("date", "", "UPDATED_CHARLSON_INDEX")
+                if c
+                not in (
+                    "date",
+                    "YOUR_MILEAGE_MAY_VARY",
+                    "UPDATED_CHARLSON_INDEX",
+                )
             }
-        ).drop(columns=["date", "", "UPDATED_CHARLSON_INDEX"])
+        ).drop(
+            columns=["date", "YOUR_MILEAGE_MAY_VARY", "UPDATED_CHARLSON_INDEX"]
+        )
     else:
         df2 = df.copy(deep=True)
     msno.bar(
@@ -426,11 +433,7 @@ def plot_transition_probabilities(transition_matrix, selfedges=True):
             probability = round(
                 transition_matrix[state_from.value][state_to.value], 3
             )
-            if any(
-                (
-                    probability <= 0.007,
-                )
-            ):
+            if any((probability <= 0.007,)):
                 logging.info(
                     f"{state_from:^13} ~> {state_to:^12} "
                     f"has prob {probability:.3f}\t[ SKIPPED ]"
@@ -535,9 +538,7 @@ def plot_transition_probabilities(transition_matrix, selfedges=True):
         ],
     )
     for extension in ("svg",):
-        plt.savefig(
-            f"./plots/transition_probabilities.{extension}"
-        )
+        plt.savefig(f"./plots/transition_probabilities.{extension}")
 
 
 def sign(num):

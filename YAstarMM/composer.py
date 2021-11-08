@@ -1075,7 +1075,7 @@ def test_set_skeleton(test_set_df):
     """
     return test_set_df.loc[
         :,
-        rename_helper(("", "date", "ActualState_val")),
+        rename_helper(("YOUR_MILEAGE_MAY_VARY", "date", "ActualState_val")),
     ].to_dict()
 
 

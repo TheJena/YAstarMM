@@ -130,7 +130,7 @@ def _auxiliary_dataframe(df_dict, aux_cols, new_empty_col, sortby=list()):
                         not matches_date_time_rule(col),
                         # string
                         "provenance" not in col.lower(),
-                        col != rename_helper(""),
+                        col != rename_helper("YOUR_MILEAGE_MAY_VARY"),
                     )
                 )
             }
@@ -147,7 +147,9 @@ def _convert_single_cell_boolean(cell, column_name=None):
     ):
         if pd.isna(cell):
             return np.nan
-        return bool(" ".join(str(cell).lower().split()) != "")
+        return bool(
+            " ".join(str(cell).lower().split()) != "YOUR_MILEAGE_MAY_VARY"
+        )
     else:
         return BOOLEANIZATION_MAP.get(
             cell.lower() if isinstance(cell, str) else cell,
@@ -162,8 +164,10 @@ def _convert_single_cell_float(value, column=None):
         ret = str(value).lower()
         if any(
             (
-                "" in ret and "" in ret,
-                "" in ret and "" in ret,
+                "YOUR_MILEAGE_MAY_VARY" in ret
+                and "YOUR_MILEAGE_MAY_VARY" in ret,
+                "YOUR_MILEAGE_MAY_VARY" in ret
+                and "YOUR_MILEAGE_MAY_VARY" in ret,
                 "not" in ret and "detectable" in ret,
                 "not" in ret and "determinable" in ret,
             )
@@ -523,7 +527,12 @@ def create_new_unique_identifier(
         df_dict,
         aux_cols=aux_cols,
         new_empty_col=new_key_col,
-        sortby=["provenance", "", "admission_date", "discharge_date"],
+        sortby=[
+            "provenance",
+            "YOUR_MILEAGE_MAY_VARY",
+            "admission_date",
+            "discharge_date",
+        ],
     ).astype({new_key_col: "string"})
 
     stats = Counter()
@@ -635,14 +644,18 @@ def create_new_unique_identifier(
         ).drop(
             columns=[c for c in ("date", "provenance") if c in aux_df.columns]
         ).dropna(
-            subset=[""]
+            subset=["YOUR_MILEAGE_MAY_VARY"]
         ).drop_duplicates().reset_index(
             drop=True
         ).to_pickle(
             join_path(expanduser("~"), "RAMDISK", "aux_df.pkl")
         )
-    debug(f"amount of          in aux_df: {aux_df[].count():9d}")
-    debug(f"amount of          in aux_df: {aux_df[].count():9d}")
+    debug(
+        f"amount of          in aux_df: {aux_df['YOUR_MILEAGE_MAY_VARY'].count():9d}"
+    )
+    debug(
+        f"amount of          in aux_df: {aux_df['YOUR_MILEAGE_MAY_VARY'].count():9d}"
+    )
     debug(f"size of               aux_df: {aux_df.shape[0]:9d}")
     return df_dict
 
@@ -691,7 +704,7 @@ def deduplicate_dataframe_columns(
 
 @black_magic
 def fill_guessable_nan_keys(df_dict, key_col, aux_cols, **kwargs):
-    if key_col != "":
+    if key_col != "YOUR_MILEAGE_MAY_VARY":
         warning(
             f"This function was designed to fill missing "
             "but guessable '' values.\nIts usage against "
@@ -707,7 +720,12 @@ def fill_guessable_nan_keys(df_dict, key_col, aux_cols, **kwargs):
         df_dict,
         aux_cols=aux_cols,
         new_empty_col=new_key_col,
-        sortby=["provenance", "", "admission_date", "discharge_date"],
+        sortby=[
+            "provenance",
+            "YOUR_MILEAGE_MAY_VARY",
+            "admission_date",
+            "discharge_date",
+        ],
     )
     stats = Counter()
     debug(f"finding existing and valid '{key_col}' values")

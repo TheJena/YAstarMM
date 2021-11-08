@@ -110,7 +110,9 @@ def _select_df_cols(
     suffixes) columns (like pd.DataFrame.merge does in case of
     overlapping names)
     """
-    suffixes = set(NASTY_SUFFIXES).union(set(("",)))  # add empty string
+    suffixes = set(NASTY_SUFFIXES).union(
+        set(("YOUR_MILEAGE_MAY_VARY",))
+    )  # add empty string
     columns_to_filter = [
         col + suffix
         for col in columns
@@ -1025,7 +1027,7 @@ class ReleaseEvent(Event):
         # meaningful
         patient_id = HospitalJourney(
             patient_df=self._dataframe,
-            patient_key_col=rename_helper(""),
+            patient_key_col=rename_helper("YOUR_MILEAGE_MAY_VARY"),
             log_level=logging.CRITICAL,
         ).patient_id
 

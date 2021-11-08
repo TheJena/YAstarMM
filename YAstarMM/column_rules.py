@@ -81,68 +81,56 @@ drop_rules = OrderedDict(
         for reason, list_of_rules in sorted(
             dict(
                 redundant_boolean_information=[
-                    r"",
-                    r"",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
                 ],
                 sensitive_doctors_data=[
-                    r"",
-                    r"",
-                    r"",
-                    r"",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
                     str(
-                        r""
-                        r""
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                 ],
                 sensitive_patients_data=[
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
                 ],
                 unnecessary_information=[
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
-                    r"",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    r"YOUR_MILEAGE_MAY_VARY",
+                    str(r"YOUR_MILEAGE_MAY_VARY"),
+                    str(r"YOUR_MILEAGE_MAY_VARY"),
+                    str(r"YOUR_MILEAGE_MAY_VARY"),
+                    str(r"YOUR_MILEAGE_MAY_VARY"),
+                    str(r"YOUR_MILEAGE_MAY_VARY"),
+                    str(r"YOUR_MILEAGE_MAY_VARY"),
                     str(
-                        r""
-                    ),
-                    str(
-                        r""
-                    ),
-                    str(
-                        r""
-                    ),
-                    str(
-                        r""
-                    ),
-                    str(
-                        r""
-                    ),
-                    str(
-                        r""
-                    ),
-                    str(
-                        r""
-                        r""
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                 ],
             ).items()
@@ -172,825 +160,766 @@ keep_rules = OrderedDict(
         for group_name, list_of_dictionaries in OrderedDict(
             identifiers=[
                 dict(
-                    admission_code=r"",
-                    admission_id=r"",
-                    discharge_id=r"",
-                    patient_id=r"",
-                    provenance=r"",
+                    admission_code=r"YOUR_MILEAGE_MAY_VARY",
+                    admission_id=r"YOUR_MILEAGE_MAY_VARY",
+                    discharge_id=r"YOUR_MILEAGE_MAY_VARY",
+                    patient_id=r"YOUR_MILEAGE_MAY_VARY",
+                    provenance=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             important_dates=[
                 dict(
                     date=str(
-                        r"",
-                        r"",
+                        r"YOUR_MILEAGE_MAY_VARY",
                     ),
                 ),
                 dict(
-                    admission_date=r"",
+                    admission_date=r"YOUR_MILEAGE_MAY_VARY",
                     discharge_date=str(
-                        r""
-                        r""
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     discharge_mode=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                 ),
             ],
             immunological_therapies=[
                 dict(
                     immunological_therapy=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                     immunological_therapy_date=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                 ),
             ],
             antibiotics=[
                 dict(
-                    antibiotic=r"",
-                    antibiotic_notes=r"",
-                    antibiotic_therapy=r"",
-                    roxithromycin=r"",
+                    antibiotic=r"YOUR_MILEAGE_MAY_VARY",
+                    antibiotic_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    antibiotic_therapy=r"YOUR_MILEAGE_MAY_VARY",
+                    roxithromycin=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             anticoagulant_drugs=[
                 {
-                    "": str(  # heparin
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                    ),
+                    "": str(
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # heparin
                 },
             ],
             antirheumatic_drugs=[
                 dict(
                     anakinra=str(
-                        r""
-                        r"(?!"  # start of banned endings
-                        r""
-                        r")"  # end of banned endings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # start of banned endings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # end of banned endings
                     ),
                     anakinra_1st_dose=str(
-                        r""
-                        r""  # banned middle string
-                        r""
-                    ),
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # banned middle string
                     anakinra_1st_via=str(
-                        r""
-                        r""  # banned middle string
-                        r""
-                    ),
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # banned middle string
                     anakinra_2nd_dose=str(
-                        r""
-                        r""  # banned middle string
-                        r""
-                    ),
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # banned middle string
                     anakinra_2nd_via=str(
-                        r""
-                        r""  # banned middle string
-                        r""
-                    ),
-                    anakinra_end_date=r"",
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # banned middle string
+                    anakinra_end_date=r"YOUR_MILEAGE_MAY_VARY",
                     anakinra_sample_t0=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     anakinra_sample_t2=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     anakinra_sample_t7=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
-                    anakinra_start_date=r"",
+                    anakinra_start_date=r"YOUR_MILEAGE_MAY_VARY",
                     anakinra_via=str(
-                        r""
-                        r""  # banned middle string
-                        r""
-                    ),
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # banned middle string
                 ),
                 dict(
-                    plaquenil=r"",
-                    plaquenil_1st_date=str(
-                        r""
-                    ),
+                    plaquenil=r"YOUR_MILEAGE_MAY_VARY",
+                    plaquenil_1st_date=str(r"YOUR_MILEAGE_MAY_VARY"),
                 ),
                 dict(
-                    tocilizumab=str(
-                        r"" r""
-                    ),
+                    tocilizumab=str(r"YOUR_MILEAGE_MAY_VARY"),
                     tocilizumab_1st_dose=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_1st_via=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_2nd_dose=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_2nd_via=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_3rd_dose=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_3rd_via=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_sample_t0=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_sample_t2=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_sample_t7=str(
-                        r""
-                        r""  # banned middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
                     ),
                     tocilizumab_via=str(
-                        r""
-                        r""  # banned middle string
-                        r""
-                    ),
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # banned middle string
                 ),
             ],
             antiviral_drugs=[
                 dict(
-                    antiviral_therapy=str(
-                        r""
-                    ),
-                    kaletra=r"",
-                    rezolsta=r"",
+                    antiviral_therapy=str(r"YOUR_MILEAGE_MAY_VARY"),
+                    kaletra=r"YOUR_MILEAGE_MAY_VARY",
+                    rezolsta=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             pro_nucleotide_drugs=[
                 dict(
-                    remdesivir=str(
-                        r""
-                        r""
-                    ),
-                    remdesivir_1st_date=str(
-                        r""
-                    ),
-                    remdesivir_end_date=r"",
-                    remdesivir_start_date=r"",
+                    remdesivir=str(r"YOUR_MILEAGE_MAY_VARY"),
+                    remdesivir_1st_date=str(r"YOUR_MILEAGE_MAY_VARY"),
+                    remdesivir_end_date=r"YOUR_MILEAGE_MAY_VARY",
+                    remdesivir_start_date=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             other_drug_info=[
                 dict(
-                    atc_code=r"",
-                    drug_amount=r"",
-                    drug_amount_international_unit=r"",
-                    drug_class=r"",
-                    drug_daily_amount=r"",
-                    drug_daily_amount_international_unit=r"",
-                    drug_description=r"",
-                    drug_end_date=r"",
-                    drug_start_date=r"",
+                    atc_code=r"YOUR_MILEAGE_MAY_VARY",
+                    drug_amount=r"YOUR_MILEAGE_MAY_VARY",
+                    drug_amount_international_unit=r"YOUR_MILEAGE_MAY_VARY",
+                    drug_class=r"YOUR_MILEAGE_MAY_VARY",
+                    drug_daily_amount=r"YOUR_MILEAGE_MAY_VARY",
+                    drug_daily_amount_international_unit=r"YOUR_MILEAGE_MAY_VARY",
+                    drug_description=r"YOUR_MILEAGE_MAY_VARY",
+                    drug_end_date=r"YOUR_MILEAGE_MAY_VARY",
+                    drug_start_date=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             cortisone_journey=[
                 {
                     "": str(
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                 },
                 dict(
-                    cortisone_level=r"",
-                    dexamethasone_end_date=r"",
-                    dexamethasone_start_date=r"",
-                    steroids=r"",
-                    steroids_mg=r"",
-                    steroids_mg_pro_kg=r"",
-                    steroids_start=r"",
-                    steroids_end=r"",
+                    cortisone_level=r"YOUR_MILEAGE_MAY_VARY",
+                    dexamethasone_end_date=r"YOUR_MILEAGE_MAY_VARY",
+                    dexamethasone_start_date=r"YOUR_MILEAGE_MAY_VARY",
+                    steroids=r"YOUR_MILEAGE_MAY_VARY",
+                    steroids_mg=r"YOUR_MILEAGE_MAY_VARY",
+                    steroids_mg_pro_kg=r"YOUR_MILEAGE_MAY_VARY",
+                    steroids_start=r"YOUR_MILEAGE_MAY_VARY",
+                    steroids_end=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             oxygen_journey=[
                 dict(
-                    hfno_state_end=r"",
-                    hfno_state_start=r"",
-                    intubation_state_end=r"",
-                    intubation_state_start=r"",
-                    niv_state_end=r"",
-                    niv_state_start=r"",
-                    oxygen_therapy_state_end=r"",
-                    oxygen_therapy_state_start=r"",
-                    post_hfno_state_end=r"",
-                    post_hfno_state_start=r"",
-                    post_niv_state_end=r"",
-                    post_niv_state_start=r"",
-                    post_oxygen_therapy_state_end=r"",
-                    post_oxygen_therapy_state_start=r"",
+                    hfno_state_end=r"YOUR_MILEAGE_MAY_VARY",
+                    hfno_state_start=r"YOUR_MILEAGE_MAY_VARY",
+                    intubation_state_end=r"YOUR_MILEAGE_MAY_VARY",
+                    intubation_state_start=r"YOUR_MILEAGE_MAY_VARY",
+                    niv_state_end=r"YOUR_MILEAGE_MAY_VARY",
+                    niv_state_start=r"YOUR_MILEAGE_MAY_VARY",
+                    oxygen_therapy_state_end=r"YOUR_MILEAGE_MAY_VARY",
+                    oxygen_therapy_state_start=r"YOUR_MILEAGE_MAY_VARY",
+                    post_hfno_state_end=r"YOUR_MILEAGE_MAY_VARY",
+                    post_hfno_state_start=r"YOUR_MILEAGE_MAY_VARY",
+                    post_niv_state_end=r"YOUR_MILEAGE_MAY_VARY",
+                    post_niv_state_start=r"YOUR_MILEAGE_MAY_VARY",
+                    post_oxygen_therapy_state_end=r"YOUR_MILEAGE_MAY_VARY",
+                    post_oxygen_therapy_state_start=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 {
-                    "": r"",
+                    "": r"YOUR_MILEAGE_MAY_VARY",
                 },
             ],
             respiration=[
                 dict(
                     breathing_room_air=str(
-                        r""
-                        r"(?!"  # start banned endings
-                        r""
-                        r")"  # end banned endings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # start banned endings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # end banned endings
                     ),
-                    breathing_room_air_notes=str(
-                        r""
-                    ),
+                    breathing_room_air_notes=str(r"YOUR_MILEAGE_MAY_VARY"),
                     fraction_inspired_oxygen=str(
-                        r"(?!)"  # banned beginnings
-                        r""
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned beginnings
                     ),
                     fraction_inspired_oxygen_notes=str(
-                        r"(?!)"  # banned starts
-                        r""  # allowed ends
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned starts  # allowed ends
                     ),
-                    hacor_score=r"",
+                    hacor_score=r"YOUR_MILEAGE_MAY_VARY",
                     horowitz_index=str(
-                        r"(?!)"
-                        r""
-                        r"(?!)"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    horowitz_index_notes=r"",
-                    horowitz_index_under150_date=str(
-                        r""
-                    ),
-                    horowitz_index_under250_date=str(
-                        r""
-                    ),
+                    horowitz_index_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    horowitz_index_under150_date=str(r"YOUR_MILEAGE_MAY_VARY"),
+                    horowitz_index_under250_date=str(r"YOUR_MILEAGE_MAY_VARY"),
                     non_invasive_ventilation_exhaled_tidal_volume=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                     non_invasive_ventilation_fraction_inspired_oxygen=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     non_invasive_ventilation_positive_end_expiratory_pressure=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    non_invasive_ventilation_ps=r"",
-                    non_invasive_ventilation_vm=r"",
-                    peak_inspiratory_pressure=r"",
-                    peak_inspiratory_pressure_volume=r"",
+                    non_invasive_ventilation_ps=r"YOUR_MILEAGE_MAY_VARY",
+                    non_invasive_ventilation_vm=r"YOUR_MILEAGE_MAY_VARY",
+                    peak_inspiratory_pressure=r"YOUR_MILEAGE_MAY_VARY",
+                    peak_inspiratory_pressure_volume=r"YOUR_MILEAGE_MAY_VARY",
                     oxygen_litres=str(
-                        r"" r"" r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    oxygen_partial_pressure=str(
-                        r""
-                    ),
+                    oxygen_partial_pressure=str(r"YOUR_MILEAGE_MAY_VARY"),
                     oxygen_partial_pressure_notes=str(
-                        r""  # allowed beginnings
-                        r"(?!)"  # banned middle string
-                        r""  # allowed ends
+                        r"YOUR_MILEAGE_MAY_VARY"  # allowed beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"  # banned middle string
+                        r"YOUR_MILEAGE_MAY_VARY"  # allowed ends
                     ),
-                    oxygen_reservoirs_usage=r"",
+                    oxygen_reservoirs_usage=r"YOUR_MILEAGE_MAY_VARY",
                     oxygen_saturation=str(
-                        r""  # allowed match
-                        r"|"  # logic or
-                        r""  # allowed match
+                        r"YOUR_MILEAGE_MAY_VARY"  # allowed match
+                        r"YOUR_MILEAGE_MAY_VARY"  # logic or
+                        r"YOUR_MILEAGE_MAY_VARY"  # allowed match
                     ),
-                    oxygen_saturation_notes=r"",
+                    oxygen_saturation_notes=r"YOUR_MILEAGE_MAY_VARY",
                     oxygen_therapy=str(
-                        r"(?"  # start of banned beginnings
-                        r""
-                        r""
-                        r")"  # end of banned beginnings
-                        r""
-                        r"(?!"  # start of banned endings
-                        r""
-                        r")"  # end of banned endings
+                        r"YOUR_MILEAGE_MAY_VARY"  # start of banned beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # end of banned beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # start of banned endings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # end of banned endings
                     ),
                     oxygen_therapy_notes=str(
-                        r"(?!"  # start of banned beginnings
-                        r""
-                        r""
-                        r")"  # end of banned beginnings
-                        r""
-                        r""
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"  # start of banned beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # end of banned beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    # oxygen_therapy_pressure=str(
-                    #     r"(?!"
-                    #     r""
-                    #     r")"
-                    #     r""
-                    #     r"(?!"
-                    #     r""
-                    #     r")"
-                    # ),
                 ),
                 {
-                    "": str(  # respiratory_rate
-                        r""
-                        r""
-                    ),
+                    "": str(r"YOUR_MILEAGE_MAY_VARY"),  # respiratory_rate
                 },
                 dict(
-                    venturi_mask_litres=r"",
+                    venturi_mask_litres=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             vaccines=[
                 dict(
-                    influenza_vaccine=r"",
+                    influenza_vaccine=r"YOUR_MILEAGE_MAY_VARY",
                     pneumococcal_vaccine=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                 ),
             ],
             swabs=[
                 dict(
-                    bronchoalveolar_lavage_date=r"",
-                    bronchoalveolar_lavage_result=r"",
-                    swab_1st_negative_date=r"",
-                    swab_1st_positive_date=r"",
-                    swab_all_dates=r"",
+                    bronchoalveolar_lavage_date=r"YOUR_MILEAGE_MAY_VARY",
+                    bronchoalveolar_lavage_result=r"YOUR_MILEAGE_MAY_VARY",
+                    swab_1st_negative_date=r"YOUR_MILEAGE_MAY_VARY",
+                    swab_1st_positive_date=r"YOUR_MILEAGE_MAY_VARY",
+                    swab_all_dates=r"YOUR_MILEAGE_MAY_VARY",
                     swab_check_date=str(
-                        r""
-                        r"|"  # logic or
-                        r""
-                    ),
-                    swab_laboratory=r"",
+                        r"YOUR_MILEAGE_MAY_VARY" r"|" r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # logic or
+                    swab_laboratory=r"YOUR_MILEAGE_MAY_VARY",
                     swab_laboratory_notes=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
-                    swab_result=r"",
+                    swab_result=r"YOUR_MILEAGE_MAY_VARY",
                     swab_symptoms_start=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                     swab_symptoms_start_notes=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                 ),
             ],
             ungrouped_rules=[
                 dict(
                     age=str(
-                        r"(?!"  # start banned beginnings
-                        r""
-                        r""
-                        r")"  # end banned beginnings
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"  # start banned beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # end banned beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    body_mass_index=r"",
-                    ceiling_effect_start_date=str(
-                        r""
-                    ),
-                    ceiling_effect_notes=r"",
-                    covid_19=r"",
-                    covid_19_correlation=str(
-                        r""
-                    ),
+                    body_mass_index=r"YOUR_MILEAGE_MAY_VARY",
+                    ceiling_effect_start_date=str(r"YOUR_MILEAGE_MAY_VARY"),
+                    ceiling_effect_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    covid_19=r"YOUR_MILEAGE_MAY_VARY",
+                    covid_19_correlation=str(r"YOUR_MILEAGE_MAY_VARY"),
                     covid_19_correlation_date=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
-                    dopamine=r"",
-                    height=r"",
-                    infection_description=r"",
+                    dopamine=r"YOUR_MILEAGE_MAY_VARY",
+                    height=r"YOUR_MILEAGE_MAY_VARY",
+                    infection_description=r"YOUR_MILEAGE_MAY_VARY",
                     liver_controlled_attenuation_parameter=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                     liver_controlled_attenuation_parameter_inter_quartile_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    obesity=r"",
-                    organ_transplant=r"",
-                    plica_b=r"",
-                    sex=r"",
-                    waist_circumference=r"",
-                    weight=r"",
+                    obesity=r"YOUR_MILEAGE_MAY_VARY",
+                    organ_transplant=r"YOUR_MILEAGE_MAY_VARY",
+                    plica_b=r"YOUR_MILEAGE_MAY_VARY",
+                    sex=r"YOUR_MILEAGE_MAY_VARY",
+                    waist_circumference=r"YOUR_MILEAGE_MAY_VARY",
+                    weight=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             comorbidities=[
                 dict(
-                    basic_pathologies=r"",
-                    blood_diseases=r"",
-                    cardiovascular_disease=r"",
-                    chronic_diseases=r"",
+                    basic_pathologies=r"YOUR_MILEAGE_MAY_VARY",
+                    blood_diseases=r"YOUR_MILEAGE_MAY_VARY",
+                    cardiovascular_disease=r"YOUR_MILEAGE_MAY_VARY",
+                    chronic_diseases=r"YOUR_MILEAGE_MAY_VARY",
                     chronic_kidney_disease=str(
-                        r""
-                        r""  # optional middle string
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # optional middle string
                     ),
                     chronic_obstructive_pulmonary_disease=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
-                    copatologies=r"",
-                    diabetes=r"",
-                    hepatitis_b=r"",
-                    hepatitis_c=r"",
-                    hiv=r"",
-                    hypertension=r"",
-                    hypertension_notes=r"",
-                    liver_failure=r"",
-                    neoplasms=r"",
-                    organ_damage=r"",
-                    parkinson=r"",
-                    parkinson_notes=r"",
-                    staging_risk=r"",
+                    copatologies=r"YOUR_MILEAGE_MAY_VARY",
+                    diabetes=r"YOUR_MILEAGE_MAY_VARY",
+                    hepatitis_b=r"YOUR_MILEAGE_MAY_VARY",
+                    hepatitis_c=r"YOUR_MILEAGE_MAY_VARY",
+                    hiv=r"YOUR_MILEAGE_MAY_VARY",
+                    hypertension=r"YOUR_MILEAGE_MAY_VARY",
+                    hypertension_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    liver_failure=r"YOUR_MILEAGE_MAY_VARY",
+                    neoplasms=r"YOUR_MILEAGE_MAY_VARY",
+                    organ_damage=r"YOUR_MILEAGE_MAY_VARY",
+                    parkinson=r"YOUR_MILEAGE_MAY_VARY",
+                    parkinson_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    staging_risk=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 {
-                    "": r"",  # charlson index
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # charlson index
                 },
             ],
             intensive_care_unit_scores=[
                 dict(
-                    fully_conscious_state=r"",
-                    drg_code=r"",
-                    drg_description=r"",
-                    icd9_code=r"",
-                    icd9_description=r"",
-                    icd9_weight=r"",
-                    nosocomial_pneumonia=r"",
+                    fully_conscious_state=r"YOUR_MILEAGE_MAY_VARY",
+                    drg_code=r"YOUR_MILEAGE_MAY_VARY",
+                    drg_description=r"YOUR_MILEAGE_MAY_VARY",
+                    icd9_code=r"YOUR_MILEAGE_MAY_VARY",
+                    icd9_description=r"YOUR_MILEAGE_MAY_VARY",
+                    icd9_weight=r"YOUR_MILEAGE_MAY_VARY",
+                    nosocomial_pneumonia=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 {
-                    "": r"",  # APACHE II
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # APACHE II
                 },
                 dict(
-                    glasgow_coma_scale=r"",
+                    glasgow_coma_scale=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 {
-                    "": r"",  # SAPS II
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # SAPS II
                 },
                 dict(
                     sofa_score=str(
-                        r""
-                        r""  # logic or
-                        r""
-                        r""  # logic or
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # logic or  # logic or
                     ),
-                    sofa_score_bilirubin=r"",
-                    sofa_score_creatinine=r"",
-                    sofa_score_platelets=r"",
-                    sofa_score_date=r"",
-                    sofa_score_mean_arterial_pressure=r"",
-                    sofa_score_horowitz_index=r"",
-                    sofa_score_notes=r"",
+                    sofa_score_bilirubin=r"YOUR_MILEAGE_MAY_VARY",
+                    sofa_score_creatinine=r"YOUR_MILEAGE_MAY_VARY",
+                    sofa_score_platelets=r"YOUR_MILEAGE_MAY_VARY",
+                    sofa_score_date=r"YOUR_MILEAGE_MAY_VARY",
+                    sofa_score_mean_arterial_pressure=r"YOUR_MILEAGE_MAY_VARY",
+                    sofa_score_horowitz_index=r"YOUR_MILEAGE_MAY_VARY",
+                    sofa_score_notes=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             hospital_units_journey=[
                 dict(
-                    unit_code=r"",
-                    unit_description=r"",
+                    unit_code=r"YOUR_MILEAGE_MAY_VARY",
+                    unit_description=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 dict(
-                    actual_unit=r"",
+                    actual_unit=r"YOUR_MILEAGE_MAY_VARY",
                     gastroenterology_unit_covid_discharge_date=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     infectious_disease_unit_transfer_date=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     post_operative_recovery_unit_transfer_date=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    previous_unit=r"",
+                    previous_unit=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 dict(
                     infectious_disease_unit_covid_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     infectious_disease_unit_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     internal_intensive_care_unit_critical_area_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     internal_medicine_and_critical_care_unit_covid_admission_room_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     internal_medicine_unit_covid_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     internal_medicine_unit_covid_suspects_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     internal_medicine_unit_critical_area_covid_room_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     internal_medicine_unit_critical_area_covid_suspects_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     internal_medicine_unit_critical_area_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     internal_medicine_unit_date_range=str(
-                        r"" r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     post_operative_covid_recovery_unit_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     post_operative_recovery_unit_date_range=str(
-                        r""
-                        r""
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     respiratory_medicine_sub_intensive_unit_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     respiratory_medicine_unit_covid_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                     respiratory_medicine_unit_date_range=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
                 ),
             ],
             traceability=[
                 dict(
-                    home_confinement=str(
-                        r""
-                        r""
-                    ),
+                    home_confinement=str(r"YOUR_MILEAGE_MAY_VARY"),
                     home_confinement_other_people=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    home_confinement_start_date=str(
-                        r""
-                    ),
+                    home_confinement_start_date=str(r"YOUR_MILEAGE_MAY_VARY"),
                 ),
                 {
-                    "": r"",  # contacts
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # contacts
                 },
                 {
-                    "": r"",  # expositions
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # expositions
                 },
             ],
             signs_and_symptoms=[  # TODO split into signs and into symptoms
                 {
-                    "": r"",  # conjunctivitis
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # conjunctivitis
                 },
                 {
-                    "": r"",  # cough
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # cough
                 },
                 {
-                    "": r"",  # diarrhea
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # diarrhea
                 },
                 {
-                    "": r"",  # dyspnea
-                },
-                # dict(
-                #     dyspnea_start_date=r"",
-                #     dyspnea_when_sitting_lying=str(
-                #         r""
-                #     ),  # make black auto-formatting prettier
-                #     dyspnea_when_walking=r"",
-                #     dyspnea_when_washing_dressing=str(
-                #         r""
-                #     ),
-                # ),
-                {
-                    "": r"",  # fatigue
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # dyspnea
                 },
                 {
-                    "": r"",  # headache
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # fatigue
                 },
                 {
-                    "": r"",  # hemoptysis
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # headache
                 },
                 {
-                    "": r"",  # myalgia
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # hemoptysis
                 },
                 {
-                    "": r"",  # rash
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # myalgia
                 },
                 {
-                    "": r"",  # rhinorrhea
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # rash
                 },
                 {
-                    "": r"",  # rigors
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # rhinorrhea
+                },
+                {
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # rigors
                 },
                 {  # severe_lymphadenopathy
-                    "": r"",
+                    "": r"YOUR_MILEAGE_MAY_VARY",
                 },
                 {  # sputum
-                    "": r"",
+                    "": r"YOUR_MILEAGE_MAY_VARY",
                 },
                 dict(
-                    stiffness=r"",
-                    stiffness_inter_quartile_range=r"",
+                    stiffness=r"YOUR_MILEAGE_MAY_VARY",
+                    stiffness_inter_quartile_range=r"YOUR_MILEAGE_MAY_VARY",
                     symptoms_list=str(
-                        r""
-                        r""
-                        r""
-                        r"",
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY",
                     ),
-                    symptoms_start_date=str(
-                        r""
-                    ),
+                    symptoms_start_date=str(r"YOUR_MILEAGE_MAY_VARY"),
                 ),
                 {
-                    "": r"",  # temperature
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # temperature
                 },
                 {
-                    "": str(  # thorax_physical_exam
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                    ),
+                    "": str(
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                    ),  # thorax_physical_exam
                 },
                 {
-                    "": r"",  # throat_pain
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # throat_pain
                 },
                 {
-                    "": r"",  # tracheotomy
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # tracheotomy
                 },
                 {
-                    "": r"",  # tonsil_oedema
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # tonsil_oedema
                 },
                 dict(
-                    other_symptoms=r"",
+                    other_symptoms=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             has_respiratory_symptoms=[
                 dict(
-                    has_breathing_pain_symptom=r"",
-                    has_chest_pain_symptom=r"",
-                    has_cough_and_becomes_easily_exhausted_symptom=r"",
-                    has_cough_and_breathing_causes_sleep_disorder_symptom=r"",
-                    has_cough_and_coughing_causes_physical_tiredness_symptom=r"",
-                    has_cough_and_feels_breathless_when_bending_symptom=r"",
-                    has_cough_and_feels_breathless_when_talking_symptom=r"",
-                    has_cough_and_feels_pain_when_coughing_symptom=r"",
-                    has_cough_symptom=r"",
-                    has_dyspnea_on_exertion_symptom=r"",
-                    has_dyspnea_symptom=r"",
-                    has_dyspnea_while_sitting_lying_symptom=r"",
-                    has_dyspnea_while_walking_in_room_symptom=r"",
-                    has_dyspnea_while_washing_dressing_symptom=r"",
+                    has_breathing_pain_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_chest_pain_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cough_and_becomes_easily_exhausted_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cough_and_breathing_causes_sleep_disorder_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cough_and_coughing_causes_physical_tiredness_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cough_and_feels_breathless_when_bending_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cough_and_feels_breathless_when_talking_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cough_and_feels_pain_when_coughing_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cough_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_dyspnea_on_exertion_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_dyspnea_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_dyspnea_while_sitting_lying_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_dyspnea_while_walking_in_room_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_dyspnea_while_washing_dressing_symptom=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             has_musculoskeletal_symptoms=[
                 dict(
-                    has_asthenia_symptom=r"",
-                    has_falls_symptom=r"",
-                    has_imbalance_disorder_symptom=r"",
-                    has_inability_to_control_movement_symptom=r"",
-                    has_joint_pain_symptom=r"",
-                    has_muscle_pain_symptom=r"",
+                    has_asthenia_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_falls_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_imbalance_disorder_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_inability_to_control_movement_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_joint_pain_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_muscle_pain_symptom=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             has_neurocognitive_symptoms=[
                 dict(
-                    has_abdominal_pain_symptom=r"",
-                    has_ageusia_symptom=r"",
-                    has_altered_emotional_state_symptom=r"",
-                    has_anosmia_symptom=r"",
-                    has_behavior_alteration_symptom=r"",
-                    has_clouded_mind_symptom=r"",
-                    has_cognitive_attention_symptom=r"",
-                    has_cognitive_concentration_symptom=r"",
-                    has_cognitive_memory_symptom=r"",
-                    has_diarrhea_symptom=r"",
-                    has_dizziness_symptom=r"",
-                    has_effluvium_symptom=r"",
-                    has_epileptic_seizures_convulsions_symptom=r"",
-                    has_erectile_dysfunction_symptom=r"",
-                    has_eye_disorder_symptom=r"",
-                    has_fainting_blackout_symptom=r"",
-                    has_fear_of_the_future_symptom=r"",
-                    has_headache_symptom=r"",
-                    has_hearing_disorder_symptom=r"",
-                    has_lost_appetite_symptom=r"",
-                    has_menstrual_cycle_change_symptom=r"",
-                    has_nausea_symptom=r"",
-                    has_others_symptom=r"",
-                    has_psychological_activation_symptom=r"",
-                    has_skin_alteration_symptom=r"",
-                    has_sleep_disorder_symptom=r"",
-                    has_swallowing_troubles_symptom=r"",
-                    has_sweating_symptom=r"",
-                    has_tachycardia_symptom=r"",
-                    has_throat_scraper_symptom=r"",
-                    has_tremors_symptom=r"",
-                    has_urinating_troubles_symptom=r"",
-                    has_weak_legs_arms_symptom=r"",
+                    has_abdominal_pain_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_ageusia_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_altered_emotional_state_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_anosmia_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_behavior_alteration_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_clouded_mind_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cognitive_attention_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cognitive_concentration_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_cognitive_memory_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_diarrhea_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_dizziness_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_effluvium_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_epileptic_seizures_convulsions_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_erectile_dysfunction_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_eye_disorder_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_fainting_blackout_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_fear_of_the_future_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_headache_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_hearing_disorder_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_lost_appetite_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_menstrual_cycle_change_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_nausea_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_others_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_psychological_activation_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_skin_alteration_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_sleep_disorder_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_swallowing_troubles_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_sweating_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_tachycardia_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_throat_scraper_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_tremors_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_urinating_troubles_symptom=r"YOUR_MILEAGE_MAY_VARY",
+                    has_weak_legs_arms_symptom=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             blood=[
                 dict(
-                    hearth_rate=str(
-                        r""
-                        r""
-                    ),
+                    hearth_rate=str(r"YOUR_MILEAGE_MAY_VARY"),
                 ),
                 dict(
-                    diastolic_pressure=r"",
-                    systolic_pressure=r"",
+                    diastolic_pressure=r"YOUR_MILEAGE_MAY_VARY",
+                    systolic_pressure=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 dict(
-                    arterial_blood=r"",
-                    arterial_blood_notes=r"",
-                    bicarbonate=r"",
-                    bicarbonate_notes=r"",
+                    arterial_blood=r"YOUR_MILEAGE_MAY_VARY",
+                    arterial_blood_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    bicarbonate=r"YOUR_MILEAGE_MAY_VARY",
+                    bicarbonate_notes=r"YOUR_MILEAGE_MAY_VARY",
                     carbon_dioxide_partial_pressure=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                     carbon_dioxide_partial_pressure_notes=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),  # make black auto-formatting prettier
                     erythrocyte_sedimentation_rate=str(
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"
                     ),
-                    erythrocyte_sedimentation_rate_notes=r"",
-                    glucose=r"",
-                    glucose_notes=r"",
-                    hemoglobine=r"",
-                    hemoglobine_notes=r"",
-                    ph=r"",
-                    ph_notes=r"",
-		     urine_ph=r"",
-		     urine_ph_notes=r"",
-                    procalcitonin_exam_date=r"",
+                    erythrocyte_sedimentation_rate_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    glucose=r"YOUR_MILEAGE_MAY_VARY",
+                    glucose_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    hemoglobine=r"YOUR_MILEAGE_MAY_VARY",
+                    hemoglobine_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    ph=r"YOUR_MILEAGE_MAY_VARY",
+                    ph_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    urine_ph=r"YOUR_MILEAGE_MAY_VARY",
+                    urine_ph_notes=r"YOUR_MILEAGE_MAY_VARY",
+                    procalcitonin_exam_date=r"YOUR_MILEAGE_MAY_VARY",
                 ),
             ],
             blood_tests_to_be_partitioned_into_ad_hoc_regexp=[
                 # TODO divide some of the following into ad-hoc regexp
                 {
                     "": str(
-                        r"^(?!"  # start of banned beginnings
-                        r""
-                        r""
-                        r""
-                        r""
-                        r")"  # end of banned beginnings
-                        r""
-                        r"("  # start of group
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                        r""
-                        r")"  # end of group
-                        r""
-                        r""
+                        r"YOUR_MILEAGE_MAY_VARY"  # start of banned beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # end of banned beginnings
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # start of group
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"  # end of group
+                        r"YOUR_MILEAGE_MAY_VARY"
+                        r"YOUR_MILEAGE_MAY_VARY"
                     )
                 },
             ],
             unknown_stuff=[
                 dict(
-                    insert_date=r"",
-                    validation_date=r"",
+                    insert_date=r"YOUR_MILEAGE_MAY_VARY",
+                    validation_date=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 dict(
-                    edit_date=r"",
-                    removal_date=r"",
-                    report_version=r"",
+                    edit_date=r"YOUR_MILEAGE_MAY_VARY",
+                    removal_date=r"YOUR_MILEAGE_MAY_VARY",
+                    report_version=r"YOUR_MILEAGE_MAY_VARY",
                 ),
                 {
-                    "": r"",  # Med_*
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # Med_*
                 },
                 {
-                    "": r"",  # PARVENT_*
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # PARVENT_*
                 },
                 {
-                    "": r"",  # SARSCoV2_PCR_*
+                    "": r"YOUR_MILEAGE_MAY_VARY",  # SARSCoV2_PCR_*
                 },
                 dict(
-                    free_text_notes=str(
-                        r""
-                        r""
-                    ),
+                    free_text_notes=str(r"YOUR_MILEAGE_MAY_VARY"),
                 ),
             ],
         ).items()
@@ -1008,7 +937,8 @@ def charlson_enum_rule(column_values):
     }
     charlson_map, unique_values = dict(), set(column_values)
     if any(
-        "".join(age_suffix.split()) in "".join(str(val).split())
+        "YOUR_MILEAGE_MAY_VARY".join(age_suffix.split())
+        in "YOUR_MILEAGE_MAY_VARY".join(str(val).split())
         for val in unique_values
         for age_suffix in charlson_age.values()
     ):
@@ -1016,7 +946,9 @@ def charlson_enum_rule(column_values):
         charlson_map = {k: set([f"{k} {v}"]) for k, v in charlson_age.items()}
         for val in unique_values:
             for i, age_suffix in charlson_age.items():
-                if "".join(age_suffix.split()) in "".join(str(val).split()):
+                if "YOUR_MILEAGE_MAY_VARY".join(
+                    age_suffix.split()
+                ) in "YOUR_MILEAGE_MAY_VARY".join(str(val).split()):
                     charlson_map[i] = charlson_map[i].union({val})
     else:
         for val in unique_values:
@@ -1043,7 +975,7 @@ def charlson_enum_rule(column_values):
         for i in range(10):
             if any(
                 (
-                    f"{i}=" in "".join(str(val).split()),
+                    f"{i}=" in "YOUR_MILEAGE_MAY_VARY".join(str(val).split()),
                     str(i) == str(val).strip(".0 "),
                     # the following line treats stuff in CHARLSON_AGE
                     str(i) == " ".join(str(val).split("(")[:1]).strip(".0 "),
@@ -1090,8 +1022,8 @@ def charlson_enum_rule(column_values):
 
 def covid_enum_rule(column_values):
     covid_map = {
-        "": "",
-        "": "",
+        "YOUR_MILEAGE_MAY_VARY": "YOUR_MILEAGE_MAY_VARY",
+        "YOUR_MILEAGE_MAY_VARY": "YOUR_MILEAGE_MAY_VARY",
     }
 
     if not all((str(res).lower() in covid_map for res in set(column_values))):
@@ -1113,15 +1045,15 @@ def does_not_match_categorical_rule(column_name, df):
         (
             str(df.dtypes[column_name])
             in ("boolean", "datetime64[ns]"),  # already casted
-            "" in column_name.lower(),  # free text notes
-            "audit" in column_name.lower(),   # AUDIT-C alcool use
+            "YOUR_MILEAGE_MAY_VARY" in column_name.lower(),  # free text notes
+            "audit" in column_name.lower(),  # AUDIT-C alcool use
             "_description" in column_name.lower(),  # free text notes
-            "" in column_name.lower(),  # exam results
+            "YOUR_MILEAGE_MAY_VARY" in column_name.lower(),  # exam results
             "_notes" in column_name.lower(),  # free text notes
             "_date_range" in column_name.lower(),
             "_vaccine" in column_name.lower(),
             "sapsii" in column_name.lower(),  # dates
-            column_name.lower().startswith(""),
+            column_name.lower().startswith("YOUR_MILEAGE_MAY_VARY"),
         )
     ):
         return True
@@ -1166,19 +1098,19 @@ def does_not_match_float_rule(column_name, dtype):
         (
             str(column_name).lower().startswith("drug"),
             str(column_name).lower().endswith("_all_dates"),
-            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("YOUR_MILEAGE_MAY_VARY"),
             str(column_name).lower().endswith("_code"),
             str(column_name).lower().endswith("_date_range"),
             str(column_name).lower().endswith("_description"),
-            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("YOUR_MILEAGE_MAY_VARY"),
             str(column_name).lower().endswith("_id"),
             str(column_name).lower().endswith("_list"),
-            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("YOUR_MILEAGE_MAY_VARY"),
             str(column_name).lower().endswith("_notes"),
-            str(column_name).lower().endswith(""),
-            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("YOUR_MILEAGE_MAY_VARY"),
+            str(column_name).lower().endswith("YOUR_MILEAGE_MAY_VARY"),
             str(column_name).lower().endswith("_version"),
-            str(column_name).lower().endswith(""),
+            str(column_name).lower().endswith("YOUR_MILEAGE_MAY_VARY"),
         )
     ):
         return True
@@ -1186,9 +1118,9 @@ def does_not_match_float_rule(column_name, dtype):
         "antibiotic_therapy",
         "apacheii",  # APACHEII score + (date)
         "charlson",  # Charlson-Index value + (date)
-        "",
-        "",
-        "",
+        "YOUR_MILEAGE_MAY_VARY",
+        "YOUR_MILEAGE_MAY_VARY",
+        "YOUR_MILEAGE_MAY_VARY",
         "sapsii",  # SAPSII score + (date)
         "sofa_score",  # SOFA score + (date)
     ):
@@ -1199,8 +1131,7 @@ def does_not_match_float_rule(column_name, dtype):
 
 
 def drug_enum_rule(column_values):
-    drug_map = dict(
-    )
+    drug_map = dict()
     drug_map.update({f"{k}": f"{v}" for k, v in drug_map.items()})
     drug_map.update(
         {
@@ -1249,7 +1180,7 @@ def fallback_enum_rule(column_values):
             .replace("anakirna", "anakinra")  # typos are everywhere :_(
             .replace("Anakirna", "Anakinra")  # en.wikipedia.org/wiki/Anakinra
             .replace("ANAKIRNA", "ANAKINRA")
-            .replace("", "")
+            .replace("YOUR_MILEAGE_MAY_VARY", "YOUR_MILEAGE_MAY_VARY")
         )
         categories.add(nice_val)
         conversion_map[val] = nice_val
@@ -1321,19 +1252,21 @@ def matches_date_time_rule(column_name):
     c = column_name.lower()
     return any(
         (
-            "" in c,
+            "YOUR_MILEAGE_MAY_VARY" in c,
             c in ("date"),
-            c.endswith(""),
-            c.endswith(""),
-            c.endswith(""),
+            c.endswith("YOUR_MILEAGE_MAY_VARY"),
+            c.endswith("YOUR_MILEAGE_MAY_VARY"),
+            c.endswith("YOUR_MILEAGE_MAY_VARY"),
             c.endswith("_end"),
-            c.endswith(""),
+            c.endswith("YOUR_MILEAGE_MAY_VARY"),
             c.endswith("_from"),
-            c.endswith(""),
+            c.endswith("YOUR_MILEAGE_MAY_VARY"),
             c.endswith("_start"),
             c.endswith("_to"),
-            c.startswith("") and not c.endswith(""),
-            c.startswith("") and not c.endswith(""),
+            c.startswith("YOUR_MILEAGE_MAY_VARY")
+            and not c.endswith("YOUR_MILEAGE_MAY_VARY"),
+            c.startswith("YOUR_MILEAGE_MAY_VARY")
+            and not c.endswith("YOUR_MILEAGE_MAY_VARY"),
         )
     )
 
@@ -1346,9 +1279,11 @@ def matches_integer_rule(column_name):
     return any(
         (
             c == "age",
-            not c.startswith("") and c.endswith("_code"),
-            not c.startswith("") and c.endswith("_code"),
-            not c.startswith("") and c.endswith("_id"),
+            not c.startswith("YOUR_MILEAGE_MAY_VARY") and c.endswith("_code"),
+            not c.startswith("YOUR_MILEAGE_MAY_VARY") and c.endswith("_code"),
+            not c.startswith("YOUR_MILEAGE_MAY_VARY") and c.endswith("_id"),
+        )
+    )
 
 
 @lru_cache(maxsize=None)
@@ -1600,21 +1535,23 @@ def new_key_col_value(admission_date, birth_date=None, discharge_date=None):
 
 def oxygen_support_enum_rule(column_values):
     oxygen_map = {
-        "": "hfno",
-        "": "hfno",
-        "": "absent",
+        "YOUR_MILEAGE_MAY_VARY": "hfno",
+        "YOUR_MILEAGE_MAY_VARY": "hfno",
+        "YOUR_MILEAGE_MAY_VARY": "absent",
         "niv": "niv",
         "no": "absent",
-        "": "nasal cannula",
+        "YOUR_MILEAGE_MAY_VARY": "nasal cannula",
         "reservoir": "with reservoir bag",
-        "": "nasal cannula",
+        "YOUR_MILEAGE_MAY_VARY": "nasal cannula",
         "ventimask": "venturi mask",
         "venturi": "venturi mask",
     }
     if not any(
         (
             word.strip(digits + punctuation)
-            in set(oxygen_map.keys()).difference({"", "no", ""})
+            in set(oxygen_map.keys()).difference(
+                {"YOUR_MILEAGE_MAY_VARY", "no", "YOUR_MILEAGE_MAY_VARY"}
+            )
             for val in set(column_values)
             for word in str(val).lower().split()
         )
@@ -1629,7 +1566,14 @@ def oxygen_support_enum_rule(column_values):
             nice_word = word.strip(digits + punctuation)
             if nice_word not in oxygen_map.keys():
                 continue
-            if all(w not in nice_word for w in ("reserv", "", "")):
+            if all(
+                w not in nice_word
+                for w in (
+                    "reserv",
+                    "YOUR_MILEAGE_MAY_VARY",
+                    "YOUR_MILEAGE_MAY_VARY",
+                )
+            ):
                 nice_word = oxygen_map[nice_word]
                 if "con" in str(val).lower():
                     nice_word += " with"
@@ -1739,7 +1683,7 @@ def _rename_helper(old_col_name, errors="warn"):
     assert errors in ("quiet", "raise", "warn")
 
     if old_col_name.startswith("Has "):
-        old_col_name = old_col_name.replace("Has ", "")
+        old_col_name = old_col_name.replace("Has ", "YOUR_MILEAGE_MAY_VARY")
     new_col_name = HARDCODED_COLUMN_NAMES.get(old_col_name, None)
     if new_col_name is not None:
         debug(
@@ -1776,7 +1720,10 @@ def _rename_helper(old_col_name, errors="warn"):
     for group, list_of_mappings in keep_rules.items():
         for mapping in list_of_mappings:
             for new_col_name in mapping.keys():
-                if new_col_name != "" and old_col_name.lower() == new_col_name:
+                if (
+                    new_col_name != "YOUR_MILEAGE_MAY_VARY"
+                    and old_col_name.lower() == new_col_name
+                ):
                     debug(
                         "New name found:\t"
                         f"({old_col_name} ~> {new_col_name})"
@@ -1785,7 +1732,10 @@ def _rename_helper(old_col_name, errors="warn"):
     for group, list_of_mappings in keep_rules.items():
         for mapping in list_of_mappings:
             for new_col_name, rule in mapping.items():
-                if new_col_name != "" and rule.match(old_col_name) is not None:
+                if (
+                    new_col_name != "YOUR_MILEAGE_MAY_VARY"
+                    and rule.match(old_col_name) is not None
+                ):
                     debug(
                         "New name found:\t"
                         f"({old_col_name} ~> {new_col_name})"
@@ -1901,50 +1851,52 @@ def summarize_features():
             "dyspnea": [
                 SummarizeFeatureItem(["DYSPNEA"], [False], "no dyspnea"),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "dyspnea during room walk",
                 ),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "dyspnea while washing/dressing",
                 ),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "dyspnea while sitting/lying",
                 ),
             ],
             "cough": [
-                SummarizeFeatureItem([""], [False], "no cough"),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"], [False], "no cough"
+                ),
+                SummarizeFeatureItem(
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "cough with weakness",
                 ),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "persistent cough",
                 ),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "persistent cough",
                 ),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "persistent cough",
                 ),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "persistent cough",
                 ),
                 SummarizeFeatureItem(
-                    [""],
+                    ["YOUR_MILEAGE_MAY_VARY"],
                     [True],
                     "persistent cough",
                 ),
@@ -1975,8 +1927,7 @@ def summarize_features():
 
 
 def swab_enum_rule(column_values):
-    swab_common_values = [
-    ]
+    swab_common_values = ["YOUR_MILEAGE_MAY_VARY", "YOUR_MILEAGE_MAY_VARY"]
     if not any(
         (
             " ".join(str(val).lower().split()) in swab_common_values
@@ -1986,7 +1937,10 @@ def swab_enum_rule(column_values):
         raise ValueError("Bad guess, retry")
 
     swab_common_values = [
-        v.capitalize().replace("", "") for v in swab_common_values
+        v.capitalize().replace(
+            "YOUR_MILEAGE_MAY_VARY", "YOUR_MILEAGE_MAY_VARY"
+        )
+        for v in swab_common_values
     ]
     conversion_map = {val: val for val in swab_common_values}
     for val in set(column_values):
@@ -1994,8 +1948,8 @@ def swab_enum_rule(column_values):
             " ".join(str(val).split())
             .capitalize()
             .replace(
-                "",
-                "",
+                "YOUR_MILEAGE_MAY_VARY",
+                "YOUR_MILEAGE_MAY_VARY",
             )
         )
         if nice_val not in swab_common_values:
@@ -2009,17 +1963,17 @@ def swab_enum_rule(column_values):
 
 
 def switch_to_date_features(sheet_name):
-    date = rename_helper("")
+    date = rename_helper("YOUR_MILEAGE_MAY_VARY")
     anakinra, antibiotic, plaquenil, remdesivir, tocilizumab = rename_helper(
         ()
     )
     return dict(
         diary={
-            anakinra: SwitchToDateValue("", date),
-            antibiotic: SwitchToDateValue("", date),
-            plaquenil: SwitchToDateValue("", date),
-            remdesivir: SwitchToDateValue("", date),
-            tocilizumab: SwitchToDateValue("", date),
+            anakinra: SwitchToDateValue("YOUR_MILEAGE_MAY_VARY", date),
+            antibiotic: SwitchToDateValue("YOUR_MILEAGE_MAY_VARY", date),
+            plaquenil: SwitchToDateValue("YOUR_MILEAGE_MAY_VARY", date),
+            remdesivir: SwitchToDateValue("YOUR_MILEAGE_MAY_VARY", date),
+            tocilizumab: SwitchToDateValue("YOUR_MILEAGE_MAY_VARY", date),
         },
     ).get(
         sheet_name, dict()
@@ -2091,22 +2045,22 @@ def translator_helper(old_col_name, bold=False, usetex=False, **kwargs):
                 ),
                 False: "pCO2",
             }.get(usetex): ("carbon_dioxide_partial_pressure",),
-            "Charlson Comorbidity Index": ("",),
+            "Charlson Comorbidity Index": ("YOUR_MILEAGE_MAY_VARY",),
             "Charlson Comorbidity Index (updated)": (
                 "updated_charlson_index",
             ),
-            "Creatinine": ("",),
-            "D-dimer": ("",),
+            "Creatinine": ("YOUR_MILEAGE_MAY_VARY",),
+            "D-dimer": ("YOUR_MILEAGE_MAY_VARY",),
             "Days in the same state": ("days_in_state",),
-            "Dyspnea": ("",),
+            "Dyspnea": ("YOUR_MILEAGE_MAY_VARY",),
             "Horowitz-Index": ("horowitz_index",),
             "Lactate dehydrogenase": ("ldh",),
-            "Lymphocytes": ("",),
+            "Lymphocytes": ("YOUR_MILEAGE_MAY_VARY",),
             "pH (blood)": ("ph",),
             "pH (urine)": ("urine_ph",),
             "Phosphocreatine": ("pcr",),
-            "Procalcitonin": ("",),
-            "Respiratory rate": ("",),
+            "Procalcitonin": ("YOUR_MILEAGE_MAY_VARY",),
+            "Respiratory rate": ("YOUR_MILEAGE_MAY_VARY",),
             "Urea": ("urea",),
         }
     )
@@ -2131,7 +2085,9 @@ def translator_helper(old_col_name, bold=False, usetex=False, **kwargs):
 
 def verticalize_features():
     for item in [
-        VerticalizeFeatureItem("ANAKINRA", "ANAKINRA", [""]),
+        VerticalizeFeatureItem(
+            "ANAKINRA", "ANAKINRA", ["YOUR_MILEAGE_MAY_VARY"]
+        ),
         VerticalizeFeatureItem(
             "ANAKINRA_1ST_DOSE", "ANAKINRA_1ST_DOSE", ["ANAKINRA_1ST_VIA"]
         ),
@@ -2152,21 +2108,23 @@ def verticalize_features():
         ),
         VerticalizeFeatureItem("DYSPNEA_START", "DYSPNEA_START", list()),
         VerticalizeFeatureItem(
-            "", "SYMPTOMS_START", [""]
+            "YOUR_MILEAGE_MAY_VARY",
+            "SYMPTOMS_START",
+            ["YOUR_MILEAGE_MAY_VARY"],
         ),
         VerticalizeFeatureItem("PLAQUENIL", "PLAQUENIL", list()),
         VerticalizeFeatureItem(
-            "PLAQUENIL_1ST_DATE", "", list()
+            "PLAQUENIL_1ST_DATE", "YOUR_MILEAGE_MAY_VARY", list()
         ),
         VerticalizeFeatureItem(
-            "", "HOROWITZ_INDEX_UNDER_150", list()
+            "YOUR_MILEAGE_MAY_VARY", "HOROWITZ_INDEX_UNDER_150", list()
         ),
         VerticalizeFeatureItem(
-            "", "HOROWITZ_INDEX_UNDER_250", list()
+            "YOUR_MILEAGE_MAY_VARY", "HOROWITZ_INDEX_UNDER_250", list()
         ),
         VerticalizeFeatureItem("REMDESIVIR", "REMDESIVIR", list()),
         VerticalizeFeatureItem(
-            "REMDESIVIR_1ST_DATE", "", list()
+            "REMDESIVIR_1ST_DATE", "YOUR_MILEAGE_MAY_VARY", list()
         ),
         VerticalizeFeatureItem("SWAB_CHECK_DATE", "SWAB", ["SWAB_RESULT"]),
         VerticalizeFeatureItem(
@@ -2175,7 +2133,7 @@ def verticalize_features():
             ["IMMUNOLOGICAL_THERAPY"],
         ),
         VerticalizeFeatureItem(
-            "TOCILIZUMAB", "TOCILIZUMAB", [""]
+            "TOCILIZUMAB", "TOCILIZUMAB", ["YOUR_MILEAGE_MAY_VARY"]
         ),
         VerticalizeFeatureItem(
             "TOCILIZUMAB_1ST_DOSE",
@@ -2197,10 +2155,10 @@ def verticalize_features():
             "TOCILIZUMAB_SAMPLE_T7", "TOCILIZUMAB_SAMPLE_T7", list()
         ),
         VerticalizeFeatureItem(
-            "", "ICU_TRANSFER", list()
+            "YOUR_MILEAGE_MAY_VARY", "ICU_TRANSFER", list()
         ),
         VerticalizeFeatureItem(
-            "",
+            "YOUR_MILEAGE_MAY_VARY",
             "INFECTIOUS_DISEASES_UNIT_TRANSFER",
             list(),
         ),

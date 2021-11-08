@@ -78,7 +78,7 @@ AVERAGE_DAYS_PER_YEAR = 365 + 1 / 4 - 1 / 100 + 1 / 400
 AVG_ITER_TIME = 6.283185  # seconds
 
 BOOLEANIZATION_MAP = {
-    "": np.nan,
+    "YOUR_MILEAGE_MAY_VARY": np.nan,
     "none": False,
     "nan": np.nan,
     "any": False,
@@ -110,13 +110,10 @@ COLUMNS_TO_JOIN = [
     "symptoms_list",
     "free_text_notes",
 ]
-COLUMNS_TO_MAXIMIZE = [
-]
-COLUMNS_TO_MINIMIZE = [
-]
+COLUMNS_TO_MAXIMIZE = ["YOUR_MILEAGE_MAY_VARY",]
+COLUMNS_TO_MINIMIZE = ["YOUR_MILEAGE_MAY_VARY",]
 
-COLUMNS_WITH_FLOAT_MIXED_WITH_NOTES = [
-]
+COLUMNS_WITH_FLOAT_MIXED_WITH_NOTES = ["YOUR_MILEAGE_MAY_VARY",]
 
 
 #
@@ -146,7 +143,7 @@ DAYFIRST_REGEXP = re.compile(
 )
 assert datetime.today().year < 2200, "Please fix DAYFIRST regular expression"
 
-DECEASED = ""
+DECEASED = "YOUR_MILEAGE_MAY_VARY"
 
 EIGHTEEN_CENTURIES_IN_MINUTES = 18 * 100 * AVERAGE_DAYS_PER_YEAR * 24 * 60
 
@@ -161,8 +158,7 @@ ENUM_GRAVITY_LIST = [  # from lower gravity
     "NIV",
 ]  # to higher gravity
 
-ENUM_TO_MAXIMIZE = [
-]
+ENUM_TO_MAXIMIZE = ["YOUR_MILEAGE_MAY_VARY",]
 
 EPSILON = 1e-6
 
@@ -208,70 +204,70 @@ GroupWorkerInput = namedtuple("GroupWorkerInput", ["group_name", "dataframe"])
 GroupWorkerOutput = namedtuple("GroupWorkerOutput", ["df", "stats"])
 
 HARDCODED_COLUMN_NAMES = dict(
-    ALCOHOLIC_LIVER_DISEASE="",
-    ANOTHER_DIABETES_COLUMN="",
-    AUTOIMMUNE_HEPATITIS="",
-    ActualState="",
-    ActualState_val="",
-    BLOOD_NEOPLASMS="",
-    CARDIAC_ISCHEMIA="",
-    CEREBROVASCULAR_DISEASE="",
-    CHARLSON_AGE="",
-    CHARLSON_AIDS="",
-    CHARLSON_BLOOD_DISEASE="",
-    CHARLSON_CONNECTIVE_TISSUE_DISEASE="",
-    CHARLSON_COPD="",
-    CHARLSON_CVA_OR_TIA="",
-    CHARLSON_DEMENTIA="",
-    CHARLSON_DIABETES="",
-    CHARLSON_HEART_FAILURE="",
-    CHARLSON_HEMIPLEGIA="",
-    CHARLSON_INDEX="",
-    CHARLSON_KIDNEY_DISEASE="",
-    CHARLSON_LIVER_DISEASE="",
-    CHARLSON_LIVER_FAILURE="",
-    CHARLSON_MYOCARDIAL_ISCHEMIA="",
-    CHARLSON_PEPTIC_ULCER_DISEASE="",
-    CHARLSON_SOLID_TUMOR="",
-    CHARLSON_VASCULAR_DISEASE="",
-    CIRRHOSIS="",
-    CKD="",
-    COPD="",
-    CREATININE="",
-    DEMENTIA="",
-    DYSPNEA="",
-    DYSPNEA_START="",
-    D_DIMER="",
-    DayCount="",
-    GPT_ALT="",
-    HEART_FAILURE="",
-    HFNO_STATE="",
-    HOROWITZ_INDEX_UNDER_150="",
-    HOROWITZ_INDEX_UNDER_250="",
-    ICU_TRANSFER="",
-    INFECTIOUS_DISEASES_UNIT_TRANSFER="",
-    INTUBATION_STATE="",
-    LACTATES="",
-    LDH="",
-    LYMPHOCYTE="",
-    NIV_STATE="",
-    NO_OXYGEN_THERAPY_STATE="",
-    NO_OXYGEN_THERAPY_STATE_END="",
-    NO_OXYGEN_THERAPY_STATE_START="",
-    OTHER_LIVER_PATOLOGIES="",
-    OXYGEN_THERAPY_STATE="",
-    PHOSPHOCREATINE="",
-    PORTAL_HYPERTENSION="",
-    PROCALCITONIN="",
-    RESPIRATORY_RATE="",
-    SOLID_TUMOR="",
-    SWAB="",
-    SYMPTOMS_START="",
-    State="",
-    TEMPERATURE="",
-    UREA="",
-    USE_OXYGEN="",
-    day_count="",
+    ALCOHOLIC_LIVER_DISEASE="YOUR_MILEAGE_MAY_VARY",
+    ANOTHER_DIABETES_COLUMN="YOUR_MILEAGE_MAY_VARY",
+    AUTOIMMUNE_HEPATITIS="YOUR_MILEAGE_MAY_VARY",
+    ActualState="YOUR_MILEAGE_MAY_VARY",
+    ActualState_val="YOUR_MILEAGE_MAY_VARY",
+    BLOOD_NEOPLASMS="YOUR_MILEAGE_MAY_VARY",
+    CARDIAC_ISCHEMIA="YOUR_MILEAGE_MAY_VARY",
+    CEREBROVASCULAR_DISEASE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_AGE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_AIDS="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_BLOOD_DISEASE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_CONNECTIVE_TISSUE_DISEASE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_COPD="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_CVA_OR_TIA="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_DEMENTIA="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_DIABETES="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_HEART_FAILURE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_HEMIPLEGIA="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_INDEX="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_KIDNEY_DISEASE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_LIVER_DISEASE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_LIVER_FAILURE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_MYOCARDIAL_ISCHEMIA="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_PEPTIC_ULCER_DISEASE="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_SOLID_TUMOR="YOUR_MILEAGE_MAY_VARY",
+    CHARLSON_VASCULAR_DISEASE="YOUR_MILEAGE_MAY_VARY",
+    CIRRHOSIS="YOUR_MILEAGE_MAY_VARY",
+    CKD="YOUR_MILEAGE_MAY_VARY",
+    COPD="YOUR_MILEAGE_MAY_VARY",
+    CREATININE="YOUR_MILEAGE_MAY_VARY",
+    DEMENTIA="YOUR_MILEAGE_MAY_VARY",
+    DYSPNEA="YOUR_MILEAGE_MAY_VARY",
+    DYSPNEA_START="YOUR_MILEAGE_MAY_VARY",
+    D_DIMER="YOUR_MILEAGE_MAY_VARY",
+    DayCount="YOUR_MILEAGE_MAY_VARY",
+    GPT_ALT="YOUR_MILEAGE_MAY_VARY",
+    HEART_FAILURE="YOUR_MILEAGE_MAY_VARY",
+    HFNO_STATE="YOUR_MILEAGE_MAY_VARY",
+    HOROWITZ_INDEX_UNDER_150="YOUR_MILEAGE_MAY_VARY",
+    HOROWITZ_INDEX_UNDER_250="YOUR_MILEAGE_MAY_VARY",
+    ICU_TRANSFER="YOUR_MILEAGE_MAY_VARY",
+    INFECTIOUS_DISEASES_UNIT_TRANSFER="YOUR_MILEAGE_MAY_VARY",
+    INTUBATION_STATE="YOUR_MILEAGE_MAY_VARY",
+    LACTATES="YOUR_MILEAGE_MAY_VARY",
+    LDH="YOUR_MILEAGE_MAY_VARY",
+    LYMPHOCYTE="YOUR_MILEAGE_MAY_VARY",
+    NIV_STATE="YOUR_MILEAGE_MAY_VARY",
+    NO_OXYGEN_THERAPY_STATE="YOUR_MILEAGE_MAY_VARY",
+    NO_OXYGEN_THERAPY_STATE_END="YOUR_MILEAGE_MAY_VARY",
+    NO_OXYGEN_THERAPY_STATE_START="YOUR_MILEAGE_MAY_VARY",
+    OTHER_LIVER_PATOLOGIES="YOUR_MILEAGE_MAY_VARY",
+    OXYGEN_THERAPY_STATE="YOUR_MILEAGE_MAY_VARY",
+    PHOSPHOCREATINE="YOUR_MILEAGE_MAY_VARY",
+    PORTAL_HYPERTENSION="YOUR_MILEAGE_MAY_VARY",
+    PROCALCITONIN="YOUR_MILEAGE_MAY_VARY",
+    RESPIRATORY_RATE="YOUR_MILEAGE_MAY_VARY",
+    SOLID_TUMOR="YOUR_MILEAGE_MAY_VARY",
+    SWAB="YOUR_MILEAGE_MAY_VARY",
+    SYMPTOMS_START="YOUR_MILEAGE_MAY_VARY",
+    State="YOUR_MILEAGE_MAY_VARY",
+    TEMPERATURE="YOUR_MILEAGE_MAY_VARY",
+    UREA="YOUR_MILEAGE_MAY_VARY",
+    USE_OXYGEN="YOUR_MILEAGE_MAY_VARY",
+    day_count="YOUR_MILEAGE_MAY_VARY",
 )
 """Lazy renaming mapping for columns not covered by regular expressions"""
 
@@ -1182,7 +1178,7 @@ NORMALIZED_TIMESTAMP_COLUMNS = [
     "steroids_start",
 ]
 
-ORDINARILY_HOME_DISCHARGED = ""
+ORDINARILY_HOME_DISCHARGED = "YOUR_MILEAGE_MAY_VARY"
 
 Point = namedtuple("Point", ["x", "y"])
 
@@ -1202,42 +1198,42 @@ SHEET_RENAMING_RULES = OrderedDict(
         new_sheet_name: re.compile(case_insensitive_regexp, re.IGNORECASE)
         for new_sheet_name, case_insensitive_regexp in sorted(
             dict(
-                DRG=r"",
-                ICD__9=r"",
-                anagraphic=r"",
-                emogas=r"",
-                exams=r"",
-                heparine_and_remdesivir=r"",
-                patient_journey=r"",
-                sofa=r"",
-                sofa_history=r"",
-                symptoms=r"",
-                unit_transfer=r"",
+                DRG=r"YOUR_MILEAGE_MAY_VARY",
+                ICD__9=r"YOUR_MILEAGE_MAY_VARY",
+                anagraphic=r"YOUR_MILEAGE_MAY_VARY",
+                emogas=r"YOUR_MILEAGE_MAY_VARY",
+                exams=r"YOUR_MILEAGE_MAY_VARY",
+                heparine_and_remdesivir=r"YOUR_MILEAGE_MAY_VARY",
+                patient_journey=r"YOUR_MILEAGE_MAY_VARY",
+                sofa=r"YOUR_MILEAGE_MAY_VARY",
+                sofa_history=r"YOUR_MILEAGE_MAY_VARY",
+                symptoms=r"YOUR_MILEAGE_MAY_VARY",
+                unit_transfer=r"YOUR_MILEAGE_MAY_VARY",
                 anamnesis=str(
-                    r""
+                    r"YOUR_MILEAGE_MAY_VARY"
                     r"|"  # logic or
-                    r""
+                    r"YOUR_MILEAGE_MAY_VARY"
                     r"|"  # logic or
-                    r""
+                    r"YOUR_MILEAGE_MAY_VARY"
                 ),
-                diary=r"",
-                infections=r"",
-                involved_units=r"",
-                steroids=r"",
-                swabs=r"",
+                diary=r"YOUR_MILEAGE_MAY_VARY",
+                infections=r"YOUR_MILEAGE_MAY_VARY",
+                involved_units=r"YOUR_MILEAGE_MAY_VARY",
+                steroids=r"YOUR_MILEAGE_MAY_VARY",
+                swabs=r"YOUR_MILEAGE_MAY_VARY",
                 #
                 # post-COVID sheets
                 # v v v v v v v v v
-                cog=r"",
-                covid_hospitalization=r"",
-                fibroscan=r"",
-                frailty=r"",
-                nutrition=r"",
-                pneumological_exam=r"",
-                radiology_report=r"",
-                six_min_walk=r"",
-                therapies=r"",
-                well_being=r"",
+                cog=r"YOUR_MILEAGE_MAY_VARY",
+                covid_hospitalization=r"YOUR_MILEAGE_MAY_VARY",
+                fibroscan=r"YOUR_MILEAGE_MAY_VARY",
+                frailty=r"YOUR_MILEAGE_MAY_VARY",
+                nutrition=r"YOUR_MILEAGE_MAY_VARY",
+                pneumological_exam=r"YOUR_MILEAGE_MAY_VARY",
+                radiology_report=r"YOUR_MILEAGE_MAY_VARY",
+                six_min_walk=r"YOUR_MILEAGE_MAY_VARY",
+                therapies=r"YOUR_MILEAGE_MAY_VARY",
+                well_being=r"YOUR_MILEAGE_MAY_VARY",
             ).items()
         )
     }
@@ -1281,9 +1277,7 @@ TimestampWorkerInputOutput = namedtuple(
     "TimestampWorkerInputOutput", ["sheet_name", "column_name", "series"]
 )
 
-TITLE_COLUMN_REGEXP = re.compile(
-    r"^\s*(title|description)\s*$", re.IGNORECASE
-)
+TITLE_COLUMN_REGEXP = re.compile(r"^\s*(title|description)\s*$", re.IGNORECASE)
 
 VerticalizeFeatureItem = namedtuple(
     "VerticalizeFeatureItem", ["date_column", "column_name", "related_columns"]

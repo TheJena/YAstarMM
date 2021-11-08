@@ -139,7 +139,7 @@ def _convert_single_cell_timestamp(cell, column_name, sheet_name):
                 pass
             else:
                 if (
-                    column_name == ""
+                    column_name == "YOUR_MILEAGE_MAY_VARY"
                     and cell_value < EIGHTEEN_CENTURIES_IN_MINUTES
                 ):
                     # This is a useless incremental timestamp,
@@ -147,9 +147,7 @@ def _convert_single_cell_timestamp(cell, column_name, sheet_name):
                     return pd.NaT
 
         # a CENSORED_DATE_NAME could also be an integer
-        if (
-            column_name == "" and "__" not in cell_value
-        ):
+        if column_name == "YOUR_MILEAGE_MAY_VARY" and "__" not in cell_value:
             try:
                 # Please take your seat before reading further ...
                 #
@@ -1170,9 +1168,9 @@ def merge_sheets(
 
     preferred_join_order = (
         # http://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html
-        {"date": "datetime64[ns]", "": "Int64"},
+        {"date": "datetime64[ns]", "YOUR_MILEAGE_MAY_VARY": "Int64"},
         {"date": "datetime64[ns]", key_col: key_col_dtype},
-        {"": "Int64"},
+        {"YOUR_MILEAGE_MAY_VARY": "Int64"},
         {key_col: key_col_dtype},
         {"admission_code": "Int64"},
     )

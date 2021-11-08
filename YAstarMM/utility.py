@@ -115,9 +115,9 @@ def black_magic(fun):
         n = 4096  # consider only first N bytes of object representation
         if fun.__name__ == "merge_sheets":
             hashed_input = "CHECKPOINT_CHARLIE"
-        # elif fun.__name__ == "":
+        # elif fun.__name__ == "YOUR_MILEAGE_MAY_VARY":
         #     hashed_input = "CHECKPOINT_BRAVO"
-        # elif fun.__name__ == "":
+        # elif fun.__name__ == "YOUR_MILEAGE_MAY_VARY":
         #     hashed_input = "CHECKPOINT_ALPHA"
         else:
             hashed_input = blake2b(
